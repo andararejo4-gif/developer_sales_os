@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
 
 @theme {
   --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
@@ -8,11 +9,14 @@
   --color-terracotta: #b45309;
   --color-olive: #3f6212;
   --color-warmborder: #e6e0d4;
+  --color-surface: #ffffff;
 }
 
 @layer base {
   body {
-    font-variant-numeric: lining-nums;
+    background-color: #f5f2eb;
+    color: #1c1917;
+    font-variant-numeric: tabular-nums lining-nums;
   }
   @media (max-width: 767px) {
     input,
@@ -24,4 +28,17 @@
 
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Leaflet map custom override to fit design system */
+.leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  background-color: #ffffff;
+  color: #1c1917;
+  border: 1px solid #e6e0d4;
+  box-shadow: 0 4px 12px rgba(28, 25, 23, 0.08);
+}
+
+.leaflet-popup-tip {
+  background-color: #ffffff;
 }

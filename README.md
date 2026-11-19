@@ -1,38 +1,89 @@
-# Andara Sales OS (PWA)
+# Developer Sales OS
 
-React + Vite + TypeScript + Tailwind v4 + vite-plugin-pwa.
+> Platform Web Multi-Tenant untuk Pengembang Perumahan: Mengubah Dokumen Mentah (Brosur, Pricelist, Koordinat) Menjadi Mesin Penjualan Otonom.
 
-## Pengembangan (laptop)
+- **Domain Target**: `developerproperti.giivepro.com`
+- **Tenant Percontohan**: PT Andara Rejo Makmur · The Park Townhouse Sukoharjo (30 Unit, 3 Cluster)
+- **Desain Sistem**: *Warm Terracotta & Sandstone* (terinspirasi estetika openrouter.ai)
+- **Font**: *Plus Jakarta Sans*
 
+---
+
+## 1. Panduan Menjalankan Lokal
+
+Pastikan [Bun](https://bun.sh) (v1.4+) atau Node.js (v20+) terinstal.
+
+```bash
+# 1. Masuk ke direktori
+cd "developer_sales_os"
+
+# 2. Salin environment
+cp .env.example .env
+
+# 3. Jalankan server pengembangan
+bun dev
+# atau: npm run dev
 ```
-npm install
-npm run dev        # http://localhost:5173
-npm run build      # type-check + build ke dist/
-npm run preview    # uji PWA dari hasil build
+
+Buka peramban di `http://localhost:5173` atau `http://localhost:3000`.
+
+---
+
+## 2. Menjalankan Pengujian Otomatis
+
+Seluruh pengujian unit, guardrail validator, dan isolasi tenant dijalankan melalui runner bawaan Bun:
+
+```bash
+bun test
 ```
 
-## Deploy ke server
+Rangkaian uji mencakup:
+- `tests/love-letter-validator.test.ts`: Uji kepatuhan 99 poin, larangan overpromise, dan format estimasi jarak.
+- `tests/tenant-isolation.test.ts`: Pembuktian bahwa pengguna Tenant A tidak dapat mengakses data Tenant B.
+- `tests/plans-config.test.ts`: Validasi paket (Gold, Platinum, Diamond) berbasis flag dinamis dengan harga `null` ("Hubungi kami").
+- `tests/smoke-phase1.test.ts`: Pengujian alur onboarding, penghitungan angka faktual, dan generator DOCX/HTML.
 
-Hasil build adalah file statis di `dist/`. Di server (Ubuntu + nginx):
+---
 
-```
-git pull
-npm ci
+## 3. Menjalankan Kompilasi Build
+
+```bash
 npm run build
-sudo rsync -a --delete dist/ /var/www/developer_sales_os/
+# atau: bun run build
 ```
 
-Contoh nginx (wajib HTTPS agar PWA bisa di-install):
+Hasil kompilasi siap produksi akan tersimpan di direktori `/dist`.
 
+---
+
+## 4. Panduan Deploy ke VPS Ubuntu (PM2)
+
+Untuk mendistribusikan ke server VPS Ubuntu dengan port terpisah dari aplikasi lain:
+
+```bash
+# 1. Masuk ke server & clone repository
+cd /var/www/developer_sales_os
+
+# 2. Instalasi dependensi
+bun install --frozen-lockfile
+
+# 3. Build artefak
+bun run build
+
+# 4. Jalankan aplikasi via PM2 (port terpisah, misal 3040)
+pm2 start "bun preview --port 3040 --host" --name "developer-sales-os"
+
+# 5. Konfigurasi Nginx Reverse Proxy
+# Proxy pass ke http://127.0.0.1:3040 untuk domain developerproperti.giivepro.com
 ```
-server {
-  server_name sales.example.com;
-  root /var/www/developer_sales_os;
-  index index.html;
-  location / { try_files $uri /index.html; }
-  # service worker & manifest jangan di-cache lama
-  location = /sw.js { add_header Cache-Control "no-cache"; }
-  location = /manifest.webmanifest { add_header Cache-Control "no-cache"; }
-  location /assets/ { add_header Cache-Control "public, max-age=31536000, immutable"; }
-}
-```
+
+---
+
+## 5. Struktur Database & Migrasi SQL
+
+Skema database PostgreSQL murni: `sales_os`.
+File migrasi berurutan di `/db/migrations`:
+- `0001_sales_os_core_schema.sql`: Skema multi-tenant, tabel `tenants`, `plans`, `plan_features`, `users`, `projects`, `clusters`, `units`, `project_files`, `love_letters`, `jobs`, `ai_usage`, `approvals`, dan `audit_logs`.
+- `0002_sales_os_seed_plans_and_the_park.sql`: Data awal paket Gold, Platinum, Diamond, Superadmin Giivepro, Tenant PT Andara Rejo Makmur, 3 Cluster (Nagoya, Osaka, Tokyo), dan 30 Unit The Park Townhouse Sukoharjo.
+
+Dokumentasi detail diagram relasi entitas dapat dibaca di [`ERD.md`](./ERD.md) dan keputusan arsitektur di [`DECISIONS.md`](./DECISIONS.md).

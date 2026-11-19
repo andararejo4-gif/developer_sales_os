@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { PublicHomepage } from './components/PublicHomepage';
 import {
   Award,
   Building2,
@@ -96,6 +97,7 @@ function StatusBadge({ status }: { status: Status }) {
 }
 
 export default function App() {
+  const [viewMode, setViewMode] = useState<'homepage' | 'dashboard'>('homepage');
   const [role, setRole] = useState<RoleKey>('SE');
   const user = USERS_BY_ROLE[role];
 
@@ -211,11 +213,38 @@ export default function App() {
   const rupiah = (num: number) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
 
+  if (viewMode === 'homepage') {
+    return (
+      <PublicHomepage
+        onEnterDashboard={(chosenRole) => {
+          if (chosenRole) {
+            if (chosenRole === 'DEVELOPER_OWNER') setRole('DIREKSI');
+            else if (chosenRole === 'SALES_MANAGER') setRole('SM');
+            else if (chosenRole === 'TEAM_LEADER') setRole('TL');
+            else if (chosenRole === 'SALES_EXECUTIVE') setRole('SE');
+            else if (chosenRole === 'DIGITAL_MARKETING') setRole('DIGITAL_MARKETING');
+            else if (chosenRole === 'SUPERADMIN') setRole('IT');
+            else setRole(chosenRole as RoleKey);
+          }
+          setViewMode('dashboard');
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen md:flex bg-sandstone text-espresso font-sans antialiased">
       {/* Sidebar Desktop */}
       <aside className="hidden md:flex md:w-64 md:shrink-0 md:flex-col md:sticky md:top-0 md:h-screen bg-white border-r border-warmborder px-5 py-6 justify-between z-30">
         <div>
+          {/* Back to Public Homepage */}
+          <button
+            onClick={() => setViewMode('homepage')}
+            className="w-full mb-4 py-2 px-3 rounded-xl bg-sandstone hover:bg-warmborder text-[11px] font-bold text-espresso flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-warmborder"
+          >
+            <span>&larr; Beranda Publik</span>
+          </button>
+
           {/* Logo & OS Header */}
           <div className="flex items-center gap-3 pb-5 border-b border-warmborder">
             <div className="size-10 rounded-xl bg-terracotta text-white grid place-items-center font-extrabold text-base shadow-sm">
