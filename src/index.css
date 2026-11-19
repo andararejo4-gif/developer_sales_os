@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+  --color-sandstone: #f5f2eb;
+  --color-espresso: #1c1917;
+  --color-warmmuted: #78716c;
+  --color-terracotta: #b45309;
+  --color-olive: #3f6212;
+  --color-warmborder: #e6e0d4;
+}
+
+@layer base {
+  body {
+    font-variant-numeric: lining-nums;
+  }
+  @media (max-width: 767px) {
+    input,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
