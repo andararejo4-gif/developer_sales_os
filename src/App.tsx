@@ -10,6 +10,7 @@ import {
   FileText,
   Home,
   LayoutDashboard,
+  Megaphone,
   MessageSquare,
   Plus,
   RefreshCw,
@@ -17,10 +18,12 @@ import {
   Share2,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
   TrendingUp,
   Users,
 } from 'lucide-react';
 import {
+  AD_CAMPAIGNS,
   BOOKING_TRANSACTIONS,
   DEFAULT_ITEMS,
   DIREKSI_PROJECTS,
@@ -30,7 +33,9 @@ import {
   LIVE_SLA_LEADS,
   PERIODS,
   SCORECARD_DATA,
+  SE_LEAD_FEEDBACKS,
   SE_TEAM_DATA,
+  AI_AD_INSIGHTS,
   USERS_BY_ROLE,
   evalStatus,
   type Category,
@@ -227,21 +232,21 @@ export default function App() {
             <label className="block text-[11px] font-bold uppercase tracking-wider text-warmmuted mb-2">
               Pilih Role Dashboard
             </label>
-            <div className="grid grid-cols-3 gap-1.5 p-1 bg-sandstone rounded-xl border border-warmborder">
-              {(['SE', 'TL', 'SM', 'DIREKSI', 'ADMIN', 'IT'] as RoleKey[]).map((r) => (
+            <div className="grid grid-cols-4 gap-1 p-1 bg-sandstone rounded-xl border border-warmborder text-center">
+              {(['SE', 'TL', 'SM', 'DIREKSI', 'ADMIN', 'IT', 'DIGITAL_MARKETING'] as RoleKey[]).map((r) => (
                 <button
                   key={r}
                   onClick={() => {
                     setRole(r);
-                    setToast(`Beralih ke Dashboard ${r}`);
+                    setToast(`Beralih ke Dashboard ${r === 'DIGITAL_MARKETING' ? 'Digital Marketing' : r}`);
                   }}
-                  className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  className={`py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
                     role === r
                       ? 'bg-espresso text-white shadow-sm'
                       : 'text-warmmuted hover:text-espresso hover:bg-white/60'
                   }`}
                 >
-                  {r}
+                  {r === 'DIGITAL_MARKETING' ? 'MKT' : r === 'DIREKSI' ? 'DIR' : r}
                 </button>
               ))}
             </div>
@@ -255,6 +260,16 @@ export default function App() {
             >
               <Plus className="size-4 text-amber-400" />
               <span>Input Lead Baru (SOP ≤5m)</span>
+            </button>
+          )}
+
+          {role === 'DIGITAL_MARKETING' && (
+            <button
+              onClick={() => setToast('Form Input Biaya Iklan Harian dibuka')}
+              className="mt-4 w-full h-11 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center justify-center gap-2 hover:bg-espresso/90 cursor-pointer shadow-sm"
+            >
+              <Plus className="size-4 text-amber-400" />
+              <span>Input Biaya Iklan (CPL)</span>
             </button>
           )}
 
@@ -404,6 +419,32 @@ export default function App() {
                 </a>
               </>
             )}
+
+            {role === 'DIGITAL_MARKETING' && (
+              <>
+                <a
+                  href="#ad-campaigns"
+                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+                >
+                  <Megaphone className="size-4" />
+                  <span>Kampanye &amp; CPL Iklan</span>
+                </a>
+                <a
+                  href="#se-feedback"
+                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+                >
+                  <MessageSquare className="size-4" />
+                  <span>Umpan Balik Kualitas Lead</span>
+                </a>
+                <a
+                  href="#ai-ad-optimizer"
+                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+                >
+                  <Sparkles className="size-4" />
+                  <span>AI Ad Optimizer (§S18)</span>
+                </a>
+              </>
+            )}
           </nav>
         </div>
 
@@ -473,19 +514,19 @@ export default function App() {
           </div>
 
           {/* Mobile Role Switcher */}
-          <div className="grid grid-cols-6 gap-1 p-1 bg-sandstone rounded-xl border border-warmborder text-center">
-            {(['SE', 'TL', 'SM', 'DIREKSI', 'ADMIN', 'IT'] as RoleKey[]).map((r) => (
+          <div className="grid grid-cols-7 gap-1 p-1 bg-sandstone rounded-xl border border-warmborder text-center">
+            {(['SE', 'TL', 'SM', 'DIREKSI', 'ADMIN', 'IT', 'DIGITAL_MARKETING'] as RoleKey[]).map((r) => (
               <button
                 key={r}
                 onClick={() => {
                   setRole(r);
-                  setToast(`Beralih ke ${r}`);
+                  setToast(`Beralih ke ${r === 'DIGITAL_MARKETING' ? 'MKT' : r}`);
                 }}
-                className={`py-1 text-[11px] font-bold rounded-lg ${
+                className={`py-1 text-[10px] font-bold rounded-lg ${
                   role === r ? 'bg-espresso text-white' : 'text-warmmuted'
                 }`}
               >
-                {r}
+                {r === 'DIGITAL_MARKETING' ? 'MKT' : r === 'DIREKSI' ? 'Dir' : r}
               </button>
             ))}
           </div>
@@ -1486,6 +1527,252 @@ export default function App() {
                   </table>
                 </div>
               </section>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* ROLE 7: DIGITAL MARKETING DASHBOARD (MODUL O, BIAYA IKLAN, CPL, S18) */}
+          {/* ========================================================================= */}
+          {role === 'DIGITAL_MARKETING' && (
+            <div className="space-y-6">
+              {/* Summary Cards Digital Marketing */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+                  <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Total Belanja Iklan</p>
+                  <p className="text-2xl font-extrabold text-espresso mt-1">Rp 22.000.000</p>
+                  <p className="text-[11px] text-warmmuted mt-1">Alokasi Budget: Rp 32 Juta (68.7%)</p>
+                </div>
+
+                <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+                  <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Total Leads Digital</p>
+                  <p className="text-2xl font-extrabold text-espresso mt-1">
+                    491 <span className="text-sm font-normal text-warmmuted">/ 600 Leads</span>
+                  </p>
+                  <div className="mt-2 h-1.5 rounded-full bg-sandstone overflow-hidden">
+                    <div className="h-full bg-olive rounded-full" style={{ width: '81.8%' }}></div>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Rata-Rata CPL</p>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-lime-100 text-olive">Optimal</span>
+                  </div>
+                  <p className="text-2xl font-extrabold text-olive mt-1">Rp 44.806</p>
+                  <p className="text-[11px] text-warmmuted mt-1">SOP Target: ≤ Rp 60.000 / lead</p>
+                </div>
+
+                <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+                  <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Biaya Per Booking</p>
+                  <p className="text-2xl font-extrabold text-terracotta mt-1">Rp 2.750.000</p>
+                  <p className="text-[11px] text-olive font-semibold mt-1">Efisien (Target ≤ Rp 4 Jt)</p>
+                </div>
+              </div>
+
+              {/* Tabel Kampanye & Kinerja Iklan */}
+              <section id="ad-campaigns" className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
+                <div className="p-5 border-b border-warmborder flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-espresso">
+                      Kinerja Kampanye Iklan &amp; CPL per Kanal (Modul O2 &amp; O3)
+                    </h3>
+                    <p className="text-xs text-warmmuted mt-0.5">
+                      Target: CPL ≤ Rp 60 rb · Lead Valid ≥ 60% · Biaya/Kunjungan ≤ Rp 600 rb · Biaya/Booking ≤ Rp 4 jt.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setToast('Sinkronisasi Meta, TikTok & Google Ads API')}
+                    className="px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-xs font-bold text-espresso flex items-center gap-2 cursor-pointer"
+                  >
+                    <RefreshCw className="size-3.5" /> Sync Ads API
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-sandstone/70 border-b border-warmborder text-[11px] font-bold uppercase tracking-wider text-warmmuted">
+                        <th className="py-3 px-4">Kanal / Kode</th>
+                        <th className="py-3 px-3">Belanja</th>
+                        <th className="py-3 px-3">Leads</th>
+                        <th className="py-3 px-3">% Valid</th>
+                        <th className="py-3 px-3">CPL</th>
+                        <th className="py-3 px-3">Cost/Visit</th>
+                        <th className="py-3 px-3">Cost/Booking</th>
+                        <th className="py-3 px-4 text-right">Status AI</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-warmborder text-xs">
+                      {AD_CAMPAIGNS.map((c) => (
+                        <tr key={c.id} className="hover:bg-sandstone/40">
+                          <td className="py-3 px-4">
+                            <span className="font-extrabold text-espresso">{c.nama}</span>
+                            <span className="block font-mono text-[11px] text-terracotta">
+                              {c.kode} · {c.kanal}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 font-semibold tabular-nums text-espresso">
+                            {rupiah(c.spendBulanIni)}
+                          </td>
+                          <td className="py-3 px-3 tabular-nums font-bold text-espresso">
+                            {c.leads} <span className="text-[11px] font-normal text-warmmuted">({c.leadsValid} valid)</span>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span
+                              className={`font-bold tabular-nums ${
+                                c.persenValid >= 60 ? 'text-olive' : 'text-rose-600'
+                              }`}
+                            >
+                              {c.persenValid}%
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 font-bold tabular-nums text-espresso">
+                            {rupiah(c.cpl)}
+                          </td>
+                          <td className="py-3 px-3 tabular-nums text-warmmuted">
+                            {rupiah(c.biayaPerKunjungan)}
+                          </td>
+                          <td className="py-3 px-3 tabular-nums font-bold text-terracotta">
+                            {rupiah(c.biayaPerBooking)}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                                c.statusAi === 'Optimal'
+                                  ? 'bg-lime-100 text-olive'
+                                  : 'bg-amber-100 text-terracotta'
+                              }`}
+                            >
+                              {c.statusAi}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              {/* AI Ad Optimizer Assistant (§S18) */}
+              <section id="ai-ad-optimizer" className="bg-espresso text-white rounded-2xl p-6 shadow-sm border border-white/10 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="size-4 text-amber-400" />
+                  <h3 className="text-base font-bold text-white">AI Ad Optimizer (§S18 Playbook)</h3>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-400/20 text-amber-300">
+                    Audit Otomatis 3 Harian
+                  </span>
+                </div>
+                <p className="text-xs text-white/70 max-w-2xl leading-relaxed">
+                  AI mendeteksi materi iklan dengan performa tinggi &amp; rendah, serta menyarankan pergeseran anggaran untuk memaksimalkan jumlah booking.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                  {AI_AD_INSIGHTS.map((ai) => (
+                    <div key={ai.id} className="p-4 rounded-xl bg-white/10 border border-white/15 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-300">{ai.tipe}</span>
+                        <span className="text-[10px] text-white/50">{ai.id}</span>
+                      </div>
+                      <p className="text-xs text-white/90">{ai.pesan}</p>
+                      <div className="p-2.5 rounded-lg bg-black/30 border border-white/10 text-[11px] text-white/80">
+                        <strong className="text-amber-300 font-semibold">Rekomendasi Aksi: </strong>
+                        {ai.rekomendasi}
+                      </div>
+                      <p className="text-[10px] text-lime-300 font-medium">✓ {ai.dampak}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Feedback Kualitas Lead dari SE (Modul O4) & Dayparting (Modul O8) */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+                <section id="se-feedback" className="md:col-span-7 bg-white border border-warmborder rounded-2xl p-5 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-warmborder">
+                    <div>
+                      <h4 className="text-sm font-bold text-espresso">Umpan Balik Kualitas Lead dari SE (Modul O4)</h4>
+                      <p className="text-[11px] text-warmmuted">Label valid/tidak valid dari SE dibaca digital marketer setiap hari.</p>
+                    </div>
+                    <span className="text-xs font-bold text-terracotta">Feed Real-time</span>
+                  </div>
+
+                  <div className="divide-y divide-warmborder">
+                    {SE_LEAD_FEEDBACKS.map((fb) => (
+                      <div key={fb.id} className="py-2.5 flex items-start justify-between gap-3 text-xs">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-espresso">{fb.leadName}</span>
+                            <span className="font-mono text-[10px] text-warmmuted">({fb.kodeKonten})</span>
+                          </div>
+                          <p className="text-warmmuted mt-0.5">{fb.alasan}</p>
+                          <span className="text-[10px] text-warmmuted font-semibold mt-1 inline-block">
+                            Oleh: {fb.seName} · {fb.waktu}
+                          </span>
+                        </div>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                            fb.label === 'Valid' ? 'bg-lime-100 text-olive' : 'bg-rose-100 text-rose-700'
+                          }`}
+                        >
+                          {fb.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="md:col-span-5 bg-white border border-warmborder rounded-2xl p-5 shadow-sm space-y-3">
+                  <div className="pb-2 border-b border-warmborder">
+                    <h4 className="text-sm font-bold text-espresso">Pola Jam Lead Masuk / Dayparting (§O8)</h4>
+                    <p className="text-[11px] text-warmmuted">Untuk sinkronisasi alokasi budget &amp; jadwal piket SE.</p>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <div className="flex justify-between text-[11px] font-semibold text-warmmuted mb-1">
+                        <span>Pukul 08.00 - 12.00 (Pagi)</span>
+                        <span className="text-espresso">22% Leads</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-sandstone overflow-hidden">
+                        <div className="h-full bg-terracotta rounded-full" style={{ width: '22%' }}></div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between text-[11px] font-semibold text-warmmuted mb-1">
+                        <span>Pukul 12.00 - 14.00 (Istirahat Siang)</span>
+                        <span className="text-espresso">28% Leads (Tinggi)</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-sandstone overflow-hidden">
+                        <div className="h-full bg-olive rounded-full" style={{ width: '28%' }}></div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between text-[11px] font-semibold text-warmmuted mb-1">
+                        <span>Pukul 14.00 - 18.00 (Sore)</span>
+                        <span className="text-espresso">15% Leads</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-sandstone overflow-hidden">
+                        <div className="h-full bg-terracotta rounded-full" style={{ width: '15%' }}></div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between text-[11px] font-semibold text-warmmuted mb-1">
+                        <span>Pukul 18.00 - 21.00 (Malam / Piket SE)</span>
+                        <span className="text-espresso">35% Leads (Puncak)</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-sandstone overflow-hidden">
+                        <div className="h-full bg-terracotta rounded-full" style={{ width: '35%' }}></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-terracotta leading-relaxed mt-2">
+                    💡 <strong>Insight AI:</strong> Porsi terbesar (35%) lead masuk pada jam 19.30 - 21.00 WIB. Sinkron dengan <strong>Piket Malam SE</strong> (Modul B2).
+                  </div>
+                </section>
+              </div>
             </div>
           )}
         </div>

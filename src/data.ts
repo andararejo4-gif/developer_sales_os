@@ -1,7 +1,7 @@
 // Data Store & Types untuk Developer Sales OS (PT Andara Rejo Makmur)
 // Sesuai 19 Modul Playbook v1.2 & Migrasi Schema devos
 
-export type RoleKey = 'SE' | 'TL' | 'SM' | 'DIREKSI' | 'ADMIN' | 'IT';
+export type RoleKey = 'SE' | 'TL' | 'SM' | 'DIREKSI' | 'ADMIN' | 'IT' | 'DIGITAL_MARKETING';
 
 export interface UserProfile {
   name: string;
@@ -74,6 +74,16 @@ export const USERS_BY_ROLE: Record<RoleKey, UserProfile> = {
     avatarText: 'DH',
     badge: 'IT Admin · Schema devos',
     proyek: 'Infrastruktur Sistem',
+  },
+  DIGITAL_MARKETING: {
+    name: 'Agus Prasetyo',
+    role: 'DIGITAL_MARKETING',
+    roleLabel: 'Digital Marketer',
+    email: 'marketer@andararejomakmur.co.id',
+    noWa: '+6281122334441',
+    avatarText: 'AP',
+    badge: 'Digital Ads & CPL Optimizer',
+    proyek: 'The Park Townhouse Sukoharjo',
   },
 };
 
@@ -356,4 +366,141 @@ export const IT_AUDIT_LOGS: AuditItem[] = [
   { id: 1053, tabel: 'lead', recordId: 'LD-880', aksi: 'UPDATE', dataPerubahan: 'bant_total: 6 -> 8, tahap: contacted -> qualified', oleh: 'raka@andararejomakmur.co.id', waktu: '18 Nov 2026, 10:45' },
   { id: 1052, tabel: 'persetujuan', recordId: 'ESC-01', aksi: 'INSERT', dataPerubahan: 'jenis: diskon_khusus, diputuskan_ai: true (rekomendasi)', oleh: 'ai.tl@andararejomakmur.co.id', waktu: '18 Nov 2026, 09:30' },
   { id: 1051, tabel: 'laporan_harian', recordId: 'LH-SE1', aksi: 'UPDATE', dataPerubahan: 'terkunci: true (cut-off 18.00 scheduler)', oleh: 'system cron', waktu: '17 Nov 2026, 18:00' },
+];
+
+// ======================== DIGITAL MARKETING DATA (Modul O, S18) ========================
+export interface AdCampaign {
+  id: string;
+  kode: string;
+  nama: string;
+  kanal: 'Meta Ads' | 'TikTok Ads' | 'Google Search';
+  budgetBulanan: number;
+  spendBulanIni: number;
+  leads: number;
+  leadsValid: number;
+  persenValid: number;
+  cpl: number;            // Cost Per Lead (Target <= 60.000)
+  kunjungan: number;
+  biayaPerKunjungan: number; // Target <= 600.000
+  booking: number;
+  biayaPerBooking: number;   // Target <= 4.000.000
+  ctr: number;
+  statusAi: 'Optimal' | 'CPL Tinggi' | 'Perlu Re-budget';
+}
+
+export const AD_CAMPAIGNS: AdCampaign[] = [
+  {
+    id: 'CMP-01',
+    kode: 'ADS-META-CTWA-01',
+    nama: 'Launching Promo WhatsApp Direct',
+    kanal: 'Meta Ads',
+    budgetBulanan: 12000000,
+    spendBulanIni: 8400000,
+    leads: 210,
+    leadsValid: 168,
+    persenValid: 80.0,
+    cpl: 40000,
+    kunjungan: 24,
+    biayaPerKunjungan: 350000,
+    booking: 4,
+    biayaPerBooking: 2100000,
+    ctr: 2.4,
+    statusAi: 'Optimal',
+  },
+  {
+    id: 'CMP-02',
+    kode: 'ADS-META-LEAD-02',
+    nama: 'Meta Instant Form Type Diamond',
+    kanal: 'Meta Ads',
+    budgetBulanan: 8000000,
+    spendBulanIni: 5200000,
+    leads: 104,
+    leadsValid: 65,
+    persenValid: 62.5,
+    cpl: 50000,
+    kunjungan: 10,
+    biayaPerKunjungan: 520000,
+    booking: 1,
+    biayaPerBooking: 5200000,
+    ctr: 1.1,
+    statusAi: 'CPL Tinggi',
+  },
+  {
+    id: 'CMP-03',
+    kode: 'ADS-TIKTOK-01',
+    nama: 'Video Tour Nagoya 90/75 Hook',
+    kanal: 'TikTok Ads',
+    budgetBulanan: 6000000,
+    spendBulanIni: 3600000,
+    leads: 95,
+    leadsValid: 68,
+    persenValid: 71.6,
+    cpl: 37895,
+    kunjungan: 8,
+    biayaPerKunjungan: 450000,
+    booking: 1,
+    biayaPerBooking: 3600000,
+    ctr: 1.8,
+    statusAi: 'Optimal',
+  },
+  {
+    id: 'CMP-04',
+    kode: 'ADS-GSEARCH-01',
+    nama: 'Google Search Rumah Mewah Solo Baru',
+    kanal: 'Google Search',
+    budgetBulanan: 6000000,
+    spendBulanIni: 4800000,
+    leads: 82,
+    leadsValid: 58,
+    persenValid: 70.7,
+    cpl: 58536,
+    kunjungan: 12,
+    biayaPerKunjungan: 400000,
+    booking: 2,
+    biayaPerBooking: 2400000,
+    ctr: 3.8,
+    statusAi: 'Optimal',
+  },
+];
+
+export interface SeLeadFeedback {
+  id: string;
+  seName: string;
+  leadName: string;
+  kodeKonten: string;
+  label: 'Valid' | 'Tidak Valid';
+  alasan: string;
+  waktu: string;
+}
+
+export const SE_LEAD_FEEDBACKS: SeLeadFeedback[] = [
+  { id: 'FB-1', seName: 'Raka Pratama', leadName: 'dr. Satrio Wibowo', kodeKonten: 'ADS-META-CTWA-01', label: 'Valid', alasan: 'BANT A, dokter di RS Indriati Solo Baru, siap survei Sabtu', waktu: 'Hari ini 10:15' },
+  { id: 'FB-2', seName: 'Dian Lestari', leadName: 'Bp. Bambang Heru', kodeKonten: 'ADS-META-LEAD-02', label: 'Tidak Valid', alasan: 'Nomor salah sambung / luar pulau (Kalimantan)', waktu: 'Hari ini 09:40' },
+  { id: 'FB-3', seName: 'Budi Santoso', leadName: 'Ibu Ratna Dewi', kodeKonten: 'ADS-TIKTOK-01', label: 'Valid', alasan: 'Minta simulasi KPR CT24 Osaka B.04', waktu: 'Kemarin 16:30' },
+  { id: 'FB-4', seName: 'Raka Pratama', leadName: 'Sdr. Dimas', kodeKonten: 'ADS-META-LEAD-02', label: 'Tidak Valid', alasan: 'Hanya mencari info sewa rumah / bukan pembeli', waktu: 'Kemarin 14:20' },
+];
+
+export interface AiAdRecommendation {
+  id: string;
+  tipe: string;
+  pesan: string;
+  rekomendasi: string;
+  dampak: string;
+}
+
+export const AI_AD_INSIGHTS: AiAdRecommendation[] = [
+  {
+    id: 'AI-AD-1',
+    tipe: 'Optimalisasi Anggaran',
+    pesan: 'Kampanye ADS-META-CTWA-01 menghasilkan Biaya per Booking terendah (Rp 2,1 Juta vs Target Rp 4 Juta).',
+    rekomendasi: 'Geser Rp 2.000.000 dari budget ADS-META-LEAD-02 ke ADS-META-CTWA-01 untuk memaksimalkan booking akhir bulan.',
+    dampak: 'Potensi penambahan 1-2 booking valid dalam 14 hari ke depan.',
+  },
+  {
+    id: 'AI-AD-2',
+    tipe: 'Evaluasi Materi Kreatif',
+    pesan: 'Materi video TikTok (ADS-TIKTOK-01) menghasilkan CPL sangat efisien Rp 37.895 (Target ≤ Rp 60.000).',
+    rekomendasi: 'Adaptasi format video hook Nagoya ke cluster Osaka dan perbanyak jam tayang pada pukul 19.30 - 21.00.',
+    dampak: 'Peningkatan CTR diproyeksikan naik dari 1.8% ke 2.5%.',
+  },
 ];

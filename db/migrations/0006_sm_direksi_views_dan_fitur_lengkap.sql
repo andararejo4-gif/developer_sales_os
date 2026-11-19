@@ -428,6 +428,38 @@ join devos.aktivitas_harian ah on ah.se_id = se.id
 group by sm.id, sm.nama, se.id, se.nama, ah.tanggal, ah.jenis
 order by ah.tanggal desc, se.nama, ah.jenis;
 
+-- ===== 8.6 VIEW DIGITAL MARKETER: ANALITIK KAMPANYE & BIAYA IKLAN (Modul O) =====
+create or replace view devos.v_digital_marketer_kinerja_iklan as
+select
+  k.id as kampanye_id,
+  k.proyek_id,
+  p.nama as nama_proyek,
+  k.kode as kode_kampanye,
+  k.kanal,
+  k.nama as nama_kampanye,
+  coalesce(sum(bi.biaya), 0) as total_biaya_iklan,
+  count(distinct l.id) as total_leads,
+  count(distinct l.id) filter (where l.kelas_lead <> 'tidak_valid') as total_leads_valid,
+  case when count(distinct l.id) > 0
+       then round((count(distinct l.id) filter (where l.kelas_lead <> 'tidak_valid')::numeric / count(distinct l.id) * 100), 1)
+       else 0 end as persen_valid,
+  case when count(distinct l.id) > 0
+       then round((coalesce(sum(bi.biaya), 0) / count(distinct l.id)), 0)
+       else 0 end as cpl_rupiah,
+  count(distinct l.id) filter (where l.bant_total >= 7) as total_prospek,
+  count(distinct a.id) filter (where a.status = 'hadir') as total_kunjungan,
+  count(distinct b.id) filter (where b.status in ('aktif', 'net_sales')) as total_booking,
+  case when count(distinct b.id) filter (where b.status in ('aktif', 'net_sales')) > 0
+       then round((coalesce(sum(bi.biaya), 0) / count(distinct b.id) filter (where b.status in ('aktif', 'net_sales'))), 0)
+       else 0 end as biaya_per_booking
+from devos.kampanye_iklan k
+join devos.proyek p on p.id = k.proyek_id
+left join devos.biaya_iklan bi on bi.kampanye_id = k.id
+left join devos.lead l on l.proyek_id = k.proyek_id and l.kode_konten = k.kode
+left join devos.appointment a on a.lead_id = l.id
+left join devos.booking b on b.lead_id = l.id
+group by k.id, k.proyek_id, p.nama, k.kode, k.kanal, k.nama;
+
 -- ===== 9. FUNGSI HITUNG SCORECARD BERBOBOT OTOMATIS (Modul M5) =====
 -- Booking 35%, Net sales 20%, Kunjungan 15%, Prospek 10%, Kepatuhan 10%, Waktu Respons 5%, Referral 5%
 -- Capaian per komponen maks 150%.

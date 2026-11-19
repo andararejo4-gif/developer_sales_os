@@ -9,7 +9,7 @@ create table if not exists devos.schema_migrations (
 );
 
 -- ===== Enum =====
-create type devos.role_pengguna as enum ('SE', 'TL', 'ADMIN', 'SM', 'IT', 'DIREKSI');
+create type devos.role_pengguna as enum ('SE', 'TL', 'ADMIN', 'SM', 'IT', 'DIREKSI', 'DIGITAL_MARKETING');
 create type devos.jenis_akun    as enum ('manusia', 'ai');
 create type devos.tipe_proyek   as enum ('mewah', 'menengah', 'subsidi', 'villa_resort', 'komersial');
 create type devos.status_unit   as enum ('tersedia', 'hold', 'booking', 'terjual');

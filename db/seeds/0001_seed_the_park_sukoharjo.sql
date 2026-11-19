@@ -25,7 +25,10 @@ values
   ('50000000-0000-0000-0000-000000000001', 'admin.sales@andararejomakmur.co.id', 'Siti Rahma (Admin Sales)', '+6281122334421', '$2a$10$demoHashBcryptAdmin1234567890abcdefghi', 'ADMIN', 'manusia', null, true),
 
   -- IT
-  ('60000000-0000-0000-0000-000000000001', 'it@andararejomakmur.co.id', 'Dodi Hartono (IT Lead)', '+6281122334431', '$2a$10$demoHashBcryptIT1234567890abcdefghijk', 'IT', 'manusia', null, true)
+  ('60000000-0000-0000-0000-000000000001', 'it@andararejomakmur.co.id', 'Dodi Hartono (IT Lead)', '+6281122334431', '$2a$10$demoHashBcryptIT1234567890abcdefghijk', 'IT', 'manusia', null, true),
+
+  -- Digital Marketer
+  ('70000000-0000-0000-0000-000000000001', 'marketer@andararejomakmur.co.id', 'Agus Prasetyo (Digital Marketer)', '+6281122334441', '$2a$10$demoHashBcryptMarketer1234567890abcdef', 'DIGITAL_MARKETING', 'manusia', null, true)
 on conflict (id) do nothing;
 
 -- 2. Proyek Perumahan
@@ -155,5 +158,22 @@ values
   ('perpanjangan_tempo_kpr', 14, false, 4, 'Perpanjangan dokumen KPR maksimal 14 hari disetujui AI'),
   ('refund_booking', 0, true, 24, 'Permohonan refund pembatalan wajib keputusan Owner & Legal')
 on conflict (jenis_permintaan) do nothing;
+
+-- 11. Kampanye Iklan & Biaya Iklan (Digital Marketer Modul O)
+insert into devos.kampanye_iklan (id, proyek_id, kode, kanal, nama, aktif)
+values
+  ('c0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'ADS-META-CTWA-01', 'Meta Ads', 'Promo Launching Click to WhatsApp', true),
+  ('c0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', 'ADS-META-LEAD-02', 'Meta Ads', 'Instant Form Lead Generation', true),
+  ('c0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001', 'ADS-TIKTOK-01', 'TikTok Ads', 'Video Tour Tipe Diamond 90/75', true),
+  ('c0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000001', 'ADS-GSEARCH-01', 'Google Search', 'Keyword Rumah Mewah Solo Baru', true)
+on conflict do nothing;
+
+insert into devos.biaya_iklan (kampanye_id, tanggal, biaya)
+values
+  ('c0000000-0000-0000-0000-000000000001', current_date, 450000),
+  ('c0000000-0000-0000-0000-000000000002', current_date, 300000),
+  ('c0000000-0000-0000-0000-000000000003', current_date, 250000),
+  ('c0000000-0000-0000-0000-000000000004', current_date, 200000)
+on conflict do nothing;
 
 commit;
