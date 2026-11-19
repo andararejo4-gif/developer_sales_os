@@ -3,11 +3,13 @@ import { PublicHomepage } from './components/PublicHomepage';
 import { MarketResearchViewer } from './components/MarketResearchViewer';
 import { SalesTargetViewer } from './components/SalesTargetViewer';
 import { JalurProyek } from './components/JalurProyek';
+import { ContentCalendarViewer } from './components/ContentCalendarViewer';
 import { KnowledgeBaseViewer } from './components/KnowledgeBaseViewer';
 import { LoveLetterViewerModal } from './components/LoveLetterViewerModal';
 import {
   Award,
   Building2,
+  Calendar,
   CheckCircle2,
   Clock,
   Compass,
@@ -125,10 +127,11 @@ export default function App() {
   const [escalations, setEscalations] = useState(ESCALATION_DATA);
   const [tipeFilter, setTipeFilter] = useState<string>('all');
 
-  // Proyek & Fase 2 Intelligence States
+  // Proyek & Fase 2/3 Intelligence States
   const [showJalurProyekModal, setShowJalurProyekModal] = useState<boolean>(false);
   const [showMarketResearchModal, setShowMarketResearchModal] = useState<boolean>(false);
   const [showSalesTargetModal, setShowSalesTargetModal] = useState<boolean>(false);
+  const [showContentCalendarModal, setShowContentCalendarModal] = useState<boolean>(false);
   const [showKbModal, setShowKbModal] = useState<boolean>(false);
   const [showLoveLetterModal, setShowLoveLetterModal] = useState<boolean>(false);
 
@@ -518,6 +521,14 @@ export default function App() {
               >
                 <TrendingUp className="size-4 text-terracotta" />
                 <span>Target Penjualan 100%</span>
+              </button>
+
+              <button
+                onClick={() => setShowContentCalendarModal(true)}
+                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+              >
+                <Calendar className="size-4 text-terracotta" />
+                <span>Kalender Konten (30 Hari)</span>
               </button>
 
               <button
@@ -2039,6 +2050,7 @@ export default function App() {
             if (stageKey === 'surat_cinta_99') setShowLoveLetterModal(true);
             else if (stageKey === 'riset_pasar') setShowMarketResearchModal(true);
             else if (stageKey === 'target_penjualan') setShowSalesTargetModal(true);
+            else if (stageKey === 'kalender_konten') setShowContentCalendarModal(true);
           }}
           onClose={() => setShowJalurProyekModal(false)}
         />
@@ -2059,6 +2071,13 @@ export default function App() {
           avgPriceIdr={900000000}
           seHeadcount={3}
           onClose={() => setShowSalesTargetModal(false)}
+        />
+      )}
+
+      {showContentCalendarModal && (
+        <ContentCalendarViewer
+          projectName="The Park Townhouse Sukoharjo"
+          onClose={() => setShowContentCalendarModal(false)}
         />
       )}
 

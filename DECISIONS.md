@@ -69,3 +69,14 @@ Dokumen ini mencatat keputusan arsitektural dan teknis yang diambil selama pemba
 ## 9. Kebijakan Anti-Bocor Token & Metadata AI pada Ekspor Dokumen
 - Metadata pemakaian token (input/output tokens, perkiraan biaya, nama model) **HANYA** disimpan di log database internal (`ai_usage`) untuk monitoring SUPERADMIN.
 - Dokumen ekspor (DOCX, PDF, dan cetak HTML) diverifikasi oleh guardrail `assertNoTokenLeakage` untuk memastikan **100% bersih dari angka token, biaya AI, atau prompt internal**.
+
+## 10. Kalender Konten Media Sosial 30 Hari (Fase 3)
+- **Struktur 30 Hari x 3 Slot/Hari (90 Slot)**:
+  - *Slot 1 (Pagi 09:00 WIB)*: TOFU (Top of Funnel) &mdash; Edukasi arsitektur, kesadaran iklim Solo, jebakan sertifikat induk vs pecah per kavling.
+  - *Slot 2 (Siang 14:00 WIB)*: MOFU (Middle of Funnel) &mdash; Room tour klaster Nagoya/Tokyo, bukti legalitas PBG/SHM, komparasi spesifikasi bata merah, akses mall & RS Indriati.
+  - *Slot 3 (Malam 19:30 WIB)*: BOFU (Bottom of Funnel) &mdash; Urgensi unit tersisa, promo pelunasan cash keras, skema cash bertahap 24 bulan langsung developer, undangan survei akhir pekan via WhatsApp.
+- **Dua Jalur Konten**:
+  - *Jalur Akun Official Proyek*: Mengedepankan wibawa brand pengembang, arsitektur, dan legalitas.
+  - *Jalur Akun Sales In-House*: Sudut pandang (POV) personal agen sales ramah untuk membangun kedekatan dan interaksi langsung prospek.
+- **Validasi Sumber Faktual**: Setiap slot wajib memiliki referensi `sourceFactId` ke Knowledge Base dan nomor urut Surat Cinta 99 Keunggulan (`sourceLoveLetterPoint`).
+- **Pelacakan Link Live (`postedUrl`)**: Tim marketing/sales dapat menempelkan URL postingan live (Instagram/TikTok/FB) langsung ke kartu slot untuk mengubah status menjadi `SUDAH_POSTING`.

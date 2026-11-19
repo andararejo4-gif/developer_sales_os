@@ -26,7 +26,8 @@ export const SixStepsWorkflow: React.FC<{
   onOpenLoveLetter?: () => void;
   onOpenMarketResearch?: () => void;
   onOpenSalesTarget?: () => void;
-}> = ({ onOpenLoveLetter, onOpenMarketResearch, onOpenSalesTarget }) => {
+  onOpenContentCalendar?: () => void;
+}> = ({ onOpenLoveLetter, onOpenMarketResearch, onOpenSalesTarget, onOpenContentCalendar }) => {
   const [activeStep, setActiveStep] = useState<number>(1);
 
   const steps: StepData[] = [
@@ -192,6 +193,15 @@ export const SixStepsWorkflow: React.FC<{
             <p className="font-bold text-espresso mt-1">Brief: &ldquo;Pilihan Cash Bertahap 24 Bulan Tanpa Bank, SHM Sudah Pecah&rdquo;</p>
             <p className="text-warmmuted text-[11px] mt-0.5">Tautan Sumber: Surat Cinta Poin #84 &amp; #90 (CTA WhatsApp Booking).</p>
           </div>
+          {onOpenContentCalendar && (
+            <button
+              onClick={onOpenContentCalendar}
+              className="mt-2 text-xs font-bold text-terracotta hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <span>Buka Kalender Konten 30 Hari Lengkap</span>
+              <ExternalLink className="size-3" />
+            </button>
+          )}
         </div>
       )
     },

@@ -19,6 +19,7 @@ interface CommandPaletteProps {
   onOpenMarketResearch?: () => void;
   onOpenSalesTarget?: () => void;
   onOpenJalurProyek?: () => void;
+  onOpenContentCalendar?: () => void;
   onScrollTo: (sectionId: string) => void;
 }
 
@@ -31,6 +32,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onOpenMarketResearch,
   onOpenSalesTarget,
   onOpenJalurProyek,
+  onOpenContentCalendar,
   onScrollTo
 }) => {
   const [query, setQuery] = useState('');
@@ -101,10 +103,14 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     {
       id: 'content-calendar',
       category: 'Fitur',
-      title: 'Kalender Konten 1 Bulan',
-      subtitle: 'Jadwal multi-platform TOFU, MOFU, BOFU',
+      title: 'Kalender Konten 30 Hari (90 Slot)',
+      subtitle: 'Jadwal multi-platform TOFU, MOFU, BOFU & tempel tautan hasil posting',
       icon: Calendar,
-      action: () => { onClose(); onScrollTo('alur-6-langkah'); }
+      action: () => { 
+        onClose(); 
+        if (onOpenContentCalendar) onOpenContentCalendar();
+        else onScrollTo('alur-6-langkah'); 
+      }
     },
     {
       id: 'playbook',

@@ -36,8 +36,11 @@ erDiagram
     projects ||--o{ love_letters : "surat_cinta_99"
     projects ||--o{ market_research : "riset_pasar_v1_vN"
     projects ||--o{ sales_targets : "target_penjualan_v1_vN"
+    projects ||--o{ content_calendars : "kalender_konten_v1_vN"
     projects ||--o{ project_pipeline_stages : "jalur_proyek_8_tahap"
     projects ||--o{ approvals : "approval_rekomendasi"
+    
+    content_calendars ||--o{ calendar_slots : "90_slot_30_hari"
     
     clusters ||--o{ units : "mengelompokkan"
     clusters ||--o{ location_facts : "titik_pusat_haversine"
@@ -71,6 +74,10 @@ erDiagram
 - `sales_targets`: Rencana penjualan per versi proyek (`total_units`, `avg_price_idr`, `total_target_revenue`, `scenarios` JSONB konservatif/realistis/optimis, `monthly_schedules` JSONB dengan reverse funnel, `se_targets` JSONB per headcount).
 - `project_pipeline_stages`: Status 8 tahap berurutan (`input`, `surat_cinta_99`, `riset_pasar`, `target_penjualan`, `kalender_konten`, `playbook`, `rute_harian`, `website_landing`).
 
+### D. Kalender Konten Media Sosial (Fase 3)
+- `content_calendars`: Rencana kalender konten bulanan per proyek (`month_period`, `active_platforms` JSONB, `has_sales_track`, `total_slots`, `completed_slots`).
+- `calendar_slots`: 90 slot konten terjadwal (`day_number` 1..30, `slot_order` 1..3, `funnel_stage` TOFU/MOFU/BOFU, `track` OFFICIAL/SALES_IN_HOUSE, `platform`, `format`, `title`, `brief`, `caption`, `hashtags`, `cta`, `source_fact_id`, `source_love_letter_point`, `status`, `posted_url`).
+
 ---
 
 ## 3. Aturan Isolasi Data Tingkat Tenant & Proyek
@@ -86,6 +93,7 @@ Tenant (Developer/PT)
       ├── Surat Cinta 99 Keunggulan (v1, v2)
       ├── Riset Pasar (market_research: 5 Persona & Cincin 500m - 25km)
       ├── Target Penjualan (sales_targets: 3 Skenario s.d. Sold Out 100%)
+      ├── Kalender Konten (content_calendars: 30 Hari x 3 Slot/Hari)
       ├── Clusters (Nagoya, Osaka, Tokyo) -> Koordinat Asli
       └── Units -> Akad/Closing (Aktual Pendapatan) vs Booking (Pipeline)
 ```

@@ -15,6 +15,7 @@ import { LoginModal } from './LoginModal';
 import { MarketResearchViewer } from './MarketResearchViewer';
 import { SalesTargetViewer } from './SalesTargetViewer';
 import { JalurProyek } from './JalurProyek';
+import { ContentCalendarViewer } from './ContentCalendarViewer';
 
 interface PublicHomepageProps {
   onEnterDashboard: (role?: string) => void;
@@ -28,6 +29,7 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({ onEnterDashboard
   const [isMarketResearchOpen, setIsMarketResearchOpen] = useState(false);
   const [isSalesTargetOpen, setIsSalesTargetOpen] = useState(false);
   const [isJalurProyekOpen, setIsJalurProyekOpen] = useState(false);
+  const [isContentCalendarOpen, setIsContentCalendarOpen] = useState(false);
 
   // Global Keyboard Shortcut: ⌘K or Ctrl+K to toggle Command Palette
   useEffect(() => {
@@ -77,6 +79,7 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({ onEnterDashboard
             onOpenLoveLetter={() => setIsLoveLetterOpen(true)}
             onOpenMarketResearch={() => setIsMarketResearchOpen(true)}
             onOpenSalesTarget={() => setIsSalesTargetOpen(true)}
+            onOpenContentCalendar={() => setIsContentCalendarOpen(true)}
           />
         </section>
 
@@ -112,6 +115,7 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({ onEnterDashboard
         onOpenMarketResearch={() => setIsMarketResearchOpen(true)}
         onOpenSalesTarget={() => setIsSalesTargetOpen(true)}
         onOpenJalurProyek={() => setIsJalurProyekOpen(true)}
+        onOpenContentCalendar={() => setIsContentCalendarOpen(true)}
         onScrollTo={scrollToSection}
       />
 
@@ -159,8 +163,16 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({ onEnterDashboard
             if (stageKey === 'surat_cinta_99') setIsLoveLetterOpen(true);
             else if (stageKey === 'riset_pasar') setIsMarketResearchOpen(true);
             else if (stageKey === 'target_penjualan') setIsSalesTargetOpen(true);
+            else if (stageKey === 'kalender_konten') setIsContentCalendarOpen(true);
           }}
           onClose={() => setIsJalurProyekOpen(false)}
+        />
+      )}
+
+      {isContentCalendarOpen && (
+        <ContentCalendarViewer
+          projectName="The Park Townhouse Sukoharjo"
+          onClose={() => setIsContentCalendarOpen(false)}
         />
       )}
     </div>
