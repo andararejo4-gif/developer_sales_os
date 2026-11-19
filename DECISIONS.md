@@ -6,43 +6,47 @@ Dokumen ini mencatat keputusan arsitektural dan teknis yang diambil selama pemba
 
 ## 1. Multi-Tenant Architecture & Data Isolation
 - **Pola**: Single Database, Shared Schema dengan Discriminator Column `tenant_id` di setiap tabel data bisnis.
-- **Isolasi Data**: Setiap query, mutasi, dan akses file wajib memvalidasi `tenant_id` dari session context. Dilengkapi automated unit test `tenant-isolation.test.ts` untuk membuktikan bahwa data Tenant A tidak dapat diakses oleh Tenant B.
-- **Storage**: Pola direktori lokal `/storage/{tenant_id}/{project_id}/...` terlindungi dengan route handler berotorisasi sesi.
+- **Prinsip Per Proyek**: Data (KB, 99 Keunggulan, Riset, Target, Kalender, Playbook, Rute, Pipeline CRM, dan KPI) melekat pada **satu proyek**, bukan pada developer.
+- **Cakupan Akses Per Proyek**:
+  - Tabel `project_members` (tenant_id, project_id, user_id, role_di_proyek, atasan_id, aktif).
+  - Penugasan default: 1 proyek.
+  - Penugasan tambahan: wajib disetujui pemegang wewenang penugasan (SM atau Owner) dan dicatat di audit log.
+  - Role tingkat developer: `DEVELOPER_OWNER` dan `DIREKSI` otomatis melihat seluruh proyek tenant.
+  - Role tingkat proyek (`SALES_MANAGER`, `TEAM_LEADER`, `SALES_EXECUTIVE`, `DEVELOPER_ADMIN`, dll.) hanya melihat proyek yang ditugaskan.
+  - Pengalih proyek (`ProjectSwitcher`) di navbar bekerja dalam konteks satu proyek terpilih.
 
-## 2. Database & Migrations
-- **Engine**: PostgreSQL (`sales_os`), skema terpisah dari aplikasi lain.
-- **Migration**: SQL murni berurutan di `/db/migrations/0001_...`, `/db/migrations/0002_...`.
-- **Database Client**: `postgres` (porsgres.js / pglite kompatibel) dengan fallback in-memory datastore untuk test/development offline saat PostgreSQL lokal tidak aktif.
+## 2. Mode Demo 30 Hari & Pemotongan Cuplikan (Server-Side Teaser)
+- Status akun tenant: `DEMO` -> `AKTIF` atau `DEMO_BERAKHIR`.
+- Selama `DEMO`:
+  - Surat Cinta 99 Keunggulan: **Gratis dan Penuh (100%)**.
+  - Fitur berbayar lainnya: **Mode Cuplikan (25%)**.
+  - **Aturan Keras**: Sisa data (75%) yang diburamkan **TIDAK BOLEH dikirim ke browser**. Pemotongan dilakukan di data layer/server agar tidak bisa ditembus lewat Network Inspect atau API.
+  - **Tanpa Hitung Mundur & Tanpa Desakan**: Dilarang menampilkan hitung mundur sisa hari, kuota palsu, atau kata-kata mendesak. Bahasa sistem bernada hangat dan mengundang.
 
-## 3. Plan & Feature Flag Engine
-- Konfigurasi paket (`plans`) dan fitur (`plan_features`) sepenuhnya berbasis data database (bukan hardcoded).
-- Paket awal: Gold, Platinum, Diamond.
-- Harga: `null` (ditampilkan sebagai "Hubungi Kami" di UI publik).
-- Feature flags mengontrol:
-  - Ekstraksi AI & Surat Cinta 99 Keunggulan (semua paket)
-  - Riset Pasar (dasar / lengkap / berkala)
-  - Kalender Konten (official / in-house)
-  - Otomasi AI: TL Full AI vs Manual, SM Semi-AI vs Manual (dengan tabel `approvals`)
-  - Batas proyek dan sales seat
+## 3. Hook Ajakan Mikro (Bagian 4B)
+- Komponen `HookMikro`: kartu non-blocking (lebar max 320px di desktop, chip 64px di mobile) di pojok kanan bawah.
+- Aturan tampil:
+  - Muncul setelah pengguna terlibat (>= 20 detik atau menyentuh bagian terkunci).
+  - Maksimal 1 per halaman, maksimal 2 per sesi.
+  - Cooldown 14 hari bila memilih "Nanti saja" (`hook_cooldown_hari`).
+  - Dilarang tampil pada formulir, kuesioner, wizard, login, dan settings.
+  - Role non-pembeli (SE/TL) melihat tautan sunyi *"Sarankan ke Owner"*.
 
-## 4. Guardrail & Validator Surat Cinta 99 Keunggulan
-- Validator memeriksa:
-  1. Jumlah tepat 99 poin.
-  2. Bebas kata terlarang / overpromise: "pasti untung", "pasti naik", "terbaik se-indonesia", "nomor satu di dunia", "dijamin return", "bebas risiko".
-  3. Menggunakan data faktual proyek yang terverifikasi.
-  4. Penyebutan estimasi jarak menggunakan format "sekitar ...".
-- Output berversi (`version`: v1, v2, ...), siap diekspor ke DOCX, PDF, dan standalone HTML.
+## 4. Product Knowledge Base (Fase 1A - Sumber Kebenaran Tunggal)
+- Mengorganisir fakta produk dalam kategori terstruktur dengan `fact_id` dan `source_citation`.
+- Setiap klaim yang keluar wajib menyertakan `fact_id`.
+- Pertanyaan di luar data dijawab: *"Datanya belum ada di brosur/pricelist, perlu dikonfirmasi developer."* (Tidak boleh ditebak).
+- Menghasilkan **Kartu Produk 1 Halaman Siap Cetak** dan **Kuis Pengetahuan Produk 10 Soal SE Baru** (kelulusan 80%).
 
-## 5. UI/UX & Design Tokens (Warm Terracotta & Sandstone)
-- Terinspirasi estetika openrouter.ai (hero besar dramatis, ⌘K command palette, data counters dari database, interactive roadmap & map) dipadukan dengan palet Warm Terracotta & Sandstone dari Sales OS.
-- CSS Variables / Tailwind tokens:
-  - `sandstone`: `#F5F2EB`
-  - `espresso`: `#1C1917`
-  - `warmmuted`: `#78716C`
-  - `terracotta`: `#B45309`
-  - `olive`: `#3F6212`
-  - `warmborder`: `#E6E0D4`
-  - `surface`: `#FFFFFF`
-  - `amber-50`: `#FFFBEB`
-  - `amber-400`: `#FBBF24`
-- Tanpa dark-mode toggle; kontras memenuhi standar WCAG AA; font Plus Jakarta Sans self-hosted.
+## 5. Kuesioner Onboarding Developer & Adaptasi Sistem (Fase 1B)
+- Pendaftaran akun menyatu dengan kuesioner profil & struktur tim.
+- Mesin terpusat `effective_features(tenant, project)` mengatur:
+  - Sembunyikan rute SE, KPI SE, kalender in-house bila sales in-house tidak ada.
+  - Hierarki supervisi adaptif: SE -> TL -> SM, atau SE -> SM, atau SE -> Owner.
+  - Mode TL Virtual Full AI aktif bila paket Platinum/Diamond.
+  - Target per SE dihitung secara dinamis dari headcount (N).
+
+## 6. Dasbor Direksi Lintas Proyek (Revenue Governance)
+- **Aktual Pendapatan** murni dihitung dari unit berstatus **Akad / Closing** (`terjual`).
+- Status **Booking** ditampilkan terpisah sebagai pipeline berjalan dan **tidak dihitung pendapatan**.
+- Menampilkan target omset, realisasi aktual, dan % capaian per proyek dan gabungan.

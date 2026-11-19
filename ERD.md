@@ -1,145 +1,80 @@
 # Entity-Relationship Diagram (ERD) — Developer Sales OS
 
-Skema database PostgreSQL: `sales_os`
+Skema database PostgreSQL: `sales_os`  
 Domain Target: `developerproperti.giivepro.com`
 
 ---
 
-## 1. Visualisasi Mermaid ERD
+## 1. Visualisasi Mermaid ERD (Lengkap Fase 1, 1A, & 1B)
 
 ```mermaid
 erDiagram
+    tenants ||--o{ org_profile : "profil_kuesioner"
+    tenants ||--o{ org_roles : "struktur_tim_dan_ai"
     tenants ||--o{ projects : "memiliki"
     tenants ||--o{ users : "memiliki"
     tenants ||--o{ tenant_subscriptions : "berlangganan"
-    tenants ||--o{ jobs : "menjalankan"
-    tenants ||--o{ ai_usage : "mencatat_token"
+    tenants ||--o{ hook_events : "analitik_hook"
+    tenants ||--o{ jobs : "antrean_job_ai"
+    tenants ||--o{ ai_usage : "audit_token"
     tenants ||--o{ audit_logs : "audit_trail"
     
     plans ||--o{ plan_features : "fitur_flags"
-    plans ||--o{ tenant_subscriptions : "diberikan_ke"
+    plans ||--o{ tenant_subscriptions : "diaktifkan_pada"
     
-    users ||--o{ users : "atasan_bawahan (SE->TL->SM)"
-    users ||--o{ approvals : "menyetujui"
+    users ||--o{ project_members : "penugasan_proyek"
+    users ||--o{ project_assignment_requests : "mengajukan_penugasan"
+    users ||--o{ product_quiz_results : "skor_kuis_se"
     
+    projects ||--o{ project_members : "anggota_tim"
     projects ||--o{ clusters : "terdiri_dari"
     projects ||--o{ units : "memiliki_unit"
-    projects ||--o{ project_files : "berkas_terstruktur"
+    projects ||--o{ product_sources : "berkas_asli"
+    projects ||--o{ kb_facts : "sumber_kebenaran_kb"
+    projects ||--o{ location_facts : "jarak_haversine"
+    projects ||--o{ kb_chunks : "semantik_kb"
     projects ||--o{ love_letters : "surat_cinta_99"
-    projects ||--o{ approvals : "memerlukan_persetujuan"
+    projects ||--o{ approvals : "approval_rekomendasi"
     
     clusters ||--o{ units : "mengelompokkan"
-    
-    tenants {
-        uuid id PK
-        string slug UK
-        string name
-        string legal_name
-        boolean is_active
-        timestamp created_at
-    }
+    clusters ||--o{ location_facts : "titik_pusat_haversine"
 
-    plans {
-        uuid id PK
-        string code UK
-        string name
-        numeric price
-        string billing_period
-        int max_active_projects
-        int max_sales_users
-    }
-
-    plan_features {
-        uuid id PK
-        uuid plan_id FK
-        string feature_key
-        jsonb feature_value
-        boolean is_enabled
-    }
-
-    users {
-        uuid id PK
-        uuid tenant_id FK
-        string email UK
-        string password_hash
-        string name
-        string role
-        uuid manager_id FK
-        boolean is_active
-    }
-
-    projects {
-        uuid id PK
-        uuid tenant_id FK
-        string slug
-        string name
-        string project_type
-        double latitude
-        double longitude
-        int total_units
-        boolean is_public_case_study
-    }
-
-    clusters {
-        uuid id PK
-        uuid tenant_id FK
-        uuid project_id FK
-        string name
-        double latitude
-        double longitude
-    }
-
-    units {
-        uuid id PK
-        uuid tenant_id FK
-        uuid project_id FK
-        uuid cluster_id FK
-        string unit_code
-        string unit_type
-        numeric land_area
-        numeric building_area
-        numeric price_cash_hard
-        numeric price_cash_24m
-        numeric price_kpr
-        string status
-    }
-
-    love_letters {
-        uuid id PK
-        uuid tenant_id FK
-        uuid project_id FK
-        int version
-        string title
-        jsonb points_json
-        int total_points
-        boolean validator_passed
-    }
-
-    approvals {
-        uuid id PK
-        uuid tenant_id FK
-        uuid project_id FK
-        string module_name
-        jsonb proposed_data
-        uuid approver_id FK
-        string status
-    }
+    product_sources ||--o{ kb_facts : "menghasilkan_fakta"
+    kb_facts ||--o{ kb_changes : "riwayat_perubahan"
 ```
 
 ---
 
-## 2. Hierarki Multi-Tenant & Aturan Isolasi
+## 2. Rincian Entitas Baru Fase 1A & 1B
+
+### A. Product Knowledge Base (Fase 1A)
+- `product_sources`: Berkas asli (brosur, pricelist, denah) dengan periode berlaku, versi, dan hash.
+- `kb_facts`: Fakta terstruktur terverifikasi (`fact_id`, kategori, kunci, nilai, sumber kutipan, confidence, flag `boleh_publik`).
+- `location_facts`: Jarak garis lurus Haversine dan estimasi waktu berkendara terverifikasi per cluster.
+- `kb_chunks`: Potongan teks untuk pencarian semantik.
+- `kb_changes`: Riwayat perubahan fakta produk (`dikoreksi_manual`).
+- `product_quiz_results`: Riwayat hasil kuis 10 soal SE baru (lulus minimal 80%).
+
+### B. Organisasi, Penugasan Proyek, & Mode Demo (Fase 1B)
+- `org_profile`: Profil PT, rentang headcount, kanal media sosial, alat lead, target penjualan.
+- `org_roles`: Headcount dan mode AI (`human_only`, `semi_ai`, `full_ai`) per role.
+- `project_members`: Relasi penugasan user ke proyek (`bisa_menyetujui_penugasan` untuk SM / Owner). Default: 1 proyek.
+- `project_assignment_requests`: Alur pengajuan dan persetujuan penugasan ke proyek tambahan.
+- `hook_events`: Pencatatan kartu ajakan mikro (`displayed`, `closed`, `cta_clicked`, `converted`).
+- `tenants`: Kolom status akun `DEMO` (30 hari), `teaser_visible_percent` (25%).
+
+---
+
+## 3. Aturan Isolasi Data Tingkat Tenant & Proyek
 
 ```
 Tenant (Developer/PT)
- └── Subscriptions (Plan: Gold / Platinum / Diamond)
- └── Users (SUPERADMIN, OWNER, SM, TL, SE, DIGITAL_MARKETING)
-      └── Hierarki Supervisi: SE -> TL (AI) -> SM (Semi-AI)
- └── Projects (The Park Townhouse Sukoharjo, dll)
-      ├── Clusters (Nagoya, Osaka, Tokyo)
-      │    └── Units (30 Unit Kavling)
-      ├── Project Files (/storage/{tenant_id}/{project_id}/...)
-      └── Love Letters (99 Poin Editorial Berversi v1, v2)
+ ├── Status: DEMO (30 Hari) / AKTIF / DEMO_BERAKHIR
+ ├── org_profile + org_roles -> effective_features()
+ └── Projects (Data Melekat Pada Proyek)
+      ├── Project Members (SE / TL / SM / Admin) -> Wajib Approval Penugasan
+      ├── Knowledge Base (kb_facts dengan fact_id)
+      ├── Surat Cinta 99 Keunggulan (v1, v2)
+      ├── Clusters (Nagoya, Osaka, Tokyo) -> Koordinat Asli
+      └── Units -> Akad/Closing (Aktual Pendapatan) vs Booking (Pipeline)
 ```
-
-Setiap entitas bisnis mengikat `tenant_id` secara wajib dan difilter pada seluruh query pembacaan dan mutasi.
