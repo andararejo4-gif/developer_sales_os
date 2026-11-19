@@ -16,6 +16,9 @@ interface CommandPaletteProps {
   onOpenWizard: () => void;
   onOpenLoveLetter: () => void;
   onOpenLogin: () => void;
+  onOpenMarketResearch?: () => void;
+  onOpenSalesTarget?: () => void;
+  onOpenJalurProyek?: () => void;
   onScrollTo: (sectionId: string) => void;
 }
 
@@ -25,6 +28,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onOpenWizard,
   onOpenLoveLetter,
   onOpenLogin,
+  onOpenMarketResearch,
+  onOpenSalesTarget,
+  onOpenJalurProyek,
   onScrollTo
 }) => {
   const [query, setQuery] = useState('');
@@ -60,17 +66,37 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       id: 'market-research',
       category: 'Fitur',
       title: 'Riset Pasar & Radius 25 km',
-      subtitle: 'Persona pembeli, fasilitas publik & kompetitor',
+      subtitle: '5 Persona pembeli, fasilitas publik & kompetitor',
       icon: MapPin,
-      action: () => { onClose(); onScrollTo('peta-demo'); }
+      action: () => { 
+        onClose(); 
+        if (onOpenMarketResearch) onOpenMarketResearch();
+        else onScrollTo('peta-demo'); 
+      }
     },
     {
       id: 'sales-target',
       category: 'Fitur',
       title: 'Target Penjualan s.d. Sold Out',
-      subtitle: 'Simulasi penyerapan unit per bulan',
+      subtitle: 'Simulasi penyerapan unit per bulan & reverse funnel',
       icon: TrendingUp,
-      action: () => { onClose(); onScrollTo('alur-6-langkah'); }
+      action: () => { 
+        onClose(); 
+        if (onOpenSalesTarget) onOpenSalesTarget();
+        else onScrollTo('alur-6-langkah'); 
+      }
+    },
+    {
+      id: 'jalur-proyek',
+      category: 'Fitur',
+      title: 'Jalur Proyek (8 Tahap Pipeline)',
+      subtitle: 'Alur input brosur, riset, target, kalender hingga landing page',
+      icon: Layers,
+      action: () => { 
+        onClose(); 
+        if (onOpenJalurProyek) onOpenJalurProyek();
+        else onScrollTo('alur-6-langkah'); 
+      }
     },
     {
       id: 'content-calendar',

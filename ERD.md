@@ -34,6 +34,9 @@ erDiagram
     projects ||--o{ location_facts : "jarak_haversine"
     projects ||--o{ kb_chunks : "semantik_kb"
     projects ||--o{ love_letters : "surat_cinta_99"
+    projects ||--o{ market_research : "riset_pasar_v1_vN"
+    projects ||--o{ sales_targets : "target_penjualan_v1_vN"
+    projects ||--o{ project_pipeline_stages : "jalur_proyek_8_tahap"
     projects ||--o{ approvals : "approval_rekomendasi"
     
     clusters ||--o{ units : "mengelompokkan"
@@ -63,6 +66,11 @@ erDiagram
 - `hook_events`: Pencatatan kartu ajakan mikro (`displayed`, `closed`, `cta_clicked`, `converted`).
 - `tenants`: Kolom status akun `DEMO` (30 hari), `teaser_visible_percent` (25%).
 
+### C. Riset Pasar & Target Penjualan (Fase 2)
+- `market_research`: Menyimpan riset pasar per versi proyek (`personas` JSONB min 5 persona, `public_facilities` JSONB radius 500m-25km, `competitors` JSONB, `market_share_analysis` JSONB SVG).
+- `sales_targets`: Rencana penjualan per versi proyek (`total_units`, `avg_price_idr`, `total_target_revenue`, `scenarios` JSONB konservatif/realistis/optimis, `monthly_schedules` JSONB dengan reverse funnel, `se_targets` JSONB per headcount).
+- `project_pipeline_stages`: Status 8 tahap berurutan (`input`, `surat_cinta_99`, `riset_pasar`, `target_penjualan`, `kalender_konten`, `playbook`, `rute_harian`, `website_landing`).
+
 ---
 
 ## 3. Aturan Isolasi Data Tingkat Tenant & Proyek
@@ -74,7 +82,10 @@ Tenant (Developer/PT)
  └── Projects (Data Melekat Pada Proyek)
       ├── Project Members (SE / TL / SM / Admin) -> Wajib Approval Penugasan
       ├── Knowledge Base (kb_facts dengan fact_id)
+      ├── Jalur Proyek (project_pipeline_stages: 8 Tahap)
       ├── Surat Cinta 99 Keunggulan (v1, v2)
+      ├── Riset Pasar (market_research: 5 Persona & Cincin 500m - 25km)
+      ├── Target Penjualan (sales_targets: 3 Skenario s.d. Sold Out 100%)
       ├── Clusters (Nagoya, Osaka, Tokyo) -> Koordinat Asli
       └── Units -> Akad/Closing (Aktual Pendapatan) vs Booking (Pipeline)
 ```

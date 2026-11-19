@@ -12,6 +12,9 @@ import { Footer } from './Footer';
 import { OnboardingWizardModal } from './OnboardingWizardModal';
 import { LoveLetterViewerModal } from './LoveLetterViewerModal';
 import { LoginModal } from './LoginModal';
+import { MarketResearchViewer } from './MarketResearchViewer';
+import { SalesTargetViewer } from './SalesTargetViewer';
+import { JalurProyek } from './JalurProyek';
 
 interface PublicHomepageProps {
   onEnterDashboard: (role?: string) => void;
@@ -22,6 +25,9 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({ onEnterDashboard
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [isLoveLetterOpen, setIsLoveLetterOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [isMarketResearchOpen, setIsMarketResearchOpen] = useState(false);
+  const [isSalesTargetOpen, setIsSalesTargetOpen] = useState(false);
+  const [isJalurProyekOpen, setIsJalurProyekOpen] = useState(false);
 
   // Global Keyboard Shortcut: ⌘K or Ctrl+K to toggle Command Palette
   useEffect(() => {
@@ -69,6 +75,8 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({ onEnterDashboard
         <section id="alur-6-langkah" className="py-16 md:py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <SixStepsWorkflow
             onOpenLoveLetter={() => setIsLoveLetterOpen(true)}
+            onOpenMarketResearch={() => setIsMarketResearchOpen(true)}
+            onOpenSalesTarget={() => setIsSalesTargetOpen(true)}
           />
         </section>
 
@@ -101,6 +109,9 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({ onEnterDashboard
         onOpenWizard={() => setIsWizardOpen(true)}
         onOpenLoveLetter={() => setIsLoveLetterOpen(true)}
         onOpenLogin={() => setIsLoginOpen(true)}
+        onOpenMarketResearch={() => setIsMarketResearchOpen(true)}
+        onOpenSalesTarget={() => setIsSalesTargetOpen(true)}
+        onOpenJalurProyek={() => setIsJalurProyekOpen(true)}
         onScrollTo={scrollToSection}
       />
 
@@ -120,6 +131,38 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({ onEnterDashboard
         onClose={() => setIsLoginOpen(false)}
         onSuccessLogin={(role) => onEnterDashboard(role)}
       />
+
+      {isMarketResearchOpen && (
+        <MarketResearchViewer
+          projectName="The Park Townhouse Sukoharjo"
+          userRole="DIREKSI"
+          onClose={() => setIsMarketResearchOpen(false)}
+        />
+      )}
+
+      {isSalesTargetOpen && (
+        <SalesTargetViewer
+          projectName="The Park Townhouse Sukoharjo"
+          totalUnits={30}
+          avgPriceIdr={900000000}
+          seHeadcount={3}
+          onClose={() => setIsSalesTargetOpen(false)}
+        />
+      )}
+
+      {isJalurProyekOpen && (
+        <JalurProyek
+          projectName="The Park Townhouse Sukoharjo"
+          userRole="DIREKSI"
+          onOpenStage={(stageKey) => {
+            setIsJalurProyekOpen(false);
+            if (stageKey === 'surat_cinta_99') setIsLoveLetterOpen(true);
+            else if (stageKey === 'riset_pasar') setIsMarketResearchOpen(true);
+            else if (stageKey === 'target_penjualan') setIsSalesTargetOpen(true);
+          }}
+          onClose={() => setIsJalurProyekOpen(false)}
+        />
+      )}
     </div>
   );
 };

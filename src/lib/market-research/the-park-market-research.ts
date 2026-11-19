@@ -1,0 +1,463 @@
+// ============================================================================
+// THE PARK TOWNHOUSE SUKOHARJO - GROUND TRUTH MARKET RESEARCH
+// ============================================================================
+
+import type {
+  MarketResearchReport,
+  TargetPersona,
+  PublicFacility,
+  CompetitorProperty,
+  MarketShareAnalysis,
+} from './types';
+
+export const THE_PARK_COORDINATES = {
+  lat: -7.6738726546957565,
+  lng: 110.84397833605674,
+};
+
+export const THE_PARK_5_PERSONAS: TargetPersona[] = [
+  {
+    id: 'persona-1',
+    code: 'P1_FIRST_HOME_UPGRADER',
+    name: 'Keluarga Muda Mapan Solo Raya',
+    subtitle: 'The Modern Upgrader & First Home Dreamer',
+    avatarIcon: 'Home',
+    demographics: {
+      ageRange: '28 - 36 tahun',
+      profession: ['Manager Perusahaan Swasta', 'Dokter Muda RS Solo Baru', 'Profesional IT Remote'],
+      monthlyIncome: 'Rp 22.000.000 - Rp 45.000.000 / bulan',
+      householdType: 'Menikah, 1 - 2 anak balita',
+      currentResidence: 'Sewa apartemen di Solo Baru atau tinggal di rumah orang tua Solo tengah',
+    },
+    needsAndPains: [
+      'Membutuhkan hunian 2 lantai mandiri dengan sirkulasi udara sehat & taman untuk anak balita',
+      'Khawatir lingkungan komplek tidak aman dan bising jika tinggal di pinggir jalan umum perkampungan',
+      'Menginginkan akses cepat ke sekolah unggulan dan pusat belanja Solo Baru (<15 menit)',
+      'Butuh kepastian legalitas aman agar KPR bank syariah/konvensional disetujui tanpa hambatan sertifikat gantung',
+    ],
+    commonObjections: [
+      '"Apakah DP bisa dicicil atau ada subsidi biaya akad KPR?"',
+      '"Apakah sertifikat sudah pecah per unit atau masih sertifikat induk developer?"',
+      '"Bagaimana iuran IPL bulanan dan kualitas pengelolaan air bersih serta kebersihan?"',
+    ],
+    preferredChannels: [
+      'Instagram Reels & Carousel walkthrough',
+      'TikTok House Tour review',
+      'Pameran Mall di The Park Mall Solo Baru / Pakuwon Mall',
+      'Konsultasi WhatsApp via Web Landing Page',
+    ],
+    buyingTriggers: [
+      'SHM dan PBG sudah pecah per kavling siap balik nama (legalitas bebas resiko)',
+      'Promo gratis kanopi carport dan smart digital door lock',
+      'Desain fasad modern kontemporer yang estetik untuk konten media sosial keluarga muda',
+    ],
+    relevantFactIds: ['FACT_LEGAL_SHM', 'FACT_LEGAL_PBG', 'FACT_FAC_SECURITY', 'FACT_UNIT_LUAS'],
+  },
+  {
+    id: 'persona-2',
+    code: 'P2_MEDICAL_SPECIALIST',
+    name: 'Spesialis & Tenaga Medis RS Indriati',
+    subtitle: 'The Prestigious Healthcare Professional',
+    avatarIcon: 'Stethoscope',
+    demographics: {
+      ageRange: '34 - 50 tahun',
+      profession: ['Dokter Spesialis RS Indriati Solo Baru', 'Dokter Spesialis dr. Oen Solo Baru', 'Pemilik Klinik Pratama'],
+      monthlyIncome: 'Rp 45.000.000 - Rp 110.000.000 / bulan',
+      householdType: 'Keluarga mapan, anak usia sekolah SD-SMP',
+      currentResidence: 'Menyewa rumah di perumahan tua Solo Baru atau komuter luar kota',
+    },
+    needsAndPains: [
+      'Wajib memiliki akses darurat sangat cepat (<10 menit) ke RS Indriati saat jam on-call malam hari',
+      'Privasi dan ketenangan maksimal untuk istirahat setelah jadwal operasi panjang',
+      'Carport luas yang memuat 2 mobil keluarga tanpa memakan badan jalan utama',
+      'Bebas dari resiko banjir dan jalan lingkungan komplek paving lebar minimal 7 meter',
+    ],
+    commonObjections: [
+      '"Berapa menit waktu tempuh riil saat jam sibuk pagi/sore ke Solo Baru?"',
+      '"Apakah lingkungan hening dan tetangga setara secara strata sosial?"',
+      '"Apakah spesifikasi pondasi dan bata merah terbukti kokoh tanpa bocor rembes?"',
+    ],
+    preferredChannels: [
+      'Rekomendasi sesama rekan dokter RS Indriati / dr. Oen',
+      'Undangan Private VIP Preview di lokasi pada akhir pekan',
+      'Chat WhatsApp langsung dengan Sales Manager / Team Leader',
+    ],
+    buyingTriggers: [
+      'Jarak riil hanya 5 - 7 menit ke RS Indriati Solo Baru',
+      'Keamanan 24 jam dengan CCTV & One Gate System eksklusif hanya 30 unit (bukan klaster massal)',
+      'Opsi pembayaran Cash Keras berdiskon khusus untuk dokter spesialis',
+    ],
+    relevantFactIds: ['FACT_LOC_INDRIATI', 'FACT_FAC_ONEGATE', 'FACT_FAC_ROAD', 'FACT_SPEC_BATA_MERAH'],
+  },
+  {
+    id: 'persona-3',
+    code: 'P3_CASH_ENTREPRENEUR',
+    name: 'Pengusaha Tekstil & Grosir Solo Raya',
+    subtitle: 'The Cash-Rich Business Owner',
+    avatarIcon: 'Briefcase',
+    demographics: {
+      ageRange: '35 - 55 tahun',
+      profession: ['Pemilik Toko Grosir Tekstil Pasar Klewer / Beteng', 'Pengusaha Manufaktur Rotan Trangsan', 'Distributor Bahan Bangunan'],
+      monthlyIncome: 'Rp 60.000.000 - Rp 250.000.000 / bulan',
+      householdType: 'Keluarga besar / anak remaja',
+      currentResidence: 'Ruko di pusat kota Solo atau kawasan niaga Sukoharjo',
+    },
+    needsAndPains: [
+      'Membutuhkan hunian terpisah dari hiruk pikuk tempat usaha/gudang untuk kualitas hidup keluarga',
+      'Lebih memilih transaksi tanpa birokrasi perbankan/BI checking yang rumit melalui fasilitas cicilan in-house developer',
+      'Mencari aset properti riil yang tidak mengalami depresiasi nilai dan mudah dijaminkan jika diperlukan modal ekspansi',
+    ],
+    commonObjections: [
+      '"Berapa potongan harga jika pelunasan langsung Cash Keras 100% tanpa termin?"',
+      '"Apakah ada bunga atau denda pinalti jika mengambil opsi Cash Bertahap 12 - 24 bulan?"',
+      '"Bagaimana legalitas batas tanah fisik vs gambar ukur BPN di lapangan?"',
+    ],
+    preferredChannels: [
+      'Pertemuan tatap muka (coffee meeting) di showroom / kantor pemasaran',
+      'Facebook Ads targeting pengusaha & pemilik bisnis Solo Raya',
+      'Grup paguyuban bisnis / KADIN / komunitas otomotif Solo',
+    ],
+    buyingTriggers: [
+      'Pilihan skema Cash Bertahap hingga 24 bulan langsung ke developer tanpa BI checking bank',
+      'Diskon spesial cash keras yang memberikan margin modal signifikan',
+      'Lokasi dekat koridor bisnis Solo Baru yang memiliki riwayat kenaikan harga tanah tertinggi di Sukoharjo',
+    ],
+    relevantFactIds: ['FACT_PRICE_CASH_KERAS', 'FACT_PRICE_CASH_BERTAHAP', 'FACT_LEGAL_SHM'],
+  },
+  {
+    id: 'persona-4',
+    code: 'P4_LEGACY_PARENTS',
+    name: 'Orang Tua Mapan Pembeli Warisan',
+    subtitle: 'The Generational Asset Builder',
+    avatarIcon: 'Award',
+    demographics: {
+      ageRange: '52 - 68 tahun',
+      profession: ['Pensiunan Pejabat / BUMN', 'Senior Notaris / Pengacara', 'Pengusaha Senior Solo'],
+      monthlyIncome: 'Aset simpanan deposito & passive income > Rp 50.000.000 / bulan',
+      householdType: 'Orang tua dengan anak yang baru menikah atau baru wisuda profesi',
+      currentResidence: 'Rumah tapak luas di Banjarsari atau Laweyan Solo',
+    },
+    needsAndPains: [
+      'Ingin membelikan anak/menantu rumah pertama di lokasi aman sebelum harga properti Solo Baru melonjak tak terjangkau',
+      'Sangat teliti terhadap keabsahan dokumen legalitas perizinan, batas sertifikat, dan reputasi pengembang',
+      'Tidak ingin anak dibebani cicilan KPR puluhan tahun yang memberatkan',
+    ],
+    commonObjections: [
+      '"Sudah berapa proyek yang diselesaikan developer ini di wilayah Jawa Tengah?"',
+      '"Apakah air tanahnya bersih, tidak berbau, dan tidak berkapur?"',
+      '"Kapan serah terima kunci dan apakah ada garansi pemeliharaan bangunan pasca serah terima?"',
+    ],
+    preferredChannels: [
+      'Melihat umbul-umbul / billboard fisik di sepanjang jalan protokol Solo Baru',
+      'Mendampingi anak saat survei lokasi langsung di akhir pekan',
+      'Brosur cetak fisik tebal berbobot yang bisa dibaca di rumah',
+    ],
+    buyingTriggers: [
+      'Sertifikat Hak Milik (SHM) sudah pecah atas nama kavling masing-masing',
+      'Struktur bangunan kokoh bata merah dengan pondasi cakar ayam bertulang terjamin',
+      'Kawasan eksklusif hanya 30 unit menjamin ketertiban dan ketenangan anak cucu',
+    ],
+    relevantFactIds: ['FACT_LEGAL_SHM', 'FACT_SPEC_BATA_MERAH', 'FACT_FAC_ONEGATE'],
+  },
+  {
+    id: 'persona-5',
+    code: 'P5_HIGH_YIELD_INVESTOR',
+    name: 'Investor Rental Yield & Diaspora Solo',
+    subtitle: 'The Smart High-Yield Portfolio Investor',
+    avatarIcon: 'TrendingUp',
+    demographics: {
+      ageRange: '35 - 58 tahun',
+      profession: ['Eksekutif Perbankan / Konsultan Jakarta', 'Diaspora Solo di Jabodetabek / Luar Negeri', 'Properti Portfolio Investor'],
+      monthlyIncome: 'Rp 50.000.000 - Rp 150.000.000 / bulan',
+      householdType: 'Keluarga mapan di kota besar',
+      currentResidence: 'Jakarta Selatan, Tangerang Selatan, atau Surabaya',
+    },
+    needsAndPains: [
+      'Mencari instrumen investasi properti dengan yield sewa menarik (6% - 9% per tahun) dibanding bunga deposito bank',
+      'Target penyewa premium dokter RS Indriati atau ekspatriat kawasan industri Sukoharjo',
+      'Membutuhkan manajemen pengelolaan properti/titip sewa agar tidak repot memelihara unit dari jarak jauh',
+    ],
+    commonObjections: [
+      '"Berapa estimasi harga sewa rumah 2 lantai per tahun di area ini saat ini?"',
+      '"Apakah developer memiliki divisi rental management untuk membantu mencarikan penyewa?"',
+      '"Bagaimana likuiditas pasar jika 3-5 tahun lagi ingin dilakukan capital gain resale?"',
+    ],
+    preferredChannels: [
+      'Google Search dengan keyword "rumah mewah solo baru dijual"',
+      'Virtual tour 360 & video call survey bersama Sales Manager',
+      'Laporan analisis pasar & proyeksi yield investasi tertulis',
+    ],
+    buyingTriggers: [
+      'Harga perdana unit klaster baru yang berada di bawah harga pasar klaster serupa di Solo Baru (capital upside tinggi)',
+      'Pertumbuhan kawasan Solo Baru selatan dengan fasilitas rumah sakit dan mall modern kelas satu',
+      'Fasilitas One Gate System dan CCTV online yang bisa dipantau via smartphone dari Jakarta',
+    ],
+    relevantFactIds: ['FACT_PRICE_CASH_KERAS', 'FACT_LOC_THE_PARK_MALL', 'FACT_LOC_INDRIATI', 'FACT_FAC_SECURITY'],
+  },
+];
+
+export const THE_PARK_PUBLIC_FACILITIES: PublicFacility[] = [
+  // 500 m
+  {
+    id: 'fac-1',
+    name: 'Sentra Kuliner & Minimarket 24 Jam Mandan',
+    category: 'Perbelanjaan & Lifestyle',
+    distanceMeters: 450,
+    distanceKmFormatted: '0.45 km',
+    driveTimeMinutes: 2,
+    coordinates: { lat: -7.6725, lng: 110.8428 },
+    radiusRing: 500,
+    citation: 'Fasilitas lingkungan terdekat di Jl. Mandan Sukoharjo',
+  },
+  // 1 km
+  {
+    id: 'fac-2',
+    name: 'SPBU Pertamina & Kantor Layanan Mandan',
+    category: 'Transportasi & Akses',
+    distanceMeters: 900,
+    distanceKmFormatted: '0.9 km',
+    driveTimeMinutes: 3,
+    coordinates: { lat: -7.6710, lng: 110.8415 },
+    radiusRing: 1000,
+    citation: 'Jalur utama Jl. Tentara Pelajar',
+  },
+  // 2 km
+  {
+    id: 'fac-3',
+    name: 'Puskesmas Sukoharjo & Pasar Tradisional Cuplik',
+    category: 'Kesehatan',
+    distanceMeters: 1800,
+    distanceKmFormatted: '1.8 km',
+    driveTimeMinutes: 5,
+    coordinates: { lat: -7.6680, lng: 110.8450 },
+    radiusRing: 2000,
+    citation: 'Pusat layanan kesehatan tingkat 1 & pasar rakyat',
+  },
+  // 3 km
+  {
+    id: 'fac-4',
+    name: 'Sekolah Islam Terpadu & SD/SMP Unggulan Sukoharjo',
+    category: 'Pendidikan',
+    distanceMeters: 2800,
+    distanceKmFormatted: '2.8 km',
+    driveTimeMinutes: 6,
+    coordinates: { lat: -7.6620, lng: 110.8410 },
+    radiusRing: 3000,
+    citation: 'Sentra pendidikan dasar & menengah',
+  },
+  // 5 km
+  {
+    id: 'fac-5',
+    name: 'RS Indriati Solo Baru (RS Rujukan Tipe B Modern)',
+    category: 'Kesehatan',
+    distanceMeters: 4800,
+    distanceKmFormatted: '4.8 km',
+    driveTimeMinutes: 8,
+    coordinates: { lat: -7.6250, lng: 110.8120 },
+    radiusRing: 5000,
+    citation: 'Fakta KB FACT_LOC_INDRIATI: 8-10 menit via koridor utama',
+  },
+  {
+    id: 'fac-6',
+    name: 'Sekolah Internasional Al-Azhar & Singapore Piaget Academy Solo Baru',
+    category: 'Pendidikan',
+    distanceMeters: 4950,
+    distanceKmFormatted: '4.9 km',
+    driveTimeMinutes: 9,
+    coordinates: { lat: -7.6220, lng: 110.8150 },
+    radiusRing: 5000,
+    citation: 'Kampus pendidikan elite internasional Solo Baru',
+  },
+  // 10 km
+  {
+    id: 'fac-7',
+    name: 'The Park Mall Solo Baru & Pakuwon Mall Solo Baru',
+    category: 'Perbelanjaan & Lifestyle',
+    distanceMeters: 7500,
+    distanceKmFormatted: '7.5 km',
+    driveTimeMinutes: 12,
+    coordinates: { lat: -7.6015, lng: 110.8175 },
+    radiusRing: 10000,
+    citation: 'Fakta KB FACT_LOC_THE_PARK_MALL: pusat perbelanjaan terbesar Solo Raya',
+  },
+  {
+    id: 'fac-8',
+    name: 'RS dr. Oen Solo Baru & Sentra Bisnis Jl. Ir. Soekarno',
+    category: 'Kesehatan',
+    distanceMeters: 8100,
+    distanceKmFormatted: '8.1 km',
+    driveTimeMinutes: 14,
+    coordinates: { lat: -7.5980, lng: 110.8160 },
+    radiusRing: 10000,
+    citation: 'Pusat perbankan, kuliner, dan layanan medis Solo Baru',
+  },
+  // 15 km
+  {
+    id: 'fac-9',
+    name: 'Pusat Kota Surakarta, Keraton Solo & Kawasan Slamet Riyadi',
+    category: 'Pusat Bisnis & Pemerintahan',
+    distanceMeters: 13200,
+    distanceKmFormatted: '13.2 km',
+    driveTimeMinutes: 22,
+    coordinates: { lat: -7.5690, lng: 110.8250 },
+    radiusRing: 15000,
+    citation: 'Jantung peradaban, heritage, dan sentra komersial Solo',
+  },
+  // 20 km
+  {
+    id: 'fac-10',
+    name: 'Stasiun Kereta Api Solo Balapan & Universitas Sebelas Maret (UNS)',
+    category: 'Transportasi & Akses',
+    distanceMeters: 17500,
+    distanceKmFormatted: '17.5 km',
+    driveTimeMinutes: 28,
+    coordinates: { lat: -7.5580, lng: 110.8520 },
+    radiusRing: 20000,
+    citation: 'Hub transit kereta api cepat/eksekutif & kampus negeri utama',
+  },
+  // 25 km
+  {
+    id: 'fac-11',
+    name: 'Gerbang Tol Gondangrejo / Colomadu (Tol Trans Jawa) & Bandara Adi Soemarmo',
+    category: 'Transportasi & Akses',
+    distanceMeters: 23500,
+    distanceKmFormatted: '23.5 km',
+    driveTimeMinutes: 35,
+    coordinates: { lat: -7.5150, lng: 110.7550 },
+    radiusRing: 25000,
+    citation: 'Akses konektivitas antar kota Jakarta - Semarang - Surabaya',
+  },
+];
+
+export const THE_PARK_COMPETITORS: CompetitorProperty[] = [
+  {
+    id: 'comp-1',
+    name: 'Puri Grogol Asri Residence',
+    developer: 'PT Grogol Graha Properti',
+    distanceKm: 2.4,
+    radiusRing: 3000,
+    priceRange: 'Rp 650.000.000 - Rp 950.000.000',
+    priceStartIdr: 650000000,
+    priceEndIdr: 950000000,
+    avgPricePerM2Idr: 7200000,
+    unitTypes: ['Tipe 45/90', 'Tipe 60/100'],
+    strengths: ['Harga unit awal lebih murah', 'Akses dekat jalan desa utama'],
+    weaknesses: ['Hanya 1 lantai', 'Row jalan sempit (5 meter)', 'Sertifikat masih proses induk di notaris'],
+    theParkAdvantage: 'The Park menyediakan hunian 2 lantai megah dengan jalan komplek 7 meter dan SHM 100% sudah pecah per kavling.',
+    advantageFactId: 'FACT_LEGAL_SHM',
+    isDemoVerified: true,
+  },
+  {
+    id: 'comp-2',
+    name: 'Solo Baru Emerald Townhouse',
+    developer: 'PT Cipta Graha Mandiri',
+    distanceKm: 4.8,
+    radiusRing: 5000,
+    priceRange: 'Rp 1.450.000.000 - Rp 2.200.000.000',
+    priceStartIdr: 1450000000,
+    priceEndIdr: 2200000000,
+    avgPricePerM2Idr: 12500000,
+    unitTypes: ['Tipe 100/120', 'Tipe 140/150'],
+    strengths: ['Lokasi sangat dekat jalan protokol Solo Baru', 'Klub house komplek'],
+    weaknesses: ['Harga sangat tinggi (>Rp 1.4 Miliar)', 'Kompleks padat 150 unit kehilangan privasi tenang'],
+    theParkAdvantage: 'Spesifikasi sekelas dengan harga jauh lebih kompetitif di kisaran Rp 850jt - 1.1M, serta konsep butik hanya 30 unit berprivasi tinggi.',
+    advantageFactId: 'FACT_PRICE_CASH_KERAS',
+    isDemoVerified: true,
+  },
+  {
+    id: 'comp-3',
+    name: 'Baki Harmoni Regency',
+    developer: 'PT Harmoni Land Sukoharjo',
+    distanceKm: 3.8,
+    radiusRing: 5000,
+    priceRange: 'Rp 750.000.000 - Rp 1.100.000.000',
+    priceStartIdr: 750000000,
+    priceEndIdr: 1100000000,
+    avgPricePerM2Idr: 8100000,
+    unitTypes: ['Tipe 65/95', 'Tipe 80/110'],
+    strengths: ['Konstruksi cepat', 'Dekat RS dr. Oen Solo Baru'],
+    weaknesses: ['Sebagian dinding memakai bata ringan hebel standar tanpa plesteran tebal', 'Drainase sering tergenang saat hujan lebat'],
+    theParkAdvantage: 'Konstruksi The Park memakai bata merah plester aci premium, bebas banjir dengan drainase tertutup terintegrasi.',
+    advantageFactId: 'FACT_SPEC_BATA_MERAH',
+    isDemoVerified: true,
+  },
+  {
+    id: 'comp-4',
+    name: 'Sukoharjo Grand Premiere (DEMO)',
+    developer: 'PT Premiere Graha Nusaphala',
+    distanceKm: 8.5,
+    radiusRing: 10000,
+    priceRange: 'Rp 800.000.000 - Rp 1.250.000.000',
+    priceStartIdr: 800000000,
+    priceEndIdr: 1250000000,
+    avgPricePerM2Idr: 8500000,
+    unitTypes: ['Tipe 70/100', 'Tipe 90/120'],
+    strengths: ['Lahan luas', 'Fasilitas taman bermain'],
+    weaknesses: ['Jarak lebih jauh dari akses gerbang tol dan pusat perbelanjaan Solo Baru'],
+    theParkAdvantage: 'The Park Townhouse memiliki akses yang jauh lebih cepat ke koridor bisnis Solo Baru dan RS Indriati.',
+    advantageFactId: 'FACT_LOC_INDRIATI',
+    isDemoVerified: false,
+  },
+];
+
+export const THE_PARK_MARKET_SHARE: MarketShareAnalysis = {
+  totalEstimatedMarketSupply: 162,
+  absorptionRateSukoharjoPerMonth: 12,
+  theParkAbsorptionForecastPerMonth: 3.5,
+  slices: [
+    {
+      name: 'The Park Townhouse (Proyek Kita)',
+      sharePercent: 18.5,
+      unitsAvailable: 30,
+      colorHex: '#C86D51', // Terracotta Brand Token
+      isOurProject: true,
+    },
+    {
+      name: 'Solo Baru Emerald Townhouse',
+      sharePercent: 27.2,
+      unitsAvailable: 44,
+      colorHex: '#3A2E2B', // Espresso Brand Token
+    },
+    {
+      name: 'Baki Harmoni Regency',
+      sharePercent: 23.5,
+      unitsAvailable: 38,
+      colorHex: '#526E48', // Olive Brand Token
+    },
+    {
+      name: 'Puri Grogol Asri Residence',
+      sharePercent: 19.8,
+      unitsAvailable: 32,
+      colorHex: '#8C7E72', // Warmmuted
+    },
+    {
+      name: 'Klaster Mandiri Lainnya',
+      sharePercent: 11.0,
+      unitsAvailable: 18,
+      colorHex: '#D4C3B3', // Warmborder
+    },
+  ],
+  priceBenchmarks: [
+    { propertyName: 'The Park Townhouse', pricePerM2: 9200000, isOurProject: true },
+    { propertyName: 'Solo Baru Emerald', pricePerM2: 12500000, isOurProject: false },
+    { propertyName: 'Sukoharjo Grand Premiere', pricePerM2: 8500000, isOurProject: false },
+    { propertyName: 'Baki Harmoni Regency', pricePerM2: 8100000, isOurProject: false },
+    { propertyName: 'Puri Grogol Asri', pricePerM2: 7200000, isOurProject: false },
+  ],
+  competitiveEdgeSummary:
+    'The Park Townhouse menempati posisi "Sweet Spot": kualitas bangunan butik mewah 2 lantai (bata merah, SHM pecah, one gate system 7m) dengan harga per meter persegi 26% lebih terjangkau dibandingkan proyek townhouse di Solo Baru murni, menjadikannya pilihan rasional nomor 1 bagi profesional dan keluarga muda mapan.',
+};
+
+export const DEFAULT_THE_PARK_RESEARCH_REPORT: MarketResearchReport = {
+  id: 'mr-the-park-v1',
+  projectId: 'proj-the-park-01',
+  projectName: 'The Park Townhouse Sukoharjo',
+  version: 1,
+  projectCoordinates: THE_PARK_COORDINATES,
+  personas: THE_PARK_5_PERSONAS,
+  facilities: THE_PARK_PUBLIC_FACILITIES,
+  competitors: THE_PARK_COMPETITORS,
+  marketShare: THE_PARK_MARKET_SHARE,
+  generatedAt: new Date().toISOString(),
+  tokensUsed: 1420,
+};

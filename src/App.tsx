@@ -1,15 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { PublicHomepage } from './components/PublicHomepage';
+import { MarketResearchViewer } from './components/MarketResearchViewer';
+import { SalesTargetViewer } from './components/SalesTargetViewer';
+import { JalurProyek } from './components/JalurProyek';
+import { KnowledgeBaseViewer } from './components/KnowledgeBaseViewer';
+import { LoveLetterViewerModal } from './components/LoveLetterViewerModal';
 import {
   Award,
   Building2,
   CheckCircle2,
   Clock,
+  Compass,
   Database,
   Edit3,
   FileCheck,
   FileText,
+  HeartHandshake,
   Home,
+  Layers,
   LayoutDashboard,
   Megaphone,
   MessageSquare,
@@ -116,6 +124,13 @@ export default function App() {
   // Direksi States
   const [escalations, setEscalations] = useState(ESCALATION_DATA);
   const [tipeFilter, setTipeFilter] = useState<string>('all');
+
+  // Proyek & Fase 2 Intelligence States
+  const [showJalurProyekModal, setShowJalurProyekModal] = useState<boolean>(false);
+  const [showMarketResearchModal, setShowMarketResearchModal] = useState<boolean>(false);
+  const [showSalesTargetModal, setShowSalesTargetModal] = useState<boolean>(false);
+  const [showKbModal, setShowKbModal] = useState<boolean>(false);
+  const [showLoveLetterModal, setShowLoveLetterModal] = useState<boolean>(false);
 
   // Common UI states
   const [toast, setToast] = useState<string | null>(null);
@@ -474,6 +489,53 @@ export default function App() {
                 </a>
               </>
             )}
+
+            {/* Project Workflow & Market Intelligence (Fase 1, 1A, 2) */}
+            <div className="pt-4 mt-3 border-t border-warmborder">
+              <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-warmmuted mb-1.5">
+                Pemasaran Proyek
+              </p>
+
+              <button
+                onClick={() => setShowJalurProyekModal(true)}
+                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+              >
+                <Layers className="size-4 text-terracotta" />
+                <span>Jalur Proyek (8 Tahap)</span>
+              </button>
+
+              <button
+                onClick={() => setShowMarketResearchModal(true)}
+                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+              >
+                <Compass className="size-4 text-terracotta" />
+                <span>Riset Pasar (Radius 25km)</span>
+              </button>
+
+              <button
+                onClick={() => setShowSalesTargetModal(true)}
+                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+              >
+                <TrendingUp className="size-4 text-terracotta" />
+                <span>Target Penjualan 100%</span>
+              </button>
+
+              <button
+                onClick={() => setShowKbModal(true)}
+                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+              >
+                <Database className="size-4 text-olive" />
+                <span>Knowledge Base Produk</span>
+              </button>
+
+              <button
+                onClick={() => setShowLoveLetterModal(true)}
+                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+              >
+                <HeartHandshake className="size-4 text-terracotta" />
+                <span>Surat Cinta 99 Keunggulan</span>
+              </button>
+            </div>
           </nav>
         </div>
 
@@ -1965,6 +2027,62 @@ export default function App() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Proyek Intelligence Modals (Fase 1, 1A, 2) */}
+      {showJalurProyekModal && (
+        <JalurProyek
+          projectName="The Park Townhouse Sukoharjo"
+          userRole={role}
+          onOpenStage={(stageKey) => {
+            setShowJalurProyekModal(false);
+            if (stageKey === 'surat_cinta_99') setShowLoveLetterModal(true);
+            else if (stageKey === 'riset_pasar') setShowMarketResearchModal(true);
+            else if (stageKey === 'target_penjualan') setShowSalesTargetModal(true);
+          }}
+          onClose={() => setShowJalurProyekModal(false)}
+        />
+      )}
+
+      {showMarketResearchModal && (
+        <MarketResearchViewer
+          projectName="The Park Townhouse Sukoharjo"
+          userRole={role}
+          onClose={() => setShowMarketResearchModal(false)}
+        />
+      )}
+
+      {showSalesTargetModal && (
+        <SalesTargetViewer
+          projectName="The Park Townhouse Sukoharjo"
+          totalUnits={30}
+          avgPriceIdr={900000000}
+          seHeadcount={3}
+          onClose={() => setShowSalesTargetModal(false)}
+        />
+      )}
+
+      {showKbModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="px-6 py-4 bg-sandstone border-b border-warmborder flex items-center justify-between">
+              <span className="font-extrabold text-espresso">Product Knowledge Base (The Park Townhouse)</span>
+              <button onClick={() => setShowKbModal(false)} className="text-warmmuted hover:text-espresso text-sm font-bold">
+                Tutup ✕
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              <KnowledgeBaseViewer />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLoveLetterModal && (
+        <LoveLetterViewerModal
+          isOpen={showLoveLetterModal}
+          onClose={() => setShowLoveLetterModal(false)}
+        />
       )}
 
       {/* Floating Toast Notification */}

@@ -22,7 +22,11 @@ interface StepData {
   previewContent: React.ReactNode;
 }
 
-export const SixStepsWorkflow: React.FC<{ onOpenLoveLetter?: () => void }> = ({ onOpenLoveLetter }) => {
+export const SixStepsWorkflow: React.FC<{ 
+  onOpenLoveLetter?: () => void;
+  onOpenMarketResearch?: () => void;
+  onOpenSalesTarget?: () => void;
+}> = ({ onOpenLoveLetter, onOpenMarketResearch, onOpenSalesTarget }) => {
   const [activeStep, setActiveStep] = useState<number>(1);
 
   const steps: StepData[] = [
@@ -100,6 +104,15 @@ export const SixStepsWorkflow: React.FC<{ onOpenLoveLetter?: () => void }> = ({ 
               <li>Stasiun Sukoharjo: sekitar 3.8 km (7 menit)</li>
             </ul>
           </div>
+          {onOpenMarketResearch && (
+            <button
+              onClick={onOpenMarketResearch}
+              className="mt-2 text-xs font-bold text-terracotta hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <span>Buka Riset Pasar &amp; 5 Persona Lengkap</span>
+              <ExternalLink className="size-3" />
+            </button>
+          )}
         </div>
       )
     },
@@ -133,6 +146,15 @@ export const SixStepsWorkflow: React.FC<{ onOpenLoveLetter?: () => void }> = ({ 
           <p className="text-[11px] text-warmmuted italic">
             *Setiap target unit dihitung mundur menjadi kebutuhan prospek terkualifikasi (BANT &ge;7), kunjungan survei, dan volume aktivitas harian SE.
           </p>
+          {onOpenSalesTarget && (
+            <button
+              onClick={onOpenSalesTarget}
+              className="mt-2 text-xs font-bold text-terracotta hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <span>Buka Kalkulator Target &amp; Reverse Funnel</span>
+              <ExternalLink className="size-3" />
+            </button>
+          )}
         </div>
       )
     },
