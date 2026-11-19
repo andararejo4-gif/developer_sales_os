@@ -11,9 +11,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Andara Sales OS',
-        short_name: 'Sales OS',
-        description: 'Dashboard performa & laporan harian Sales Executive Andara Living.',
+        name: 'Developer Sales OS',
+        short_name: 'DevSalesOS',
+        description: 'Dashboard performa CRM Developer Sales OS — PT Andara Rejo Makmur.',
         lang: 'id',
         start_url: '/',
         scope: '/',

@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Developer Sales OS — PT Andara Rejo Makmur</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'] },
+          colors: {
+            sandstone: '#F5F2EB',
+            espresso: '#1C1917',
+            warmmuted: '#78716C',
+            terracotta: '#B45309',
+            olive: '#3F6212',
+            warmborder: '#E6E0D4',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+    .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+    @media (max-width: 767px) { input, textarea, select { font-size: 16px !important; } }
+  </style>
+</head>
+<body class="bg-sandstone text-espresso font-sans antialiased">
+  <div class="min-h-screen md:flex">
+    <!-- Desktop Sidebar -->
+    <aside class="hidden md:flex md:w-64 md:shrink-0 md:flex-col md:sticky md:top-0 md:h-screen bg-white border-r border-warmborder px-5 py-6 justify-between z-20">
+      <div>
+        <!-- Logo -->
+        <div class="flex items-center gap-3 pb-5 border-b border-warmborder">
+          <div class="size-10 rounded-xl bg-terracotta text-white grid place-items-center font-extrabold text-base shadow-sm">
+            OS
+          </div>
+          <div>
+            <p class="font-extrabold text-sm text-espresso leading-tight">Developer Sales OS</p>
+            <p class="text-[11px] text-warmmuted">PT Andara Rejo Makmur</p>
+          </div>
+        </div>
+
+        <!-- Role Switcher -->
+        <div class="mt-5">
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-warmmuted mb-2">Pilih Role Dashboard</label>
+          <div class="grid grid-cols-3 gap-1.5 p-1 bg-sandstone rounded-xl border border-warmborder">
+            <button onclick="switchRole('SE')" id="btn-role-SE" class="role-btn py-1.5 text-xs font-bold rounded-lg bg-espresso text-white cursor-pointer">SE</button>
+            <button onclick="switchRole('TL')" id="btn-role-TL" class="role-btn py-1.5 text-xs font-bold rounded-lg text-warmmuted hover:text-espresso cursor-pointer">TL</button>
+            <button onclick="switchRole('SM')" id="btn-role-SM" class="role-btn py-1.5 text-xs font-bold rounded-lg text-warmmuted hover:text-espresso cursor-pointer">SM</button>
+            <button onclick="switchRole('DIREKSI')" id="btn-role-DIREKSI" class="role-btn py-1.5 text-xs font-bold rounded-lg text-warmmuted hover:text-espresso cursor-pointer">Direksi</button>
+            <button onclick="switchRole('ADMIN')" id="btn-role-ADMIN" class="role-btn py-1.5 text-xs font-bold rounded-lg text-warmmuted hover:text-espresso cursor-pointer">Admin</button>
+            <button onclick="switchRole('IT')" id="btn-role-IT" class="role-btn py-1.5 text-xs font-bold rounded-lg text-warmmuted hover:text-espresso cursor-pointer">IT</button>
+          </div>
+        </div>
+
+        <!-- Quick Action Button -->
+        <div id="sidebar-action-container" class="mt-4">
+          <button onclick="showToast('Form Lead Baru (SOP ≤5 Menit)')" class="w-full h-11 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center justify-center gap-2 hover:bg-espresso/90 cursor-pointer shadow-sm">
+            <i data-lucide="plus" class="size-4 text-amber-400"></i>
+            <span>Input Lead Baru</span>
+          </button>
+        </div>
+
+        <!-- Dynamic Nav -->
+        <nav id="sidebar-nav" class="mt-5 space-y-1">
+          <!-- populated by js -->
+        </nav>
+      </div>
+
+      <!-- User Card Footer -->
+      <div id="user-card-footer" class="rounded-xl bg-sandstone p-3.5 border border-warmborder">
+        <p id="user-footer-name" class="text-xs font-bold text-espresso">Raka Pratama</p>
+        <p id="user-footer-desc" class="text-[11px] text-warmmuted">SE · The Park Townhouse Sukoharjo</p>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 min-w-0 pb-28 md:pb-12">
+      <!-- Header Desktop -->
+      <header class="hidden md:flex items-center justify-between px-8 py-5 bg-white border-b border-warmborder sticky top-0 z-10">
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 id="page-title" class="text-xl font-bold text-espresso">Dashboard Sales Executive (SE)</h1>
+            <span id="role-pill" class="text-xs font-bold px-2 py-0.5 rounded-md bg-amber-50 text-terracotta border border-amber-200">SE Aktif</span>
+          </div>
+          <p class="text-xs text-warmmuted mt-0.5">Rabu, 18 November 2026 · PT Andara Rejo Makmur · The Park Townhouse Sukoharjo</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="copyWaReport()" id="btn-top-wa" class="h-10 px-4 rounded-xl bg-terracotta text-white text-xs font-semibold flex items-center gap-2 hover:bg-terracotta/90 cursor-pointer shadow-sm">
+            <i data-lucide="share-2" class="size-3.5"></i> Salin Laporan WA
+          </button>
+          <div class="flex items-center gap-2 bg-sandstone px-3 py-1.5 rounded-xl border border-warmborder text-xs">
+            <span class="size-2 rounded-full bg-olive animate-pulse"></span>
+            <span class="font-semibold text-espresso">Online</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Mobile Top Bar -->
+      <div class="md:hidden p-4 bg-white border-b border-warmborder space-y-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-wider text-terracotta">Developer Sales OS</p>
+            <h1 id="mobile-title" class="text-lg font-extrabold text-espresso">Dashboard SE</h1>
+          </div>
+          <span id="mobile-role-tag" class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-sandstone text-espresso border border-warmborder">SE</span>
+        </div>
+        <div class="grid grid-cols-6 gap-1 p-1 bg-sandstone rounded-xl border border-warmborder text-center">
+          <button onclick="switchRole('SE')" class="mobile-role-btn py-1 text-[11px] font-bold rounded-lg bg-espresso text-white">SE</button>
+          <button onclick="switchRole('TL')" class="mobile-role-btn py-1 text-[11px] font-bold rounded-lg text-warmmuted">TL</button>
+          <button onclick="switchRole('SM')" class="mobile-role-btn py-1 text-[11px] font-bold rounded-lg text-warmmuted">SM</button>
+          <button onclick="switchRole('DIREKSI')" class="mobile-role-btn py-1 text-[11px] font-bold rounded-lg text-warmmuted">Dir</button>
+          <button onclick="switchRole('ADMIN')" class="mobile-role-btn py-1 text-[11px] font-bold rounded-lg text-warmmuted">Adm</button>
+          <button onclick="switchRole('IT')" class="mobile-role-btn py-1 text-[11px] font-bold rounded-lg text-warmmuted">IT</button>
+        </div>
+      </div>
+
+      <div class="max-w-6xl mx-auto px-4 pt-5 md:px-8 md:pt-8 space-y-6">
+        <!-- ROLE VIEW CONTAINERS -->
+        <div id="view-SE" class="space-y-6">
+          <!-- SE Split Score Card -->
+          <section class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            <div class="lg:col-span-4 bg-espresso text-white rounded-2xl p-6 flex flex-col justify-between shadow-sm">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold uppercase tracking-wider text-amber-400">Skor Harian SE</span>
+                <div class="inline-flex rounded-lg bg-white/10 p-0.5">
+                  <button onclick="setPeriod('harian')" class="period-btn px-2.5 py-1 text-xs font-semibold rounded-md bg-terracotta text-white cursor-pointer">Harian</button>
+                  <button onclick="setPeriod('minggu')" class="period-btn px-2.5 py-1 text-xs font-medium rounded-md text-white/70 cursor-pointer">Minggu</button>
+                  <button onclick="setPeriod('bulan')" class="period-btn px-2.5 py-1 text-xs font-medium rounded-md text-white/70 cursor-pointer">Bulan</button>
+                </div>
+              </div>
+              <div class="my-5 flex items-center gap-5">
+                <div class="relative size-28 shrink-0 grid place-items-center">
+                  <svg viewBox="0 0 120 120" class="size-28 -rotate-90">
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="10" />
+                    <circle id="kpi-ring" cx="60" cy="60" r="50" fill="none" stroke="#D97706" stroke-width="10" stroke-linecap="round" stroke-dasharray="314.16" stroke-dashoffset="74" class="transition-all duration-500" />
+                  </svg>
+                  <div class="absolute text-center">
+                    <p id="kpi-score" class="text-2xl font-extrabold tabular-nums leading-none">88</p>
+                    <p class="text-[11px] text-white/60 mt-1">/ 115</p>
+                  </div>
+                </div>
+                <div>
+                  <p id="kpi-tier" class="text-base font-bold text-white">Tier 3 · Solid</p>
+                  <p id="kpi-meta" class="text-xs text-white/70 mt-1 tabular-nums">6/8 lead · 4/9 posting</p>
+                  <span class="inline-block mt-2 text-[10px] bg-white/15 px-2 py-0.5 rounded text-amber-300">Target Balas ≤ 5 Menit</span>
+                </div>
+              </div>
+              <p class="text-xs text-white/60 pt-3 border-t border-white/10">Scorecard Bulanan saat ini: <strong class="text-white">112.5 Poin (Tercapai)</strong></p>
+            </div>
+
+            <div class="lg:col-span-8 flex flex-col gap-5">
+              <div class="grid grid-cols-3 gap-3">
+                <div class="bg-white border border-warmborder rounded-2xl p-4 shadow-sm">
+                  <p class="text-xs text-warmmuted">Lead Hari Ini</p>
+                  <p class="text-2xl font-extrabold tabular-nums text-espresso mt-1">6 <span class="text-xs font-normal text-warmmuted">/ 8</span></p>
+                </div>
+                <div class="bg-white border border-warmborder rounded-2xl p-4 shadow-sm">
+                  <p class="text-xs text-warmmuted">Hot Prospek</p>
+                  <p class="text-2xl font-extrabold tabular-nums text-terracotta mt-1">4</p>
+                </div>
+                <div class="bg-white border border-warmborder rounded-2xl p-4 shadow-sm">
+                  <p class="text-xs text-warmmuted">Posting Sosmed</p>
+                  <p class="text-2xl font-extrabold tabular-nums text-espresso mt-1">4 <span class="text-xs font-normal text-warmmuted">/ 9</span></p>
+                </div>
+              </div>
+
+              <div class="bg-white border border-warmborder rounded-2xl p-5 flex-1 flex flex-col justify-between shadow-sm">
+                <div class="flex flex-wrap items-baseline justify-between gap-2">
+                  <div>
+                    <p class="text-xs font-bold uppercase tracking-wider text-warmmuted">Omzet Closing Valid Bulan Ini</p>
+                    <p class="text-2xl font-extrabold tabular-nums text-espresso mt-1">Rp 1.850.000.000</p>
+                  </div>
+                  <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-lime-100 text-olive">74% Target Omzet</span>
+                </div>
+                <div class="mt-4 h-2.5 rounded-full bg-sandstone overflow-hidden">
+                  <div class="h-full bg-terracotta rounded-full" style="width: 74%"></div>
+                </div>
+                <p class="mt-4 pt-3 border-t border-warmborder text-xs text-warmmuted">2 unit Net Sales (Nagoya A.01 &amp; Osaka B.04) · Target Rp 2,5 Miliar · 24 pintu canvassing</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- Scorecard Bulanan SE -->
+          <section id="scorecard-bulanan" class="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
+            <div class="p-5 border-b border-warmborder flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div class="flex items-center gap-2.5">
+                  <h2 class="text-base font-bold text-espresso">Scorecard Bulanan (Bobot Penilaian Playbook §6.4)</h2>
+                  <span class="text-xs font-bold px-2.5 py-0.5 rounded-lg bg-amber-50 text-terracotta tabular-nums">112.5 Poin</span>
+                </div>
+                <p class="text-xs text-warmmuted mt-0.5">7 komponen resmi: Booking 35%, Net Sales 20%, Kunjungan 15%, Prospek 10%, Kepatuhan 10%, CRM 5%, Referral 5%.</p>
+              </div>
+              <span class="text-xs font-bold text-olive bg-lime-100 px-3 py-1 rounded-lg">Kategori: Tercapai</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="bg-sandstone/70 border-b border-warmborder text-[11px] font-bold uppercase tracking-wider text-warmmuted">
+                    <th class="py-3 px-5">Komponen</th><th class="py-3 px-4">Bobot</th><th class="py-3 px-4">Target</th><th class="py-3 px-4">Capaian</th><th class="py-3 px-5 text-right">Poin</th>
+                  </tr>
+                </thead>
+                <tbody id="scorecard-table-body" class="divide-y divide-warmborder text-sm"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Laporan Harian SE (13 Item) -->
+          <section id="laporan-harian" class="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
+            <div class="p-5 border-b border-warmborder flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <div class="flex items-center gap-2.5">
+                  <h2 class="text-base font-bold text-espresso">Laporan Harian SE (13 Item Playbook §13.1)</h2>
+                  <span id="daily-summary-badge" class="text-xs font-bold px-2.5 py-0.5 rounded-lg bg-amber-50 text-terracotta">0/10 Hit</span>
+                </div>
+                <p class="text-xs text-warmmuted mt-0.5">Batas kirim 18.00 WIB. Pukul 18.15 AI SM/TL melakukan audit otomatis &amp; feedback.</p>
+              </div>
+              <div class="flex items-center gap-2 overflow-x-auto">
+                <button onclick="setFilter('all')" id="flt-all" class="filter-btn min-h-[36px] px-3 rounded-lg text-xs font-semibold bg-espresso text-white shrink-0 cursor-pointer">Semua (13)</button>
+                <button onclick="setFilter('prospek')" id="flt-prospek" class="filter-btn min-h-[36px] px-3 rounded-lg text-xs font-medium bg-sandstone text-warmmuted shrink-0 cursor-pointer">Prospek</button>
+                <button onclick="setFilter('outreach')" id="flt-outreach" class="filter-btn min-h-[36px] px-3 rounded-lg text-xs font-medium bg-sandstone text-warmmuted shrink-0 cursor-pointer">Outreach</button>
+                <button onclick="setFilter('closing')" id="flt-closing" class="filter-btn min-h-[36px] px-3 rounded-lg text-xs font-medium bg-sandstone text-warmmuted shrink-0 cursor-pointer">Closing &amp; KPR</button>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="bg-sandstone/70 border-b border-warmborder text-[11px] font-bold uppercase tracking-wider text-warmmuted">
+                    <th class="py-3 px-5 w-[33%]">Item</th><th class="py-3 px-4 w-[12%]">Target</th><th class="py-3 px-4 w-[22%]">Realisasi</th><th class="py-3 px-4 w-[23%]">Catatan</th><th class="py-3 px-4 w-[10%] text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="report-table-body" class="divide-y divide-warmborder text-sm"></tbody>
+              </table>
+            </div>
+            <div class="p-4 bg-sandstone/60 border-t border-warmborder flex flex-wrap items-center justify-between gap-3">
+              <button onclick="resetReport()" class="text-xs font-medium text-warmmuted hover:text-espresso cursor-pointer">Reset Default</button>
+              <button onclick="copyWaReport()" class="min-h-[40px] px-5 rounded-xl bg-terracotta text-white text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-sm">
+                <i data-lucide="send" class="size-3.5"></i> Salin Laporan WA
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- VIEW TL (TEAM LEADER - AI & HUMAN) -->
+        <!-- ========================================================================= -->
+        <div id="view-TL" class="hidden space-y-6">
+          <div class="bg-espresso text-white rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
+            <div class="space-y-1.5">
+              <div class="flex items-center gap-2">
+                <span class="size-2 rounded-full bg-amber-400 animate-ping"></span>
+                <span class="text-xs font-bold uppercase tracking-wider text-amber-400">AI Morning Huddle 07.25 (§7.1)</span>
+              </div>
+              <h2 class="text-lg font-bold">Autonomous Briefing AI SM/TL Hari Ini</h2>
+              <p class="text-xs text-white/70 max-w-xl">Briefing terkirim ke 3 SE: Raka (Zona A), Dian (Zona C), Budi (Zona D). Prioritas: Kualifikasi BANT ≥ 7 &amp; Follow-up 4 Hot Prospek.</p>
+            </div>
+            <button onclick="showToast('Broadcast WA terkirim')" class="px-4 py-2.5 rounded-xl bg-terracotta text-white text-xs font-bold shrink-0">Kirim Ulang Briefing</button>
+          </div>
+
+          <!-- Radar SLA 5 Menit -->
+          <section class="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+            <h3 class="text-base font-bold text-espresso">Live Radar Speed-to-Lead (SOP ≤ 5 Menit)</h3>
+            <div class="mt-4 divide-y divide-warmborder">
+              <div class="py-3 flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-bold text-espresso">dr. Satrio Wibowo <span class="text-xs font-normal text-warmmuted">(Meta CTWA)</span></p>
+                  <p class="text-xs text-warmmuted">Ditugaskan: Raka Pratama · Menit Berjalan: 2.1 mnt</p>
+                </div>
+                <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-lime-100 text-olive">Aman (≤5m)</span>
+              </div>
+              <div class="py-3 flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-bold text-espresso">Ibu Maya Anggraini <span class="text-xs font-normal text-warmmuted">(TikTok Lead)</span></p>
+                  <p class="text-xs text-warmmuted">Ditugaskan: Dian Lestari · Menit Berjalan: 4.8 mnt</p>
+                </div>
+                <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-terracotta">Peringatan 5 Mnt</span>
+              </div>
+              <div class="py-3 flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-bold text-espresso">Bp. Edwin Nugroho <span class="text-xs font-normal text-warmmuted">(Google Ads)</span></p>
+                  <p class="text-xs text-warmmuted">Ditugaskan: Budi Santoso · Menit Berjalan: 6.2 mnt</p>
+                </div>
+                <button onclick="showToast('Lead dialihkan ke Raka')" class="px-3 py-1.5 rounded-lg bg-espresso text-white text-xs font-bold">Dialihkan Otomatis</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Aturan 72 Jam -->
+          <section class="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+            <h3 class="text-base font-bold text-espresso">Aturan Kepemilikan 72 Jam (B4, S4)</h3>
+            <p class="text-xs text-warmmuted mt-1">Lead yang tidak dihubungi dalam 72 jam otomatis kembali ke Pool untuk dibagi ulang.</p>
+            <div class="grid grid-cols-3 gap-3 mt-4 text-center">
+              <div class="p-4 bg-sandstone/60 rounded-xl border border-warmborder">
+                <p class="text-xs text-warmmuted">Terancam 72 Jam</p>
+                <p class="text-2xl font-extrabold text-terracotta mt-1">3 Lead</p>
+              </div>
+              <div class="p-4 bg-sandstone/60 rounded-xl border border-warmborder">
+                <p class="text-xs text-warmmuted">Kembali ke Pool</p>
+                <p class="text-2xl font-extrabold text-espresso mt-1">5 Lead</p>
+              </div>
+              <div class="p-4 bg-sandstone/60 rounded-xl border border-warmborder">
+                <p class="text-xs text-warmmuted">Kepatuhan Lead</p>
+                <p class="text-2xl font-extrabold text-olive mt-1">94.2%</p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- VIEW SM (SALES MANAGER - CRUD PROYEK & MONITOR SE) -->
+        <!-- ========================================================================= -->
+        <div id="view-SM" class="hidden space-y-6">
+          <div class="bg-white border border-warmborder rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold px-2 py-0.5 rounded bg-terracotta text-white">SM Semi-AI</span>
+                <h2 class="text-lg font-bold text-espresso">Manajemen 30 Unit &amp; Supervisi 3 SE</h2>
+              </div>
+              <p class="text-xs text-warmmuted mt-1">Kendalikan data unit The Park (LT, LB, Cash Keras, Cash 6/12/24 bulan) dan pantau capaian tim SE.</p>
+            </div>
+            <button onclick="showToast('Buka Form Tambah Unit')" class="px-4 py-2.5 rounded-xl bg-espresso text-white text-xs font-bold flex items-center gap-2">
+              <i data-lucide="plus" class="size-4 text-amber-400"></i> Tambah Unit
+            </button>
+          </div>
+
+          <!-- CRUD 30 Unit Tabel -->
+          <section class="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
+            <div class="p-5 border-b border-warmborder flex items-center justify-between">
+              <div>
+                <h3 class="text-base font-bold text-espresso">Master Data 30 Unit The Park Townhouse</h3>
+                <p class="text-xs text-warmmuted mt-0.5">Cluster Nagoya (14), Osaka (9), Tokyo (7)</p>
+              </div>
+              <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-terracotta">30 Unit Aktif</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="bg-sandstone/70 border-b border-warmborder text-[11px] font-bold uppercase tracking-wider text-warmmuted">
+                    <th class="py-3 px-4">Unit</th><th class="py-3 px-3">Tipe</th><th class="py-3 px-3">LT/LB</th><th class="py-3 px-3">Cash Keras</th><th class="py-3 px-3">Cash 6 Bln</th><th class="py-3 px-3">Cash 12 Bln</th><th class="py-3 px-3">Cash 24 Bln</th><th class="py-3 px-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="unit-table-body" class="divide-y divide-warmborder text-xs"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- SM Pantau SE -->
+          <section class="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
+            <div class="p-5 border-b border-warmborder">
+              <h3 class="text-base font-bold text-espresso">Pemantauan Kinerja Tim SE Binaan SM</h3>
+              <p class="text-xs text-warmmuted mt-0.5">Evaluasi real-time kecepatan respons, lead 72 jam, dan status laporan harian 18.00.</p>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="bg-sandstone/70 border-b border-warmborder text-[11px] font-bold uppercase tracking-wider text-warmmuted">
+                    <th class="py-3 px-5">Nama SE</th><th class="py-3 px-4">Lead / Prospek</th><th class="py-3 px-4">Kunjungan</th><th class="py-3 px-4">Booking / Net</th><th class="py-3 px-4">Avg Respons</th><th class="py-3 px-4">Laporan 18.00</th><th class="py-3 px-5 text-right">Scorecard</th>
+                  </tr>
+                </thead>
+                <tbody id="sm-se-table-body" class="divide-y divide-warmborder text-sm"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- VIEW DIREKSI (PORTOFOLIO TARGET VS AKTUAL) -->
+        <!-- ========================================================================= -->
+        <div id="view-DIREKSI" class="hidden space-y-6">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+              <p class="text-xs text-warmmuted uppercase font-bold tracking-wider">Portofolio Direksi</p>
+              <p class="text-2xl font-extrabold text-espresso mt-1">2 Proyek</p>
+              <p class="text-[11px] text-warmmuted mt-1">The Park &amp; Andara Village</p>
+            </div>
+            <div class="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+              <p class="text-xs text-warmmuted uppercase font-bold tracking-wider">Total Net Sales</p>
+              <p class="text-2xl font-extrabold text-espresso mt-1">8 / 9 Unit</p>
+              <p class="text-[11px] text-olive font-semibold mt-1">88.8% Capaian Target</p>
+            </div>
+            <div class="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+              <p class="text-xs text-warmmuted uppercase font-bold tracking-wider">Realisasi Omzet</p>
+              <p class="text-2xl font-extrabold text-terracotta mt-1">Rp 5,79 M</p>
+              <p class="text-[11px] text-warmmuted mt-1">Target Rp 6,55 M (88.4%)</p>
+            </div>
+            <div class="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+              <p class="text-xs text-warmmuted uppercase font-bold tracking-wider">Eskalasi Menunggu</p>
+              <p class="text-2xl font-extrabold text-rose-700 mt-1">2 Kasus</p>
+              <p class="text-[11px] text-warmmuted mt-1">Diskon khusus &amp; refund</p>
+            </div>
+          </div>
+
+          <!-- Portofolio Detail -->
+          <section class="bg-white border border-warmborder rounded-2xl p-6 shadow-sm space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-warmborder">
+              <h3 class="text-base font-bold text-espresso">Portofolio Proyek: Target vs Aktual (November 2026)</h3>
+              <span class="text-xs text-warmmuted">Klasifikasi: Mewah, Subsidi &amp; Menengah</span>
+            </div>
+            
+            <!-- Proyek 1: Mewah -->
+            <div class="p-4 rounded-xl bg-sandstone/60 border border-warmborder space-y-3">
+              <div class="flex items-center justify-between flex-wrap gap-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold px-2 py-0.5 bg-espresso text-white rounded">TP-SKH</span>
+                  <strong class="text-sm font-bold">The Park Townhouse Sukoharjo</strong>
+                  <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-100 text-terracotta border border-amber-200">Tipe: Perumahan Mewah</span>
+                </div>
+                <span class="text-xs text-warmmuted">30 Unit (24 Tersedia, 2 Hold, 3 Booking, 1 Terjual)</span>
+              </div>
+              <div class="grid grid-cols-4 gap-2 text-xs">
+                <div><span class="text-warmmuted">Lead:</span> <strong>491 / 600</strong></div>
+                <div><span class="text-warmmuted">Booking:</span> <strong>6 / 7 Unit</strong></div>
+                <div><span class="text-warmmuted">Net Sales:</span> <strong>4 / 5 Unit</strong></div>
+                <div><span class="text-warmmuted">Omzet:</span> <strong class="text-terracotta">Rp 3,34 M / Rp 4,15 M</strong></div>
+              </div>
+            </div>
+
+            <!-- Proyek 2: Subsidi -->
+            <div class="p-4 rounded-xl bg-sandstone/60 border border-warmborder space-y-3">
+              <div class="flex items-center justify-between flex-wrap gap-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold px-2 py-0.5 bg-espresso text-white rounded">GAA-SKH</span>
+                  <strong class="text-sm font-bold">Griya Andara Asri Sukoharjo</strong>
+                  <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-lime-100 text-olive border border-lime-200">Tipe: Rumah Subsidi (FLPP)</span>
+                </div>
+                <span class="text-xs text-warmmuted">120 Unit (35 Tersedia, 10 Hold, 25 Booking, 50 Terjual)</span>
+              </div>
+              <div class="grid grid-cols-4 gap-2 text-xs">
+                <div><span class="text-warmmuted">Lead:</span> <strong>530 / 500</strong></div>
+                <div><span class="text-warmmuted">Booking:</span> <strong>16 / 15 Unit</strong></div>
+                <div><span class="text-warmmuted">Net Sales:</span> <strong>13 / 12 Unit</strong></div>
+                <div><span class="text-warmmuted">Omzet:</span> <strong class="text-olive">Rp 2,28 M / Rp 2,10 M</strong></div>
+              </div>
+            </div>
+
+          <!-- Eskalasi Diskon & Refund -->
+          <section class="bg-white border border-warmborder rounded-2xl p-6 shadow-sm">
+            <h3 class="text-base font-bold text-espresso">Eskalasi Persetujuan Direksi (Modul Q1, S21)</h3>
+            <div class="mt-4 space-y-3 text-xs">
+              <div class="p-4 rounded-xl border border-warmborder flex items-center justify-between gap-4">
+                <div>
+                  <p class="font-bold text-sm text-espresso">Bp. Hendra Kusuma · Unit A.06 (Nagoya)</p>
+                  <p class="text-warmmuted mt-0.5">Permintaan diskon khusus Rp 15.000.000 (Rekomendasi AI: Disetujui, margin 28.4%)</p>
+                </div>
+                <div class="flex gap-2">
+                  <button onclick="showToast('Pengajuan ditolak')" class="px-3 py-1.5 rounded-lg bg-sandstone font-bold text-rose-700">Tolak</button>
+                  <button onclick="showToast('Diskon khusus disetujui Direksi')" class="px-3 py-1.5 rounded-lg bg-terracotta text-white font-bold">Setujui</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- VIEW ADMIN (ADMIN SALES & BOOKING TRANSAKSI) -->
+        <!-- ========================================================================= -->
+        <div id="view-ADMIN" class="hidden space-y-6">
+          <div class="grid grid-cols-3 gap-4">
+            <div class="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+              <p class="text-xs text-warmmuted uppercase font-bold">Booking H+1</p>
+              <p class="text-2xl font-extrabold text-espresso mt-1">3 Transaksi</p>
+            </div>
+            <div class="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+              <p class="text-xs text-warmmuted uppercase font-bold">Pemberkasan KPR H+7</p>
+              <p class="text-2xl font-extrabold text-terracotta mt-1">2 Berkas</p>
+            </div>
+            <div class="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+              <p class="text-xs text-warmmuted uppercase font-bold">Multi-Bank H+10</p>
+              <p class="text-2xl font-extrabold text-espresso mt-1">2 Bank</p>
+            </div>
+          </div>
+
+          <section class="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+            <h3 class="text-base font-bold text-espresso">Validasi Booking &amp; Rekening Resmi PT Andara Rejo Makmur (Modul K)</h3>
+            <div class="mt-4 divide-y divide-warmborder text-xs">
+              <div class="py-3 flex items-center justify-between">
+                <div>
+                  <p class="font-bold text-sm text-espresso">BK-101: Bp. Hendra Kusuma (Unit A.01)</p>
+                  <p class="text-warmmuted">Transfer Rp 5.000.000 Rekening BCA PT Andara Rejo Makmur Valid · SE: Raka Pratama</p>
+                </div>
+                <span class="px-2.5 py-1 rounded bg-lime-100 text-olive font-bold">Terkonfirmasi</span>
+              </div>
+              <div class="py-3 flex items-center justify-between">
+                <div>
+                  <p class="font-bold text-sm text-espresso">BK-102: Ibu Melisa Putri (Unit A.02)</p>
+                  <p class="text-warmmuted">KPR BTN 15 Thn · Dokumen Lengkap · SE: Raka Pratama</p>
+                </div>
+                <span class="px-2.5 py-1 rounded bg-lime-100 text-olive font-bold">Terkonfirmasi</span>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- VIEW IT (SCHEMA DEVOS & AUDIT LOG) -->
+        <!-- ========================================================================= -->
+        <div id="view-IT" class="hidden space-y-6">
+          <section class="bg-white border border-warmborder rounded-2xl p-6 shadow-sm">
+            <h3 class="text-base font-bold text-espresso">PostgreSQL Schema `devos` — 6 Migrasi Aktif</h3>
+            <p class="text-xs text-warmmuted mt-1">Telah sinkron dengan struktur database Developer Sales OS.</p>
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mt-4 text-xs text-center">
+              <div class="p-3 bg-sandstone/60 rounded-xl border border-warmborder"><strong class="text-terracotta">0001</strong><p class="text-[11px] mt-1">Schema &amp; Tipe</p></div>
+              <div class="p-3 bg-sandstone/60 rounded-xl border border-warmborder"><strong class="text-terracotta">0002</strong><p class="text-[11px] mt-1">User, Proyek, Unit</p></div>
+              <div class="p-3 bg-sandstone/60 rounded-xl border border-warmborder"><strong class="text-terracotta">0003</strong><p class="text-[11px] mt-1">Lead &amp; Pipeline</p></div>
+              <div class="p-3 bg-sandstone/60 rounded-xl border border-warmborder"><strong class="text-terracotta">0004</strong><p class="text-[11px] mt-1">Booking &amp; KPR</p></div>
+              <div class="p-3 bg-sandstone/60 rounded-xl border border-warmborder"><strong class="text-terracotta">0005</strong><p class="text-[11px] mt-1">KPI, AI, Audit</p></div>
+              <div class="p-3 bg-sandstone/60 rounded-xl border border-warmborder"><strong class="text-terracotta">0006</strong><p class="text-[11px] mt-1">SM/Direksi Views</p></div>
+            </div>
+          </section>
+
+          <section class="bg-white border border-warmborder rounded-2xl p-6 shadow-sm">
+            <h3 class="text-base font-bold text-espresso">Audit Log 100% (Append-Only Trigger Q5)</h3>
+            <div class="mt-4 divide-y divide-warmborder text-xs font-mono">
+              <div class="py-2.5 flex items-center justify-between">
+                <span>[UPDATE] unit A.01: booking -> terjual (trigger booking_sinkron)</span>
+                <span class="text-warmmuted font-sans text-[11px]">18 Nov 11:02</span>
+              </div>
+              <div class="py-2.5 flex items-center justify-between">
+                <span>[UPDATE] lead LD-880: bant_total 6 -> 8 (raka@andararejomakmur)</span>
+                <span class="text-warmmuted font-sans text-[11px]">18 Nov 10:45</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="fixed bottom-20 md:bottom-6 right-4 z-50 hidden bg-espresso text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg border border-white/10"></div>
+
+  <script>
+    const USERS = {
+      SE: { name: 'Raka Pratama', title: 'Dashboard Sales Executive (SE)', pill: 'SE Aktif', desc: 'SE · The Park Townhouse Sukoharjo' },
+      TL: { name: 'AI Team Leader', title: 'Dashboard Team Leader (TL)', pill: 'AI Autonomous', desc: 'TL · AI Engine & Supervisor Human' },
+      SM: { name: 'Ferry Kurniawan', title: 'Dashboard Sales Manager (SM)', pill: 'SM Semi-AI', desc: 'SM · CRUD Proyek & Supervisi SE' },
+      DIREKSI: { name: 'Bambang Soedirjo', title: 'Dashboard Direksi & Owner', pill: 'Direksi', desc: 'Direksi · Portofolio Owner' },
+      ADMIN: { name: 'Siti Rahma', title: 'Dashboard Admin Sales', pill: 'Admin Sales', desc: 'Admin · Transaksi & Berkas KPR' },
+      IT: { name: 'Dodi Hartono', title: 'Dashboard IT Lead', pill: 'IT Lead', desc: 'IT · Schema devos & Security' },
+    };
+
+    const SCORECARD_DATA = [
+      { komponen: 'Booking', bobot: '35%', target: '2 unit', capaian: '3 unit (150%)', poin: '52.5', note: 'Maks. 150%' },
+      { komponen: 'Net sales', bobot: '20%', target: '1 unit', capaian: '1 unit (100%)', poin: '20.0', note: 'Sesuai target' },
+      { komponen: 'Kunjungan', bobot: '15%', target: '15', capaian: '12 (80%)', poin: '12.0', note: '3 jadwal minggu ini' },
+      { komponen: 'Prospek terkualifikasi', bobot: '10%', target: '50', capaian: '45 (90%)', poin: '9.0', note: 'BANT ≥ 7' },
+      { komponen: 'Kepatuhan aktivitas (call, chat, canvassing, OTT, posting)', bobot: '10%', target: '≥ 90% hari patuh', capaian: '92% patuh', poin: '10.0', note: 'Hari patuh / hari kerja' },
+      { komponen: 'Kualitas CRM & waktu respons', bobot: '5%', target: '100% & ≤ 5 menit', capaian: '95% (4.2 mnt)', poin: '4.8', note: 'Audit acak SM 2x/mgg' },
+      { komponen: 'Referral & kepuasan pelanggan', bobot: '5%', target: '12 nama, 0 komplain', capaian: '10 nama, 0 komplain', poin: '4.2', note: 'CRM + survei pembeli' },
+    ];
+
+    const DEFAULT_ITEMS = [
+      { id: 1, cat: 'prospek', item: 'Lead baru (sumber + kode)', target: '8', targetNum: 8, realisasi: '6', catatan: 'IG Ads #AR02 (4), Walk-in (2)' },
+      { id: 2, cat: 'outreach', item: 'Dial / percakapan telepon', target: '30 / 12', targetNum: 30, realisasi: '26 / 11', catatan: '11 tersambung, 4 minta brosur' },
+      { id: 3, cat: 'outreach', item: 'Chat WA personal / follow-up', target: '50 / 20', targetNum: 50, realisasi: '52 / 22', catatan: 'Follow-up batch harga baru' },
+      { id: 4, cat: 'outreach', item: 'Canvassing: kontak / brosur / lead', target: '30 / 50 / 5', targetNum: 30, realisasi: '24 / 45 / 4', catatan: 'Area Ruko Sentra & Perkantoran' },
+      { id: 5, cat: 'outreach', item: 'Posting: Reel / WA Status / Story', target: '1 / 5 / 3', targetNum: 1, realisasi: '1 / 4 / 3', catatan: 'Video progres tipe 60/90' },
+      { id: 6, cat: 'prospek', item: 'Prospek baru (BANT ≥ 7)', target: '2', targetNum: 2, realisasi: '2', catatan: 'Bp. Hendra & Ibu Sari' },
+      { id: 7, cat: 'prospek', item: 'Appointment dibuat (tanggal)', target: '1', targetNum: 1, realisasi: '1', catatan: 'Sabtu, 21 Nov 2026 · 10:00 WIB' },
+      { id: 8, cat: 'closing', item: 'Kunjungan hari ini', target: '0–1', targetNum: 1, realisasi: '1', catatan: 'Survei Blok C-12 (Ibu Melisa)' },
+      { id: 9, cat: 'closing', item: 'Penawaran tertulis terkirim', target: '2', targetNum: 2, realisasi: '2', catatan: 'Simulasi KPR BTN & Mandiri' },
+      { id: 10, cat: 'closing', item: 'Hot prospek & langkah berikut', target: '—', targetNum: null, realisasi: '4 Hot', catatan: 'Bp. Andi (konfirmasi DP Jumat)' },
+      { id: 11, cat: 'closing', item: 'Booking / dokumen KPR', target: '—', targetNum: null, realisasi: '1 Unit', catatan: 'Blok B-04 berkas SLIK lengkap' },
+      { id: 12, cat: 'prospek', item: 'Referral diperoleh', target: '1', targetNum: 1, realisasi: '1', catatan: 'Rekomendasi user Blok A-09' },
+      { id: 13, cat: 'closing', item: 'Hambatan & bantuan yang dibutuhkan', target: '—', targetNum: null, realisasi: 'Aman', catatan: 'Butuh pricelist promo akhir bulan' },
+    ];
+
+    const UNITS = [
+      { unit: 'A.01', cluster: 'Nagoya', tipe: 'Diamond', lt: 90, lb: 75, keras: 'Rp 850 Jt', c6: 'Rp 875 Jt', c12: 'Rp 900 Jt', c24: 'Rp 950 Jt', st: 'terjual' },
+      { unit: 'A.02', cluster: 'Nagoya', tipe: 'Diamond', lt: 90, lb: 75, keras: 'Rp 830 Jt', c6: 'Rp 855 Jt', c12: 'Rp 880 Jt', c24: 'Rp 930 Jt', st: 'booking' },
+      { unit: 'A.03', cluster: 'Nagoya', tipe: 'Diamond', lt: 90, lb: 75, keras: 'Rp 830 Jt', c6: 'Rp 855 Jt', c12: 'Rp 880 Jt', c24: 'Rp 930 Jt', st: 'tersedia' },
+      { unit: 'A.04', cluster: 'Nagoya', tipe: 'Diamond', lt: 90, lb: 75, keras: 'Rp 830 Jt', c6: 'Rp 855 Jt', c12: 'Rp 880 Jt', c24: 'Rp 930 Jt', st: 'hold' },
+      { unit: 'B.01', cluster: 'Osaka', tipe: 'Gold', lt: 72, lb: 60, keras: 'Rp 680 Jt', c6: 'Rp 700 Jt', c12: 'Rp 720 Jt', c24: 'Rp 760 Jt', st: 'tersedia' },
+      { unit: 'B.04', cluster: 'Osaka', tipe: 'Gold', lt: 72, lb: 60, keras: 'Rp 670 Jt', c6: 'Rp 690 Jt', c12: 'Rp 710 Jt', c24: 'Rp 750 Jt', st: 'booking' },
+      { unit: 'C.01', cluster: 'Tokyo', tipe: 'Emerald', lt: 60, lb: 50, keras: 'Rp 580 Jt', c6: 'Rp 600 Jt', c12: 'Rp 620 Jt', c24: 'Rp 650 Jt', st: 'tersedia' },
+    ];
+
+    const SE_TEAM = [
+      { nama: 'Raka Pratama', zona: 'Zona A (Perkantoran)', lead: '184 / 48', visit: '14', book: '3 / 2', avg: '3.8 mnt', lap: 'Terkirim 17:45', skor: '112.5 (Tercapai)' },
+      { nama: 'Dian Lestari', zona: 'Zona C (Ruko)', lead: '165 / 42', visit: '11', book: '2 / 1', avg: '4.5 mnt', lap: 'Terkirim 17:50', skor: '94.0 (Mendekati)' },
+      { nama: 'Budi Santoso', zona: 'Zona D (Bank/Kampus)', lead: '142 / 35', visit: '9', book: '1 / 1', avg: '7.2 mnt', lap: 'Belum Kirim', skor: '82.5 (Mendekati)' },
+    ];
+
+    let currentRole = 'SE';
+    let reportItems = structuredClone(DEFAULT_ITEMS);
+    let currentFilter = 'all';
+
+    function switchRole(r) {
+      currentRole = r;
+      ['SE', 'TL', 'SM', 'DIREKSI', 'ADMIN', 'IT'].forEach(x => {
+        document.getElementById(`view-${x}`).classList.add('hidden');
+        const b = document.getElementById(`btn-role-${x}`);
+        if (b) b.className = x === r ? 'role-btn py-1.5 text-xs font-bold rounded-lg bg-espresso text-white cursor-pointer' : 'role-btn py-1.5 text-xs font-bold rounded-lg text-warmmuted hover:text-espresso cursor-pointer';
+      });
+      document.getElementById(`view-${r}`).classList.remove('hidden');
+      const u = USERS[r];
+      document.getElementById('page-title').textContent = u.title;
+      document.getElementById('role-pill').textContent = u.pill;
+      document.getElementById('mobile-title').textContent = u.title;
+      document.getElementById('mobile-role-tag').textContent = r;
+      document.getElementById('user-footer-name').textContent = u.name;
+      document.getElementById('user-footer-desc').textContent = u.desc;
+      showToast(`Beralih ke Dashboard ${r}`);
+      lucide.createIcons();
+    }
+
+    function renderScorecard() {
+      document.getElementById('scorecard-table-body').innerHTML = SCORECARD_DATA.map(s => `
+        <tr class="hover:bg-sandstone/50">
+          <td class="py-3 px-5 font-semibold text-espresso">${s.komponen}<span class="block text-[11px] font-normal text-warmmuted">${s.note}</span></td>
+          <td class="py-3 px-4 font-bold text-terracotta tabular-nums">${s.bobot}</td>
+          <td class="py-3 px-4 text-xs text-warmmuted">${s.target}</td>
+          <td class="py-3 px-4 text-xs font-medium text-espresso">${s.capaian}</td>
+          <td class="py-3 px-5 text-right font-extrabold text-espresso tabular-nums">${s.poin}</td>
+        </tr>`).join('');
+    }
+
+    function renderUnits() {
+      document.getElementById('unit-table-body').innerHTML = UNITS.map(u => `
+        <tr class="hover:bg-sandstone/40">
+          <td class="py-3 px-4"><span class="font-extrabold text-espresso">${u.unit}</span><span class="block text-[11px] text-warmmuted">${u.cluster}</span></td>
+          <td class="py-3 px-3">${u.tipe}</td>
+          <td class="py-3 px-3">${u.lt}/${u.lb} m²</td>
+          <td class="py-3 px-3 font-bold text-espresso">${u.keras}</td>
+          <td class="py-3 px-3 text-warmmuted">${u.c6}</td>
+          <td class="py-3 px-3 text-warmmuted">${u.c12}</td>
+          <td class="py-3 px-3 text-warmmuted">${u.c24}</td>
+          <td class="py-3 px-3"><span class="px-2 py-0.5 rounded text-[11px] font-bold uppercase ${u.st === 'terjual' ? 'bg-espresso text-white' : u.st === 'booking' ? 'bg-blue-100 text-blue-700' : u.st === 'hold' ? 'bg-amber-100 text-terracotta' : 'bg-lime-100 text-olive'}">${u.st}</span></td>
+        </tr>`).join('');
+    }
+
+    function renderSmSe() {
+      document.getElementById('sm-se-table-body').innerHTML = SE_TEAM.map(se => `
+        <tr class="hover:bg-sandstone/40">
+          <td class="py-3 px-5"><span class="font-bold text-espresso">${se.nama}</span><span class="block text-xs text-warmmuted">${se.zona}</span></td>
+          <td class="py-3 px-4 text-xs font-semibold tabular-nums">${se.lead}</td>
+          <td class="py-3 px-4 text-xs tabular-nums">${se.visit} visit</td>
+          <td class="py-3 px-4 text-xs tabular-nums">${se.book}</td>
+          <td class="py-3 px-4 text-xs tabular-nums font-semibold ${parseFloat(se.avg) <= 5 ? 'text-olive' : 'text-rose-600'}">${se.avg}</td>
+          <td class="py-3 px-4 text-xs"><span class="px-2 py-0.5 rounded text-[11px] font-bold ${se.lap.includes('Terkirim') ? 'bg-lime-100 text-olive' : 'bg-rose-100 text-rose-700'}">${se.lap}</span></td>
+          <td class="py-3 px-5 text-right font-extrabold text-espresso tabular-nums">${se.skor}</td>
+        </tr>`).join('');
+    }
+
+    function evalStatus(r) {
+      if (r.targetNum === null) return r.realisasi.trim() ? 'note' : 'empty';
+      const v = parseFloat(String(r.realisasi).split('/')[0]);
+      if (isNaN(v)) return 'empty';
+      if (v >= r.targetNum) return 'hit';
+      if (v >= r.targetNum * 0.7) return 'near';
+      return 'low';
+    }
+
+    function badge(st) {
+      if (st === 'hit') return '<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-lime-100 text-olive">HIT</span>';
+      if (st === 'near') return '<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-terracotta">PROSES</span>';
+      if (st === 'note') return '<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-sandstone text-espresso">TERISI</span>';
+      return '<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700">KURANG</span>';
+    }
+
+    function renderReport() {
+      const tbody = document.getElementById('report-table-body');
+      const list = currentFilter === 'all' ? reportItems : reportItems.filter(r => r.cat === currentFilter);
+      let hits = 0; reportItems.forEach(r => { if (r.targetNum !== null && evalStatus(r) === 'hit') hits++; });
+      document.getElementById('daily-summary-badge').textContent = `${hits}/10 Hit`;
+      tbody.innerHTML = list.map(r => `
+        <tr class="hover:bg-sandstone/40">
+          <td class="py-3 px-5 font-medium text-espresso">${r.item}</td>
+          <td class="py-3 px-4 text-xs font-semibold text-warmmuted tabular-nums">${r.target}</td>
+          <td class="py-3 px-4"><input oninput="updateVal(${r.id}, 'realisasi', this.value)" value="${r.realisasi.replace(/"/g, '&quot;')}" class="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-sandstone/40 focus:bg-white focus:border-terracotta focus:outline-none text-sm font-semibold tabular-nums" /></td>
+          <td class="py-3 px-4"><input oninput="updateVal(${r.id}, 'catatan', this.value)" value="${r.catatan.replace(/"/g, '&quot;')}" class="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-white focus:border-terracotta focus:outline-none text-xs" /></td>
+          <td class="py-3 px-4 text-right">${badge(evalStatus(r))}</td>
+        </tr>`).join('');
+    }
+
+    function updateVal(id, field, val) {
+      const idx = reportItems.findIndex(x => x.id === id);
+      if (idx > -1) {
+        reportItems[idx][field] = val;
+        let h = 0; reportItems.forEach(r => { if (r.targetNum !== null && evalStatus(r) === 'hit') h++; });
+        document.getElementById('daily-summary-badge').textContent = `${h}/10 Hit`;
+      }
+    }
+
+    function setFilter(f) {
+      currentFilter = f;
+      ['all', 'prospek', 'outreach', 'closing'].forEach(x => {
+        const b = document.getElementById(`flt-${x}`);
+        if (b) b.className = x === f ? 'filter-btn min-h-[36px] px-3 rounded-lg text-xs font-semibold bg-espresso text-white shrink-0 cursor-pointer' : 'filter-btn min-h-[36px] px-3 rounded-lg text-xs font-medium bg-sandstone text-warmmuted shrink-0 cursor-pointer';
+      });
+      renderReport();
+    }
+
+    function resetReport() {
+      reportItems = structuredClone(DEFAULT_ITEMS);
+      renderReport();
+      showToast('Laporan direset ke default');
+    }
+
+    function copyWaReport() {
+      const lines = ['*LAPORAN HARIAN SE — DEVELOPER SALES OS*', '18 Nov 2026 | Raka Pratama | Scorecard: 112.5 Poin', ''];
+      reportItems.forEach((r, i) => lines.push(`${i + 1}. *${r.item}*: ${r.realisasi} (Target: ${r.target})${r.catatan ? ' — ' + r.catatan : ''}`));
+      navigator.clipboard?.writeText(lines.join('\n')).then(() => showToast('Laporan WA disalin!')).catch(() => showToast('Siap disalin'));
+    }
+
+    function showToast(m) {
+      const t = document.getElementById('toast');
+      t.textContent = m;
+      t.classList.remove('hidden');
+      clearTimeout(window._t);
+      window._t = setTimeout(() => t.classList.add('hidden'), 2400);
+    }
+
+    renderScorecard();
+    renderReport();
+    renderUnits();
+    renderSmSe();
+    lucide.createIcons();
+  </script>
+</body>
+</html>
