@@ -126,10 +126,14 @@ export function computeDireksiRevenue(
   total_aktual: number;
   total_pipeline_booking: number;
   total_persentase: number;
+  total_unit_akad: number;
+  total_unit_booking: number;
 } {
   let totalTarget = 0;
   let totalAktual = 0;
   let totalPipelineBooking = 0;
+  let totalUnitAkad = 0;
+  let totalUnitBooking = 0;
 
   const perProject = projects.map(p => {
     const projectUnits = units.filter(u => u.project_id === p.id);
@@ -142,6 +146,8 @@ export function computeDireksiRevenue(
     totalTarget += p.target_omset;
     totalAktual += aktual;
     totalPipelineBooking += pipelineBooking;
+    totalUnitAkad += akadUnits.length;
+    totalUnitBooking += bookingUnits.length;
 
     const pct = p.target_omset > 0 ? parseFloat(((aktual / p.target_omset) * 100).toFixed(1)) : 0;
 
@@ -164,6 +170,8 @@ export function computeDireksiRevenue(
     total_target: totalTarget,
     total_aktual: totalAktual,
     total_pipeline_booking: totalPipelineBooking,
-    total_persentase: totalPct
+    total_persentase: totalPct,
+    total_unit_akad: totalUnitAkad,
+    total_unit_booking: totalUnitBooking,
   };
 }

@@ -716,3 +716,6 @@ export const THE_PARK_99_POINTS: LoveLetterPoint[] = [
     narrative: "Menghadirkan ketenangan batin, kehangatan keluarga, dan prestise berkelas dalam satu ekosistem perumahan yang terencana matang."
   }
 ];
+
+export const LOVE_LETTER_POINTS = THE_PARK_99_POINTS;
+

@@ -27,7 +27,16 @@ export const SixStepsWorkflow: React.FC<{
   onOpenMarketResearch?: () => void;
   onOpenSalesTarget?: () => void;
   onOpenContentCalendar?: () => void;
-}> = ({ onOpenLoveLetter, onOpenMarketResearch, onOpenSalesTarget, onOpenContentCalendar }) => {
+  onOpenPlaybook?: () => void;
+  onOpenDailyRoute?: () => void;
+}> = ({
+  onOpenLoveLetter,
+  onOpenMarketResearch,
+  onOpenSalesTarget,
+  onOpenContentCalendar,
+  onOpenPlaybook,
+  onOpenDailyRoute,
+}) => {
   const [activeStep, setActiveStep] = useState<number>(1);
 
   const steps: StepData[] = [
@@ -230,6 +239,15 @@ export const SixStepsWorkflow: React.FC<{
               Lead baru yang tidak ditindaklanjuti dalam 72 jam otomatis ditarik kembali oleh TL AI dan didistribusikan ke SE lain yang memiliki skor responsivitas lebih tinggi.
             </p>
           </div>
+          {onOpenPlaybook && (
+            <button
+              onClick={onOpenPlaybook}
+              className="mt-2 text-xs font-bold text-terracotta hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <span>Buka Playbook SE, TL, SM Lengkap</span>
+              <ExternalLink className="size-3" />
+            </button>
+          )}
         </div>
       )
     },
@@ -258,6 +276,15 @@ export const SixStepsWorkflow: React.FC<{
             <p className="font-bold text-espresso">Standby Show Unit The Park Sukoharjo (Nagoya &amp; Osaka)</p>
             <p className="text-warmmuted text-[11px]">Menerima jadwal kunjungan calon pembeli yang diatur via WhatsApp.</p>
           </div>
+          {onOpenDailyRoute && (
+            <button
+              onClick={onOpenDailyRoute}
+              className="mt-2 text-xs font-bold text-terracotta hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <span>Buka Peta Rute Harian Kanvasing SE</span>
+              <ExternalLink className="size-3" />
+            </button>
+          )}
         </div>
       )
     }

@@ -16,6 +16,11 @@ import { MarketResearchViewer } from './MarketResearchViewer';
 import { SalesTargetViewer } from './SalesTargetViewer';
 import { JalurProyek } from './JalurProyek';
 import { ContentCalendarViewer } from './ContentCalendarViewer';
+import { PlaybookViewer } from './PlaybookViewer';
+import { DailyRouteViewer } from './DailyRouteViewer';
+import { ProjectWebsitePreview } from './ProjectWebsitePreview';
+import { CrmPipelineView } from './CrmPipelineView';
+import { SuperadminPanel } from './SuperadminPanel';
 
 interface PublicHomepageProps {
   onEnterDashboard: (role?: string) => void;
@@ -30,6 +35,11 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({ onEnterDashboard
   const [isSalesTargetOpen, setIsSalesTargetOpen] = useState(false);
   const [isJalurProyekOpen, setIsJalurProyekOpen] = useState(false);
   const [isContentCalendarOpen, setIsContentCalendarOpen] = useState(false);
+  const [isPlaybookOpen, setIsPlaybookOpen] = useState(false);
+  const [isDailyRouteOpen, setIsDailyRouteOpen] = useState(false);
+  const [isWebsitePreviewOpen, setIsWebsitePreviewOpen] = useState(false);
+  const [isCrmPipelineOpen, setIsCrmPipelineOpen] = useState(false);
+  const [isSuperadminOpen, setIsSuperadminOpen] = useState(false);
 
   // Global Keyboard Shortcut: ⌘K or Ctrl+K to toggle Command Palette
   useEffect(() => {
@@ -80,6 +90,8 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({ onEnterDashboard
             onOpenMarketResearch={() => setIsMarketResearchOpen(true)}
             onOpenSalesTarget={() => setIsSalesTargetOpen(true)}
             onOpenContentCalendar={() => setIsContentCalendarOpen(true)}
+            onOpenPlaybook={() => setIsPlaybookOpen(true)}
+            onOpenDailyRoute={() => setIsDailyRouteOpen(true)}
           />
         </section>
 
@@ -116,6 +128,11 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({ onEnterDashboard
         onOpenSalesTarget={() => setIsSalesTargetOpen(true)}
         onOpenJalurProyek={() => setIsJalurProyekOpen(true)}
         onOpenContentCalendar={() => setIsContentCalendarOpen(true)}
+        onOpenPlaybook={() => setIsPlaybookOpen(true)}
+        onOpenDailyRoute={() => setIsDailyRouteOpen(true)}
+        onOpenProjectWebsite={() => setIsWebsitePreviewOpen(true)}
+        onOpenCrmPipeline={() => setIsCrmPipelineOpen(true)}
+        onOpenSuperadmin={() => setIsSuperadminOpen(true)}
         onScrollTo={scrollToSection}
       />
 
@@ -164,6 +181,9 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({ onEnterDashboard
             else if (stageKey === 'riset_pasar') setIsMarketResearchOpen(true);
             else if (stageKey === 'target_penjualan') setIsSalesTargetOpen(true);
             else if (stageKey === 'kalender_konten') setIsContentCalendarOpen(true);
+            else if (stageKey === 'playbook') setIsPlaybookOpen(true);
+            else if (stageKey === 'rute_harian') setIsDailyRouteOpen(true);
+            else if (stageKey === 'website_landing') setIsWebsitePreviewOpen(true);
           }}
           onClose={() => setIsJalurProyekOpen(false)}
         />
@@ -173,6 +193,40 @@ export const PublicHomepage: React.FC<PublicHomepageProps> = ({ onEnterDashboard
         <ContentCalendarViewer
           projectName="The Park Townhouse Sukoharjo"
           onClose={() => setIsContentCalendarOpen(false)}
+        />
+      )}
+
+      {isPlaybookOpen && (
+        <PlaybookViewer
+          projectName="The Park Townhouse Sukoharjo"
+          initialRole="SE"
+          onClose={() => setIsPlaybookOpen(false)}
+        />
+      )}
+
+      {isDailyRouteOpen && (
+        <DailyRouteViewer
+          projectName="The Park Townhouse Sukoharjo"
+          onClose={() => setIsDailyRouteOpen(false)}
+        />
+      )}
+
+      {isWebsitePreviewOpen && (
+        <ProjectWebsitePreview
+          onClose={() => setIsWebsitePreviewOpen(false)}
+        />
+      )}
+
+      {isCrmPipelineOpen && (
+        <CrmPipelineView
+          projectName="The Park Townhouse Sukoharjo"
+          onClose={() => setIsCrmPipelineOpen(false)}
+        />
+      )}
+
+      {isSuperadminOpen && (
+        <SuperadminPanel
+          onClose={() => setIsSuperadminOpen(false)}
         />
       )}
     </div>

@@ -20,6 +20,11 @@ interface CommandPaletteProps {
   onOpenSalesTarget?: () => void;
   onOpenJalurProyek?: () => void;
   onOpenContentCalendar?: () => void;
+  onOpenPlaybook?: () => void;
+  onOpenDailyRoute?: () => void;
+  onOpenProjectWebsite?: () => void;
+  onOpenCrmPipeline?: () => void;
+  onOpenSuperadmin?: () => void;
   onScrollTo: (sectionId: string) => void;
 }
 
@@ -33,6 +38,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onOpenSalesTarget,
   onOpenJalurProyek,
   onOpenContentCalendar,
+  onOpenPlaybook,
+  onOpenDailyRoute,
+  onOpenProjectWebsite,
+  onOpenCrmPipeline,
+  onOpenSuperadmin,
   onScrollTo
 }) => {
   const [query, setQuery] = useState('');
@@ -115,10 +125,61 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     {
       id: 'playbook',
       category: 'Fitur',
-      title: 'Playbook Penjualan & Rute Harian SE',
-      subtitle: 'SOP sales, TL Full AI & SM Semi-AI',
+      title: 'Playbook Penjualan (SE, TL, SM)',
+      subtitle: 'SOP sales harian, kualifikasi BANT ≥ 7 & KPI terukur',
       icon: BookOpen,
-      action: () => { onClose(); onScrollTo('peran-ai'); }
+      action: () => { 
+        onClose(); 
+        if (onOpenPlaybook) onOpenPlaybook();
+        else onScrollTo('peran-ai'); 
+      }
+    },
+    {
+      id: 'daily-route',
+      category: 'Fitur',
+      title: 'Rute Harian Kanvasing SE',
+      subtitle: 'Peta rute GPS waypoint & jadwal per jam ke RS Indriati / Solo Baru',
+      icon: MapPin,
+      action: () => { 
+        onClose(); 
+        if (onOpenDailyRoute) onOpenDailyRoute();
+        else onScrollTo('alur-6-langkah'); 
+      }
+    },
+    {
+      id: 'project-website',
+      category: 'Fitur',
+      title: 'Website Landing Page Proyek',
+      subtitle: 'Preview landing page interaktif dengan kalkulator simulasi cicilan KPR',
+      icon: Layers,
+      action: () => { 
+        onClose(); 
+        if (onOpenProjectWebsite) onOpenProjectWebsite();
+        else onScrollTo('alur-6-langkah'); 
+      }
+    },
+    {
+      id: 'crm-pipeline',
+      category: 'Fitur',
+      title: 'CRM & Pipeline Penjualan (7 Tahap)',
+      subtitle: 'Papan Kanban leads, checklist tanggal tindak lanjut & skor BANT',
+      icon: TrendingUp,
+      action: () => { 
+        onClose(); 
+        if (onOpenCrmPipeline) onOpenCrmPipeline();
+        else onScrollTo('alur-6-langkah'); 
+      }
+    },
+    {
+      id: 'superadmin',
+      category: 'Aksi',
+      title: 'Panel Pengawasan Superadmin',
+      subtitle: 'Audit tenant, pemakaian token AI (ai_usage) & feature flags',
+      icon: Sparkles,
+      action: () => { 
+        onClose(); 
+        if (onOpenSuperadmin) onOpenSuperadmin();
+      }
     },
     {
       id: 'case-study',

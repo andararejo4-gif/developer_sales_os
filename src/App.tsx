@@ -6,8 +6,15 @@ import { JalurProyek } from './components/JalurProyek';
 import { ContentCalendarViewer } from './components/ContentCalendarViewer';
 import { KnowledgeBaseViewer } from './components/KnowledgeBaseViewer';
 import { LoveLetterViewerModal } from './components/LoveLetterViewerModal';
+import { PlaybookViewer } from './components/PlaybookViewer';
+import { DailyRouteViewer } from './components/DailyRouteViewer';
+import { ProjectWebsitePreview } from './components/ProjectWebsitePreview';
+import { CrmPipelineView } from './components/CrmPipelineView';
+import { CommissionSettingsModal } from './components/CommissionSettingsModal';
+import { SuperadminPanel } from './components/SuperadminPanel';
 import {
   Award,
+  BookOpen,
   Building2,
   Calendar,
   CheckCircle2,
@@ -17,12 +24,15 @@ import {
   Edit3,
   FileCheck,
   FileText,
+  Globe,
   HeartHandshake,
   Home,
   Layers,
   LayoutDashboard,
+  MapPin,
   Megaphone,
   MessageSquare,
+  Percent,
   Plus,
   RefreshCw,
   Send,
@@ -127,13 +137,19 @@ export default function App() {
   const [escalations, setEscalations] = useState(ESCALATION_DATA);
   const [tipeFilter, setTipeFilter] = useState<string>('all');
 
-  // Proyek & Fase 2/3 Intelligence States
+  // Proyek & Fase 2/3/4/5/6 Intelligence States
   const [showJalurProyekModal, setShowJalurProyekModal] = useState<boolean>(false);
   const [showMarketResearchModal, setShowMarketResearchModal] = useState<boolean>(false);
   const [showSalesTargetModal, setShowSalesTargetModal] = useState<boolean>(false);
   const [showContentCalendarModal, setShowContentCalendarModal] = useState<boolean>(false);
   const [showKbModal, setShowKbModal] = useState<boolean>(false);
   const [showLoveLetterModal, setShowLoveLetterModal] = useState<boolean>(false);
+  const [showPlaybookModal, setShowPlaybookModal] = useState<boolean>(false);
+  const [showDailyRouteModal, setShowDailyRouteModal] = useState<boolean>(false);
+  const [showWebsiteModal, setShowWebsiteModal] = useState<boolean>(false);
+  const [showCrmModal, setShowCrmModal] = useState<boolean>(false);
+  const [showCommissionModal, setShowCommissionModal] = useState<boolean>(false);
+  const [showSuperadminModal, setShowSuperadminModal] = useState<boolean>(false);
 
   // Common UI states
   const [toast, setToast] = useState<string | null>(null);
@@ -532,6 +548,46 @@ export default function App() {
               </button>
 
               <button
+                onClick={() => setShowPlaybookModal(true)}
+                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+              >
+                <BookOpen className="size-4 text-terracotta" />
+                <span>Playbook Sales (SE/TL/SM)</span>
+              </button>
+
+              <button
+                onClick={() => setShowDailyRouteModal(true)}
+                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+              >
+                <MapPin className="size-4 text-terracotta" />
+                <span>Rute Harian Kanvasing</span>
+              </button>
+
+              <button
+                onClick={() => setShowWebsiteModal(true)}
+                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+              >
+                <Globe className="size-4 text-terracotta" />
+                <span>Website Landing Page</span>
+              </button>
+
+              <button
+                onClick={() => setShowCrmModal(true)}
+                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+              >
+                <Users className="size-4 text-terracotta" />
+                <span>CRM &amp; Pipeline (7 Stage)</span>
+              </button>
+
+              <button
+                onClick={() => setShowCommissionModal(true)}
+                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+              >
+                <Percent className="size-4 text-olive" />
+                <span>Aturan Komisi Penjualan</span>
+              </button>
+
+              <button
                 onClick={() => setShowKbModal(true)}
                 className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
               >
@@ -546,6 +602,16 @@ export default function App() {
                 <HeartHandshake className="size-4 text-terracotta" />
                 <span>Surat Cinta 99 Keunggulan</span>
               </button>
+
+              {(role === 'IT' || role === 'DIREKSI') && (
+                <button
+                  onClick={() => setShowSuperadminModal(true)}
+                  className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+                >
+                  <ShieldCheck className="size-4 text-amber-600" />
+                  <span>Panel Superadmin Multi-Tenant</span>
+                </button>
+              )}
             </div>
           </nav>
         </div>
@@ -2040,7 +2106,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Proyek Intelligence Modals (Fase 1, 1A, 2) */}
+      {/* Proyek Intelligence Modals (Fase 1, 1A, 2, 3, 4, 5, 6) */}
       {showJalurProyekModal && (
         <JalurProyek
           projectName="The Park Townhouse Sukoharjo"
@@ -2051,6 +2117,10 @@ export default function App() {
             else if (stageKey === 'riset_pasar') setShowMarketResearchModal(true);
             else if (stageKey === 'target_penjualan') setShowSalesTargetModal(true);
             else if (stageKey === 'kalender_konten') setShowContentCalendarModal(true);
+            else if (stageKey === 'playbook') setShowPlaybookModal(true);
+            else if (stageKey === 'rute_harian') setShowDailyRouteModal(true);
+            else if (stageKey === 'website_landing') setShowWebsiteModal(true);
+            else if (stageKey === 'crm_pipeline') setShowCrmModal(true);
           }}
           onClose={() => setShowJalurProyekModal(false)}
         />
@@ -2078,6 +2148,50 @@ export default function App() {
         <ContentCalendarViewer
           projectName="The Park Townhouse Sukoharjo"
           onClose={() => setShowContentCalendarModal(false)}
+        />
+      )}
+
+      {showPlaybookModal && (
+        <PlaybookViewer
+          projectName="The Park Townhouse Sukoharjo"
+          onClose={() => setShowPlaybookModal(false)}
+        />
+      )}
+
+      {showDailyRouteModal && (
+        <DailyRouteViewer
+          projectName="The Park Townhouse Sukoharjo"
+          onClose={() => setShowDailyRouteModal(false)}
+        />
+      )}
+
+      {showWebsiteModal && (
+        <ProjectWebsitePreview
+          onClose={() => setShowWebsiteModal(false)}
+          onLeadCaptured={() => {
+            setToast('Lead baru berhasil tersimpan ke CRM Proyek!');
+          }}
+        />
+      )}
+
+      {showCrmModal && (
+        <CrmPipelineView
+          projectName="The Park Townhouse Sukoharjo"
+          userRole={role}
+          onClose={() => setShowCrmModal(false)}
+        />
+      )}
+
+      {showCommissionModal && (
+        <CommissionSettingsModal
+          onClose={() => setShowCommissionModal(false)}
+          onSaved={() => setToast('Aturan komisi berhasil diperbarui')}
+        />
+      )}
+
+      {showSuperadminModal && (
+        <SuperadminPanel
+          onClose={() => setShowSuperadminModal(false)}
         />
       )}
 
