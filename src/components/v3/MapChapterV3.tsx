@@ -74,6 +74,9 @@ function buildPoiPopupHtml(poi: POI, km: number, inRadius: boolean): string {
   const statusBadge = inRadius
     ? `<span style="font-size:10px;font-family:monospace;font-weight:700;padding:2px 7px;border-radius:999px;background:#EAF4D3;color:#0B3D2E;">Dalam radius</span>`
     : `<span style="font-size:10px;font-family:monospace;font-weight:700;padding:2px 7px;border-radius:999px;background:#F3F4F6;color:#4B5563;border:1px solid #E5E7EB;">Di luar radius</span>`;
+  const strategicBadge = poi.strategicType
+    ? `<span style="font-size:9.5px;font-family:monospace;font-weight:700;padding:2px 7px;border-radius:999px;background:#0B3D2E;color:#C6F432;">★ ${poi.strategicType.replace(/_/g, ' ')}</span>`
+    : '';
 
   return `
     <div style="font-family:'Plus Jakarta Sans',sans-serif;color:#0B3D2E;padding:2px 0;">
@@ -85,6 +88,7 @@ function buildPoiPopupHtml(poi: POI, km: number, inRadius: boolean): string {
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px;">
             <span style="font-size:9.5px;font-family:monospace;font-weight:800;text-transform:uppercase;color:${catColor.pinBg};">${poi.categoryLabel || poi.category}</span>
             ${statusBadge}
+            ${strategicBadge}
           </div>
           <h4 style="font-size:13.5px;font-weight:800;line-height:1.3;color:#0B3D2E;margin:0;">${poi.name}</h4>
         </div>
@@ -818,8 +822,13 @@ export const MapChapterV3: React.FC = () => {
                         {poi.name}
                       </h4>
 
-                      {/* Lencana jarak dan status di baris terpisah */}
+                      {/* Lencana jarak, status, dan jenis strategis di baris terpisah */}
                       <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                        {poi.strategicType && (
+                          <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[#0B3D2E] text-[#C6F432]">
+                            ★ {poi.strategicType.replace(/_/g, ' ')}
+                          </span>
+                        )}
                         <span
                           className={`text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded-full ${
                             inRadius
@@ -868,19 +877,19 @@ export const MapChapterV3: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-4 sm:mb-6">
           <div className="max-w-2xl">
             <p className="text-xs font-mono uppercase tracking-widest text-[#2F9E5B] font-bold">
-              Bab 04 · Peta Spasial &amp; Radius Riset (OpenStreetMap)
+              Bab 04 · Fasilitas Lokasi Wilayah Strategis (OpenStreetMap)
             </p>
             <h2 className="font-display-v3 text-v3-chapter font-extrabold text-[#0B3D2E] mt-1.5">
-              Peta jadi pusat keputusan lokasi.
+              Peta Fasilitas Lokasi Wilayah Strategis.
             </h2>
             <p className="text-sm sm:text-base text-[#3B5E50] mt-2 leading-relaxed">
-              Jelajahi 9 kategori fasilitas di sekitar The Park Townhouse Sukoharjo. Pin berdekatan otomatis dikelompokkan dan dapat diurai (spiderfy).
+              Hanya menampilkan fasilitas lokasi strategis dan landmark terverifikasi di 9 kategori sekitar perumahan (kuliner legendaris, rumah sakit rujukan, pusat belanja regional, sekolah unggulan). Fasilitas minor/feeder disaring untuk menjaga relevansi keputusan pembeli.
             </p>
           </div>
 
           <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white border border-[#CFE1D5] text-xs font-semibold text-[#0B3D2E] self-start">
             <Compass className="size-4 text-[#2F9E5B]" />
-            <span>3 Klaster · {POIS.length} Fasilitas OSM Terverifikasi</span>
+            <span>3 Klaster · {POIS.length} Fasilitas Wilayah Strategis</span>
           </div>
         </div>
 

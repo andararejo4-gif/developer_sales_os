@@ -37,6 +37,9 @@ export interface POI {
   approxDistance: string;
   whyInteresting: string;
   buyerHighlight: string;
+  isStrategic?: boolean;
+  strategicType?: string;
+  strategicTier?: string;
 }
 
 export interface ClusterData {
@@ -51,20 +54,25 @@ export interface ClusterData {
   calloutDir: 'top-right' | 'bottom-left' | 'bottom-right';
 }
 
-export const POIS: POI[] = (osmPoisData as any[]).map((p) => ({
-  id: p.id,
-  osmId: p.osmId,
-  name: p.name,
-  category: p.categoryLabel || p.category,
-  categoryKey: p.category as PoiCategoryKey,
-  categoryLabel: p.categoryLabel,
-  subType: p.subType,
-  lat: p.lat,
-  lng: p.lng,
-  approxDistance: p.approxDistance.includes('berkendara') ? p.approxDistance : `${p.approxDistance} berkendara`,
-  whyInteresting: p.whyInteresting,
-  buyerHighlight: p.buyerHighlight,
-}));
+export const POIS: POI[] = (osmPoisData as any[])
+  .filter((p) => p.isStrategic !== false)
+  .map((p) => ({
+    id: p.id,
+    osmId: p.osmId,
+    name: p.name,
+    category: p.categoryLabel || p.category,
+    categoryKey: p.category as PoiCategoryKey,
+    categoryLabel: p.categoryLabel,
+    subType: p.subType,
+    lat: p.lat,
+    lng: p.lng,
+    approxDistance: p.approxDistance.includes('berkendara') ? p.approxDistance : `${p.approxDistance} berkendara`,
+    whyInteresting: p.whyInteresting,
+    buyerHighlight: p.buyerHighlight,
+    isStrategic: p.isStrategic ?? true,
+    strategicType: p.strategicType,
+    strategicTier: p.strategicTier,
+  }));
 
 export const CLUSTERS: ClusterData[] = [
   {
@@ -222,6 +230,9 @@ function buildClusterMarkerHtml(cluster: ClusterData, isActive: boolean): string
 
 function buildPoiPopupHtml(poi: POI): string {
   const svgInner = getPoiSvgPath(poi.category);
+  const strategicBadge = poi.strategicType
+    ? `<span style="font-size:9.5px;font-family:monospace;font-weight:700;padding:2px 6px;border-radius:999px;background:#1c1917;color:#facc15;margin-left:4px;">★ ${poi.strategicType.replace(/_/g, ' ')}</span>`
+    : '';
   return `
     <div style="width:260px;max-width:76vw;padding:12px 14px;font-family:'Plus Jakarta Sans',sans-serif;color:#1c1917;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
@@ -229,7 +240,10 @@ function buildPoiPopupHtml(poi: POI): string {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgInner}</svg>
         </div>
         <div style="min-width:0;">
-          <div style="font-size:10px;font-family:monospace;font-weight:700;text-transform:uppercase;color:#b45309;letter-spacing:0.04em;">${poi.category}</div>
+          <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
+            <span style="font-size:10px;font-family:monospace;font-weight:700;text-transform:uppercase;color:#b45309;letter-spacing:0.04em;">${poi.category}</span>
+            ${strategicBadge}
+          </div>
           <div style="font-size:13px;font-weight:800;line-height:1.25;color:#1c1917;">${poi.name}</div>
         </div>
       </div>
