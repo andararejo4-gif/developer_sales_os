@@ -21,7 +21,10 @@
       "building": "yes"
     },
     "in1km": true,
-    "minDistanceMeters": 213.8
+    "minDistanceMeters": 213.8,
+    "unggulan": true,
+    "skor_kurasi": 98.0,
+    "alasan_kurasi": "Stadion kabupaten kebanggaan daerah, fasilitas olahraga utama radius 1 km otomatis unggulan"
   },
   {
     "id": "poi-osm-002",
@@ -44,7 +47,10 @@
       "sport": "badminton;volleyball"
     },
     "in1km": true,
-    "minDistanceMeters": 209.4
+    "minDistanceMeters": 209.4,
+    "unggulan": true,
+    "skor_kurasi": 94.0,
+    "alasan_kurasi": "Gelanggang Olahraga indoor serbaguna tingkat kabupaten dalam radius 1 km"
   },
   {
     "id": "poi-osm-003",
@@ -67,7 +73,10 @@
       "sport": "tennis"
     },
     "in1km": true,
-    "minDistanceMeters": 214.6
+    "minDistanceMeters": 214.6,
+    "unggulan": false,
+    "skor_kurasi": 58.0,
+    "alasan_kurasi": "Sarana lapangan tenis pelengkap kompleks Gelora Merdeka"
   },
   {
     "id": "poi-osm-004",
@@ -90,7 +99,10 @@
       "access": "public"
     },
     "in1km": true,
-    "minDistanceMeters": 126.8
+    "minDistanceMeters": 126.8,
+    "unggulan": false,
+    "skor_kurasi": 59.0,
+    "alasan_kurasi": "Sarana kolam renang pelengkap kompleks Gelora Merdeka"
   },
   {
     "id": "poi-osm-005",
@@ -113,7 +125,10 @@
       "sport": "archery"
     },
     "in1km": true,
-    "minDistanceMeters": 204.8
+    "minDistanceMeters": 204.8,
+    "unggulan": false,
+    "skor_kurasi": 56.0,
+    "alasan_kurasi": "Sarana lapangan panahan pelengkap kompleks Gelora Merdeka"
   },
   {
     "id": "poi-osm-006",
@@ -136,7 +151,10 @@
       "sport": "basketball;futsal"
     },
     "in1km": true,
-    "minDistanceMeters": 141.8
+    "minDistanceMeters": 141.8,
+    "unggulan": false,
+    "skor_kurasi": 54.0,
+    "alasan_kurasi": "Lapangan olahraga kecil pelengkap kompleks"
   },
   {
     "id": "poi-osm-007",
@@ -159,7 +177,10 @@
       "tourism": "attraction"
     },
     "in1km": true,
-    "minDistanceMeters": 136
+    "minDistanceMeters": 136,
+    "unggulan": true,
+    "skor_kurasi": 91.0,
+    "alasan_kurasi": "Taman rekreasi dan ruang terbuka hijau keluarga utama dalam radius 1 km"
   },
   {
     "id": "poi-osm-008",
@@ -181,7 +202,10 @@
       "leisure": "playground"
     },
     "in1km": true,
-    "minDistanceMeters": 99.5
+    "minDistanceMeters": 99.5,
+    "unggulan": false,
+    "skor_kurasi": 55.0,
+    "alasan_kurasi": "Wahana bermain anak pelengkap Taman Pakujoyo"
   },
   {
     "id": "poi-osm-009",
@@ -203,7 +227,10 @@
       "leisure": "fitness_centre"
     },
     "in1km": true,
-    "minDistanceMeters": 171.1
+    "minDistanceMeters": 171.1,
+    "unggulan": false,
+    "skor_kurasi": 44.0,
+    "alasan_kurasi": "Studio senam privat ukuran ruko"
   },
   {
     "id": "poi-osm-010",
@@ -225,7 +252,10 @@
       "amenity": "school"
     },
     "in1km": true,
-    "minDistanceMeters": 270.7
+    "minDistanceMeters": 270.7,
+    "unggulan": true,
+    "skor_kurasi": 88.0,
+    "alasan_kurasi": "Sekolah dasar negeri percontohan terdekat dalam radius 1 km"
   },
   {
     "id": "poi-osm-011",
@@ -247,7 +277,10 @@
       "amenity": "kindergarten"
     },
     "in1km": true,
-    "minDistanceMeters": 183.1
+    "minDistanceMeters": 183.1,
+    "unggulan": false,
+    "skor_kurasi": 52.0,
+    "alasan_kurasi": "Taman kanak-kanak lingkungan"
   },
   {
     "id": "poi-osm-012",
@@ -269,7 +302,10 @@
       "amenity": "childcare"
     },
     "in1km": true,
-    "minDistanceMeters": 123.5
+    "minDistanceMeters": 123.5,
+    "unggulan": false,
+    "skor_kurasi": 48.0,
+    "alasan_kurasi": "Pendidikan anak usia dini tingkat RT/RW"
   },
   {
     "id": "poi-osm-013",
@@ -292,7 +328,10 @@
       "religion": "muslim"
     },
     "in1km": true,
-    "minDistanceMeters": 134.7
+    "minDistanceMeters": 134.7,
+    "unggulan": true,
+    "skor_kurasi": 89.0,
+    "alasan_kurasi": "Masjid jami utama lingkungan Gayam dalam radius 1 km"
   },
   {
     "id": "poi-osm-014",
@@ -315,7 +354,10 @@
       "religion": "muslim"
     },
     "in1km": true,
-    "minDistanceMeters": 36.4
+    "minDistanceMeters": 36.4,
+    "unggulan": false,
+    "skor_kurasi": 43.0,
+    "alasan_kurasi": "Musala warga ukuran kecil"
   },
   {
     "id": "poi-osm-015",
@@ -338,7 +380,10 @@
       "religion": "christian"
     },
     "in1km": true,
-    "minDistanceMeters": 319.3
+    "minDistanceMeters": 319.3,
+    "unggulan": false,
+    "skor_kurasi": 65.0,
+    "alasan_kurasi": "Gereja persekutuan lingkungan sekunder, daftar lengkap di Riset Pasar"
   },
   {
     "id": "poi-osm-016",
@@ -360,7 +405,10 @@
       "amenity": "clinic"
     },
     "in1km": true,
-    "minDistanceMeters": 241.9
+    "minDistanceMeters": 241.9,
+    "unggulan": true,
+    "skor_kurasi": 84.0,
+    "alasan_kurasi": "Pusat pelayanan kesehatan masyarakat terdekat dalam radius 1 km"
   },
   {
     "id": "poi-osm-017",
@@ -382,7 +430,10 @@
       "amenity": "pharmacy"
     },
     "in1km": true,
-    "minDistanceMeters": 237.1
+    "minDistanceMeters": 237.1,
+    "unggulan": false,
+    "skor_kurasi": 56.0,
+    "alasan_kurasi": "Gerai apotek retail obat"
   },
   {
     "id": "poi-osm-018",
@@ -404,7 +455,10 @@
       "amenity": "clinic"
     },
     "in1km": true,
-    "minDistanceMeters": 226.2
+    "minDistanceMeters": 226.2,
+    "unggulan": false,
+    "skor_kurasi": 54.0,
+    "alasan_kurasi": "Klinik pratama faskes 1 kecil non-spesialis"
   },
   {
     "id": "poi-osm-019",
@@ -426,7 +480,10 @@
       "shop": "convenience"
     },
     "in1km": true,
-    "minDistanceMeters": 75.3
+    "minDistanceMeters": 75.3,
+    "unggulan": false,
+    "skor_kurasi": 45.0,
+    "alasan_kurasi": "Minimarket retail feeder lokal"
   },
   {
     "id": "poi-osm-020",
@@ -448,7 +505,10 @@
       "shop": "convenience"
     },
     "in1km": true,
-    "minDistanceMeters": 46.4
+    "minDistanceMeters": 46.4,
+    "unggulan": false,
+    "skor_kurasi": 42.0,
+    "alasan_kurasi": "Minimarket retail feeder lokal"
   },
   {
     "id": "poi-osm-021",
@@ -470,7 +530,10 @@
       "amenity": "marketplace"
     },
     "in1km": true,
-    "minDistanceMeters": 177.2
+    "minDistanceMeters": 177.2,
+    "unggulan": true,
+    "skor_kurasi": 85.0,
+    "alasan_kurasi": "Pasar tradisional segar utama kebutuhan dapur harian dalam radius 1 km"
   },
   {
     "id": "poi-osm-022",
@@ -492,7 +555,10 @@
       "amenity": "taxi"
     },
     "in1km": true,
-    "minDistanceMeters": 97.1
+    "minDistanceMeters": 97.1,
+    "unggulan": false,
+    "skor_kurasi": 36.0,
+    "alasan_kurasi": "Pangkalan ojek feeder transportasi sekunder"
   },
   {
     "id": "poi-osm-023",
@@ -514,7 +580,10 @@
       "highway": "bus_stop"
     },
     "in1km": true,
-    "minDistanceMeters": 145
+    "minDistanceMeters": 145,
+    "unggulan": false,
+    "skor_kurasi": 45.0,
+    "alasan_kurasi": "Halte angkutan pedesaan/feeder"
   },
   {
     "id": "poi-osm-024",
@@ -536,7 +605,10 @@
       "amenity": "townhall"
     },
     "in1km": true,
-    "minDistanceMeters": 290.3
+    "minDistanceMeters": 290.3,
+    "unggulan": true,
+    "skor_kurasi": 87.0,
+    "alasan_kurasi": "Pusat administrasi kependudukan sipil resmi terdekat dalam radius 1 km"
   },
   {
     "id": "poi-osm-025",
@@ -558,7 +630,10 @@
       "amenity": "police"
     },
     "in1km": true,
-    "minDistanceMeters": 186.9
+    "minDistanceMeters": 186.9,
+    "unggulan": false,
+    "skor_kurasi": 39.0,
+    "alasan_kurasi": "Pos penjagaan/pos ronda tingkat RW"
   },
   {
     "id": "poi-osm-026",
@@ -580,7 +655,10 @@
       "amenity": "atm"
     },
     "in1km": true,
-    "minDistanceMeters": 65
+    "minDistanceMeters": 65,
+    "unggulan": false,
+    "skor_kurasi": 46.0,
+    "alasan_kurasi": "Gerai mesin ATM tanpa layanan teller/cabang"
   },
   {
     "id": "poi-osm-027",
@@ -602,7 +680,10 @@
       "amenity": "bank"
     },
     "in1km": true,
-    "minDistanceMeters": 163.9
+    "minDistanceMeters": 163.9,
+    "unggulan": true,
+    "skor_kurasi": 82.0,
+    "alasan_kurasi": "Kantor bank cabang resmi terdekat dalam radius 1 km"
   },
   {
     "id": "poi-osm-028",
@@ -624,7 +705,10 @@
       "amenity": "bank"
     },
     "in1km": true,
-    "minDistanceMeters": 5.6
+    "minDistanceMeters": 5.6,
+    "unggulan": false,
+    "skor_kurasi": 38.0,
+    "alasan_kurasi": "Agen transaksi keuangan mikro perantara"
   },
   {
     "id": "poi-osm-029",
@@ -647,7 +731,10 @@
       "cuisine": "indonesian"
     },
     "in1km": true,
-    "minDistanceMeters": 69.8
+    "minDistanceMeters": 69.8,
+    "unggulan": false,
+    "skor_kurasi": 40.0,
+    "alasan_kurasi": "Warung soto sarapan lokal informal"
   },
   {
     "id": "poi-osm-030",
@@ -669,7 +756,10 @@
       "amenity": "restaurant"
     },
     "in1km": true,
-    "minDistanceMeters": 53.9
+    "minDistanceMeters": 53.9,
+    "unggulan": false,
+    "skor_kurasi": 35.0,
+    "alasan_kurasi": "Warung angkringan/HIK santai malam informal"
   },
   {
     "id": "poi-osm-031",
@@ -691,7 +781,10 @@
       "amenity": "food_court"
     },
     "in1km": true,
-    "minDistanceMeters": 95.3
+    "minDistanceMeters": 95.3,
+    "unggulan": true,
+    "skor_kurasi": 83.0,
+    "alasan_kurasi": "Sentra kuliner malam terorganisir terdekat dalam radius 1 km"
   },
   {
     "id": "poi-osm-032",
@@ -713,7 +806,10 @@
       "amenity": "school"
     },
     "in1km": false,
-    "minDistanceMeters": 1044.4
+    "minDistanceMeters": 1044.4,
+    "unggulan": true,
+    "skor_kurasi": 95.0,
+    "alasan_kurasi": "SMA Negeri peringkat 1 favorit se-kabupaten Sukoharjo"
   },
   {
     "id": "poi-osm-033",
@@ -735,7 +831,10 @@
       "amenity": "school"
     },
     "in1km": false,
-    "minDistanceMeters": 1221.6
+    "minDistanceMeters": 1221.6,
+    "unggulan": true,
+    "skor_kurasi": 90.0,
+    "alasan_kurasi": "SMP Negeri favorit zonasi pusat kota Sukoharjo"
   },
   {
     "id": "poi-osm-034",
@@ -758,7 +857,10 @@
       "religion": "muslim"
     },
     "in1km": false,
-    "minDistanceMeters": 1759.1
+    "minDistanceMeters": 1759.1,
+    "unggulan": true,
+    "skor_kurasi": 96.0,
+    "alasan_kurasi": "Masjid agung megah pusat Kabupaten Sukoharjo"
   },
   {
     "id": "poi-osm-035",
@@ -781,7 +883,10 @@
       "emergency": "yes"
     },
     "in1km": false,
-    "minDistanceMeters": 1655.3
+    "minDistanceMeters": 1655.3,
+    "unggulan": true,
+    "skor_kurasi": 97.0,
+    "alasan_kurasi": "Rumah sakit rujukan utama tipe B milik pemerintah kabupaten"
   },
   {
     "id": "poi-osm-036",
@@ -803,7 +908,10 @@
       "amenity": "hospital"
     },
     "in1km": true,
-    "minDistanceMeters": 934.1
+    "minDistanceMeters": 934.1,
+    "unggulan": true,
+    "skor_kurasi": 92.0,
+    "alasan_kurasi": "Rumah sakit swasta rujukan terakreditasi paripurna di jalur utama"
   },
   {
     "id": "poi-osm-037",
@@ -825,7 +933,10 @@
       "shop": "department_store"
     },
     "in1km": false,
-    "minDistanceMeters": 1495.6
+    "minDistanceMeters": 1495.6,
+    "unggulan": true,
+    "skor_kurasi": 93.0,
+    "alasan_kurasi": "Departement store dan supermarket pusat belanja keluarga terlengkap di Sukoharjo"
   },
   {
     "id": "poi-osm-038",
@@ -847,7 +958,10 @@
       "amenity": "marketplace"
     },
     "in1km": false,
-    "minDistanceMeters": 1735.5
+    "minDistanceMeters": 1735.5,
+    "unggulan": true,
+    "skor_kurasi": 94.0,
+    "alasan_kurasi": "Pasar induk tradisional modern pusat Kabupaten Sukoharjo"
   },
   {
     "id": "poi-osm-039",
@@ -869,7 +983,10 @@
       "railway": "station"
     },
     "in1km": true,
-    "minDistanceMeters": 716.8
+    "minDistanceMeters": 716.8,
+    "unggulan": true,
+    "skor_kurasi": 91.0,
+    "alasan_kurasi": "Stasiun kereta api penumpang aktif rute Purwosari-Wonogiri"
   },
   {
     "id": "poi-osm-040",
@@ -891,7 +1008,10 @@
       "amenity": "bus_station"
     },
     "in1km": false,
-    "minDistanceMeters": 1366.7
+    "minDistanceMeters": 1366.7,
+    "unggulan": true,
+    "skor_kurasi": 90.0,
+    "alasan_kurasi": "Terminal induk bus AKAP/AKDP kabupaten rute nasional"
   },
   {
     "id": "poi-osm-041",
@@ -913,7 +1033,10 @@
       "amenity": "townhall"
     },
     "in1km": false,
-    "minDistanceMeters": 1811.2
+    "minDistanceMeters": 1811.2,
+    "unggulan": true,
+    "skor_kurasi": 97.0,
+    "alasan_kurasi": "Pusat pemerintahan kabupaten dan pelayanan publik satu atap"
   },
   {
     "id": "poi-osm-042",
@@ -935,7 +1058,10 @@
       "leisure": "park"
     },
     "in1km": false,
-    "minDistanceMeters": 1781.7
+    "minDistanceMeters": 1781.7,
+    "unggulan": true,
+    "skor_kurasi": 95.0,
+    "alasan_kurasi": "Landmark sipil & ruang publik terbuka hijau utama kota"
   },
   {
     "id": "poi-osm-043",
@@ -957,7 +1083,10 @@
       "amenity": "police"
     },
     "in1km": false,
-    "minDistanceMeters": 1935.4
+    "minDistanceMeters": 1935.4,
+    "unggulan": true,
+    "skor_kurasi": 92.0,
+    "alasan_kurasi": "Markas komando kepolisian resor kabupaten 24 jam"
   },
   {
     "id": "poi-osm-044",
@@ -979,7 +1108,10 @@
       "amenity": "bank"
     },
     "in1km": false,
-    "minDistanceMeters": 1422.6
+    "minDistanceMeters": 1422.6,
+    "unggulan": true,
+    "skor_kurasi": 91.0,
+    "alasan_kurasi": "Kantor cabang utama perbankan BUMN Sukoharjo"
   },
   {
     "id": "poi-osm-045",
@@ -1001,7 +1133,10 @@
       "amenity": "bank"
     },
     "in1km": false,
-    "minDistanceMeters": 1431.1
+    "minDistanceMeters": 1431.1,
+    "unggulan": false,
+    "skor_kurasi": 68.0,
+    "alasan_kurasi": "Kantor cabang pembantu sekunder di samping kantor cabang utama BRI"
   },
   {
     "id": "poi-osm-046",
@@ -1024,7 +1159,10 @@
       "cuisine": "chicken;indonesian"
     },
     "in1km": true,
-    "minDistanceMeters": 900.5
+    "minDistanceMeters": 900.5,
+    "unggulan": true,
+    "skor_kurasi": 96.0,
+    "alasan_kurasi": "Kuliner legendaris ikonik Sukoharjo langganan Presiden Joko Widodo"
   },
   {
     "id": "poi-osm-047",
@@ -1046,7 +1184,10 @@
       "amenity": "food_court"
     },
     "in1km": false,
-    "minDistanceMeters": 1559.3
+    "minDistanceMeters": 1559.3,
+    "unggulan": true,
+    "skor_kurasi": 89.0,
+    "alasan_kurasi": "Destinasi wisata kuliner herbal & khas Kota Jamu Sukoharjo"
   },
   {
     "id": "poi-osm-048",
@@ -1068,7 +1209,10 @@
       "shop": "mall"
     },
     "in1km": false,
-    "minDistanceMeters": 8127.3
+    "minDistanceMeters": 8127.3,
+    "unggulan": true,
+    "skor_kurasi": 99.0,
+    "alasan_kurasi": "Mall gaya hidup termegah Solo Raya di koridor Solo Baru"
   },
   {
     "id": "poi-osm-049",
@@ -1090,7 +1234,10 @@
       "shop": "mall"
     },
     "in1km": false,
-    "minDistanceMeters": 8345.5
+    "minDistanceMeters": 8345.5,
+    "unggulan": true,
+    "skor_kurasi": 98.0,
+    "alasan_kurasi": "Pusat belanja modern superblok terpadu Solo Baru"
   },
   {
     "id": "poi-osm-050",
@@ -1113,7 +1260,10 @@
       "emergency": "yes"
     },
     "in1km": false,
-    "minDistanceMeters": 7942.8
+    "minDistanceMeters": 7942.8,
+    "unggulan": true,
+    "skor_kurasi": 97.0,
+    "alasan_kurasi": "Rumah sakit swasta tipe A terlengkap Solo Baru dengan helipad & pusat onkologi"
   },
   {
     "id": "poi-osm-051",
@@ -1135,7 +1285,10 @@
       "amenity": "hospital"
     },
     "in1km": false,
-    "minDistanceMeters": 7582.5
+    "minDistanceMeters": 7582.5,
+    "unggulan": true,
+    "skor_kurasi": 93.0,
+    "alasan_kurasi": "Rumah sakit swasta terpercaya puluhan tahun di koridor Solo Baru"
   },
   {
     "id": "poi-osm-052",
@@ -1158,7 +1311,10 @@
       "leisure": "water_park"
     },
     "in1km": false,
-    "minDistanceMeters": 7077.1
+    "minDistanceMeters": 7077.1,
+    "unggulan": true,
+    "skor_kurasi": 94.0,
+    "alasan_kurasi": "Taman rekreasi air tematik pewayangan bertaraf nasional"
   },
   {
     "id": "poi-osm-053",
@@ -1181,7 +1337,10 @@
       "leisure": "nature_reserve"
     },
     "in1km": false,
-    "minDistanceMeters": 3809.9
+    "minDistanceMeters": 3809.9,
+    "unggulan": false,
+    "skor_kurasi": 70.0,
+    "alasan_kurasi": "Destinasi wisata alam sekunder perbatasan timur Sukoharjo (~4.2 km)"
   },
   {
     "id": "poi-osm-054",
@@ -1203,7 +1362,10 @@
       "highway": "bus_stop"
     },
     "in1km": false,
-    "minDistanceMeters": 7952.1
+    "minDistanceMeters": 7952.1,
+    "unggulan": true,
+    "skor_kurasi": 88.0,
+    "alasan_kurasi": "Halte transit bus raya modern ber-AC koridor Solo Baru"
   },
   {
     "id": "poi-osm-055",
@@ -1225,7 +1387,10 @@
       "amenity": "bank"
     },
     "in1km": false,
-    "minDistanceMeters": 7804.7
+    "minDistanceMeters": 7804.7,
+    "unggulan": true,
+    "skor_kurasi": 95.0,
+    "alasan_kurasi": "Kantor cabang utama Bank BCA dengan layanan Prioritas/Solitaire"
   },
   {
     "id": "poi-osm-056",
@@ -1248,7 +1413,10 @@
       "cuisine": "duck;indonesian"
     },
     "in1km": false,
-    "minDistanceMeters": 7615.3
+    "minDistanceMeters": 7615.3,
+    "unggulan": true,
+    "skor_kurasi": 95.0,
+    "alasan_kurasi": "Pelopor bebek goreng legendaris ikon kuliner nasional asal Sukoharjo"
   },
   {
     "id": "poi-osm-057",
@@ -1271,7 +1439,10 @@
       "cuisine": "noodle"
     },
     "in1km": false,
-    "minDistanceMeters": 7765.5
+    "minDistanceMeters": 7765.5,
+    "unggulan": true,
+    "skor_kurasi": 87.0,
+    "alasan_kurasi": "Restoran kuliner kekinian viral di sentra komersial Solo Baru"
   },
   {
     "id": "poi-osm-058",
@@ -1293,7 +1464,10 @@
       "amenity": "college"
     },
     "in1km": false,
-    "minDistanceMeters": 7641.4
+    "minDistanceMeters": 7641.4,
+    "unggulan": true,
+    "skor_kurasi": 88.0,
+    "alasan_kurasi": "Lembaga pendidikan Islam modern terpadu rujukan regional"
   },
   {
     "id": "poi-osm-059",
@@ -1315,7 +1489,10 @@
       "amenity": "university"
     },
     "in1km": false,
-    "minDistanceMeters": 14525.5
+    "minDistanceMeters": 14525.5,
+    "unggulan": true,
+    "skor_kurasi": 96.0,
+    "alasan_kurasi": "Universitas swasta terkemuka Solo Raya akreditasi Unggul"
   },
   {
     "id": "poi-osm-060",
@@ -1337,7 +1514,10 @@
       "amenity": "university"
     },
     "in1km": false,
-    "minDistanceMeters": 12550.6
+    "minDistanceMeters": 12550.6,
+    "unggulan": true,
+    "skor_kurasi": 98.0,
+    "alasan_kurasi": "Universitas negeri PTN-BH terkemuka bertaraf internasional"
   },
   {
     "id": "poi-osm-061",
@@ -1359,7 +1539,10 @@
       "railway": "station"
     },
     "in1km": false,
-    "minDistanceMeters": 12640.5
+    "minDistanceMeters": 12640.5,
+    "unggulan": true,
+    "skor_kurasi": 99.0,
+    "alasan_kurasi": "Hub stasiun utama KA eksekutif antarkota & KRL Commuter Line Solo-Yogya"
   },
   {
     "id": "poi-osm-062",
@@ -1381,7 +1564,10 @@
       "aeroway": "aerodrome"
     },
     "in1km": false,
-    "minDistanceMeters": 19385.8
+    "minDistanceMeters": 19385.8,
+    "unggulan": true,
+    "skor_kurasi": 99.0,
+    "alasan_kurasi": "Bandara penerbangan udara domestik dan internasional"
   },
   {
     "id": "poi-osm-063",
@@ -1404,7 +1590,10 @@
       "emergency": "yes"
     },
     "in1km": false,
-    "minDistanceMeters": 12634.2
+    "minDistanceMeters": 12634.2,
+    "unggulan": true,
+    "skor_kurasi": 98.0,
+    "alasan_kurasi": "Rumah sakit umum daerah rujukan provinsi Jawa Tengah"
   },
   {
     "id": "poi-osm-064",
@@ -1426,7 +1615,10 @@
       "shop": "convenience"
     },
     "in1km": false,
-    "minDistanceMeters": 6025.8
+    "minDistanceMeters": 6025.8,
+    "unggulan": false,
+    "skor_kurasi": 50.0,
+    "alasan_kurasi": "Fasilitas sekunder"
   },
   {
     "id": "poi-osm-065",
@@ -1448,7 +1640,10 @@
       "amenity": "clinic"
     },
     "in1km": false,
-    "minDistanceMeters": 7081.2
+    "minDistanceMeters": 7081.2,
+    "unggulan": false,
+    "skor_kurasi": 50.0,
+    "alasan_kurasi": "Fasilitas sekunder"
   },
   {
     "id": "poi-osm-066",
@@ -1470,7 +1665,10 @@
       "amenity": "post_office"
     },
     "in1km": false,
-    "minDistanceMeters": 7567.1
+    "minDistanceMeters": 7567.1,
+    "unggulan": false,
+    "skor_kurasi": 50.0,
+    "alasan_kurasi": "Fasilitas sekunder"
   },
   {
     "id": "poi-osm-067",
@@ -1492,7 +1690,10 @@
       "amenity": "atm"
     },
     "in1km": false,
-    "minDistanceMeters": 7703.1
+    "minDistanceMeters": 7703.1,
+    "unggulan": false,
+    "skor_kurasi": 50.0,
+    "alasan_kurasi": "Fasilitas sekunder"
   },
   {
     "id": "poi-osm-068",
@@ -1515,6 +1716,9 @@
       "historic": "manor"
     },
     "in1km": false,
-    "minDistanceMeters": 6846.9
+    "minDistanceMeters": 6846.9,
+    "unggulan": false,
+    "skor_kurasi": 50.0,
+    "alasan_kurasi": "Fasilitas sekunder"
   }
 ]

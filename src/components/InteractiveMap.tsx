@@ -10,6 +10,7 @@ import {
   Trees,
   Utensils,
   Church,
+  X,
 } from 'lucide-react';
 import osmPoisData from '../data/osm_poi.json';
 
@@ -42,6 +43,9 @@ export interface POI {
   strategicTier?: string;
   in1km?: boolean;
   osmTags?: Record<string, string>;
+  unggulan?: boolean;
+  skor_kurasi?: number;
+  alasan_kurasi?: string;
 }
 
 export interface ClusterData {
@@ -77,6 +81,9 @@ export const POIS: POI[] = (osmPoisData as any[]).map((p) => ({
   strategicTier: p.strategicTier,
   osmTags: p.osmTags,
   in1km: p.in1km,
+  unggulan: p.unggulan ?? true,
+  skor_kurasi: p.skor_kurasi,
+  alasan_kurasi: p.alasan_kurasi,
 }));
 
 export const CLUSTERS: ClusterData[] = [
@@ -233,38 +240,6 @@ function buildClusterMarkerHtml(cluster: ClusterData, isActive: boolean): string
   `;
 }
 
-function buildPoiPopupHtml(poi: POI): string {
-  const svgInner = getPoiSvgPath(poi.category);
-  const strategicBadge = poi.strategicType
-    ? `<span style="font-size:9.5px;font-family:monospace;font-weight:700;padding:2px 6px;border-radius:999px;background:#1c1917;color:#facc15;margin-left:4px;">★ ${poi.strategicType.replace(/_/g, ' ')}</span>`
-    : '';
-  return `
-    <div style="width:260px;max-width:76vw;padding:12px 14px;font-family:'Plus Jakarta Sans',sans-serif;color:#1c1917;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-        <div style="width:28px;height:28px;border-radius:6px;background:#b45309;color:#ffffff;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgInner}</svg>
-        </div>
-        <div style="min-width:0;">
-          <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
-            <span style="font-size:10px;font-family:monospace;font-weight:700;text-transform:uppercase;color:#b45309;letter-spacing:0.04em;">${poi.category}</span>
-            ${strategicBadge}
-          </div>
-          <div style="font-size:13px;font-weight:800;line-height:1.25;color:#1c1917;">${poi.name}</div>
-        </div>
-      </div>
-      <div style="font-size:11px;font-weight:700;color:#1c1917;background:#f5f2eb;border:1px solid #e2dbce;border-radius:4px;padding:4px 8px;margin-bottom:8px;font-family:monospace;">
-        Jarak: ${poi.approxDistance}
-      </div>
-      <p style="font-size:12px;line-height:1.45;color:#57534e;margin:0 0 8px 0;">
-        ${poi.whyInteresting}
-      </p>
-      <div style="font-size:11.5px;line-height:1.4;color:#3f6212;font-weight:600;border-top:1px solid #e2dbce;padding-top:7px;">
-        ${poi.buyerHighlight}
-      </div>
-    </div>
-  `;
-}
-
 export const InteractiveMap: React.FC = () => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -325,10 +300,25 @@ export const InteractiveMap: React.FC = () => {
     poiLayerRef.current = L.layerGroup().addTo(map);
     mapInstanceRef.current = map;
 
+    map.on('click', () => {
+      setActivePoi(null);
+    });
+
     return () => {
       map.remove();
       mapInstanceRef.current = null;
     };
+  }, []);
+
+  // Handle Esc key to close detail card
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setActivePoi(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // Render Cluster Markers
@@ -375,8 +365,15 @@ export const InteractiveMap: React.FC = () => {
       const poiIcon = L.divIcon({
         className: 'custom-poi-icon-pin',
         html: `
-          <div style="opacity:${opacity};width:30px;height:30px;border-radius:6px;background:${bg};color:#ffffff;border:2px solid #ffffff;box-shadow:0 2px 6px rgba(28,25,23,0.28);display:flex;align-items:center;justify-content:center;cursor:pointer;">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgInner}</svg>
+          <div style="position:relative;display:flex;align-items:center;justify-content:center;transition:transform 0.2s ease;${
+            isSelected ? 'transform:scale(1.25);z-index:900;' : ''
+          }">
+            ${isSelected ? '<span style="position:absolute;inset:-4px;border-radius:10px;border:2px solid #b45309;animation:ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;opacity:0.75;"></span>' : ''}
+            <div style="opacity:${opacity};width:30px;height:30px;border-radius:6px;background:${bg};color:#ffffff;border:${
+              isSelected ? '2.5px solid #facc15' : '2px solid #ffffff'
+            };box-shadow:${isSelected ? '0 0 0 2px #b45309, 0 4px 10px rgba(0,0,0,0.35)' : '0 2px 6px rgba(28,25,23,0.28)'};display:flex;align-items:center;justify-content:center;cursor:pointer;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgInner}</svg>
+            </div>
           </div>
         `,
         iconSize: [30, 30],
@@ -388,23 +385,20 @@ export const InteractiveMap: React.FC = () => {
         zIndexOffset: isSelected ? 850 : 300,
       }).addTo(layer);
 
-      marker.bindPopup(buildPoiPopupHtml(p), {
-        maxWidth: 270,
-        autoPan: true,
-        autoPanPadding: [24, 24],
-        offset: [0, -10],
+      // Single-line tooltip on hover only, NO Leaflet Popup
+      marker.bindTooltip(p.name, {
+        direction: 'top',
+        offset: [0, -18],
+        className: 'custom-poi-tooltip',
       });
 
-      marker.on('click', () => {
+      marker.on('click', (e) => {
+        L.DomEvent.stopPropagation(e);
         setActivePoi(p);
       });
 
       poiMarkersRef.current[p.name] = marker;
     });
-
-    if (activePoi && poiMarkersRef.current[activePoi.name]) {
-      poiMarkersRef.current[activePoi.name].openPopup();
-    }
   }, [poisWithRadius, activePoi]);
 
   // Render Radius Circle
@@ -435,7 +429,7 @@ export const InteractiveMap: React.FC = () => {
   }, [originPoint, selectedRadius, activePoi]);
 
   return (
-    <div className="rounded-2xl border border-warmborder bg-surface shadow-sm overflow-hidden">
+    <div className="relative isolate overflow-hidden rounded-2xl border border-warmborder bg-surface shadow-sm">
       <div className="p-4 sm:p-6 border-b border-warmborder bg-sandstone/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <span className="text-xs font-mono font-bold uppercase tracking-wider text-terracotta">
@@ -451,7 +445,51 @@ export const InteractiveMap: React.FC = () => {
           </span>
         </div>
       </div>
-      <div ref={mapContainerRef} className="w-full h-[450px]" />
+      <div className="relative">
+        <div ref={mapContainerRef} className="w-full h-[450px]" />
+
+        {/* Floating Detail Card (Single explanation at bottom-right, no leaflet popups) */}
+        {activePoi && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 w-[calc(100%-1.5rem)] sm:w-[320px] z-[800] rounded-xl bg-white border-2 border-espresso p-4 shadow-xl animate-in fade-in"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-mono font-bold uppercase text-terracotta">
+                    {activePoi.category}
+                  </span>
+                  {activePoi.strategicType && (
+                    <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded-full bg-espresso text-amber-300">
+                      ★ {activePoi.strategicType.replace(/_/g, ' ')}
+                    </span>
+                  )}
+                </div>
+                <h4 className="text-sm font-extrabold text-espresso leading-snug mt-1">
+                  {activePoi.name}
+                </h4>
+                <div className="text-[11px] font-mono font-bold text-olive mt-1">
+                  Jarak: {activePoi.approxDistance}
+                </div>
+              </div>
+              <button
+                onClick={() => setActivePoi(null)}
+                className="size-7 rounded-full bg-sandstone text-espresso hover:bg-warmborder grid place-items-center cursor-pointer shrink-0"
+                aria-label="Tutup detail (Esc)"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <p className="text-xs text-warmmuted mt-2 leading-relaxed">
+              {activePoi.whyInteresting}
+            </p>
+            <div className="text-xs font-semibold text-olive mt-2 pt-2 border-t border-warmborder">
+              {activePoi.buyerHighlight}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

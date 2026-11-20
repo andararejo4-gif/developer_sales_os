@@ -32,6 +32,7 @@ import {
   LayoutDashboard,
   MapPin,
   Megaphone,
+  Menu,
   MessageSquare,
   Percent,
   PhoneCall,
@@ -44,6 +45,7 @@ import {
   Sparkles,
   TrendingUp,
   Users,
+  X,
 } from 'lucide-react';
 import {
   AD_CAMPAIGNS,
@@ -157,6 +159,17 @@ export default function App() {
 
   // Common UI states
   const [toast, setToast] = useState<string | null>(null);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isMobileDrawerOpen) {
+        setIsMobileDrawerOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileDrawerOpen]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
@@ -268,33 +281,330 @@ export default function App() {
     return <PublicHomepageV3 onEnterDashboard={handleEnterDashboard} />;
   }
 
+  const renderSidebarNav = (onItemClick?: () => void) => {
+    const handleItemClick = (action?: () => void) => {
+      if (action) action();
+      if (onItemClick) onItemClick();
+    };
+
+    return (
+      <nav className="space-y-1">
+        <a
+          href="#dashboard-main"
+          onClick={() => handleItemClick()}
+          className="flex items-center gap-3 h-10 px-3.5 rounded-xl bg-amber-50 text-terracotta text-xs font-bold"
+        >
+          <LayoutDashboard className="size-4 shrink-0" />
+          <span>Dashboard {role}</span>
+        </a>
+
+        {role === 'SE' && (
+          <>
+            <a
+              href="#scorecard-bulanan"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <Award className="size-4 shrink-0" />
+              <span>Scorecard Bulanan</span>
+            </a>
+            <a
+              href="#laporan-harian"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <FileCheck className="size-4 shrink-0" />
+              <span>Laporan Harian (13 Item)</span>
+            </a>
+          </>
+        )}
+
+        {role === 'SM' && (
+          <>
+            <a
+              href="#master-unit"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <Home className="size-4 shrink-0" />
+              <span>30 Unit The Park</span>
+            </a>
+            <a
+              href="#tim-se"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <Users className="size-4 shrink-0" />
+              <span>Pantau Kinerja 3 SE</span>
+            </a>
+          </>
+        )}
+
+        {role === 'DIREKSI' && (
+          <>
+            <a
+              href="#portofolio-proyek"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <Building2 className="size-4 shrink-0" />
+              <span>Portofolio Proyek</span>
+            </a>
+            <a
+              href="#eskalasi-persetujuan"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <ShieldAlert className="size-4 shrink-0" />
+              <span>Eskalasi Diskon &amp; Refund</span>
+            </a>
+          </>
+        )}
+
+        {role === 'TL' && (
+          <>
+            <a
+              href="#live-sla"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <Clock className="size-4 shrink-0" />
+              <span>Radar SLA ≤5 Menit</span>
+            </a>
+            <a
+              href="#aturan-72jam"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <RefreshCw className="size-4 shrink-0" />
+              <span>Aturan Pool 72 Jam</span>
+            </a>
+          </>
+        )}
+
+        {role === 'ADMIN' && (
+          <>
+            <a
+              href="#booking-pipeline"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <CheckCircle2 className="size-4 shrink-0" />
+              <span>Verifikasi Booking H+1</span>
+            </a>
+            <a
+              href="#dokumen-kpr"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <FileText className="size-4 shrink-0" />
+              <span>Checklist KPR &amp; Multi-Bank</span>
+            </a>
+          </>
+        )}
+
+        {role === 'IT' && (
+          <>
+            <a
+              href="#db-schema"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <Database className="size-4 shrink-0" />
+              <span>Migrasi Schema devos</span>
+            </a>
+            <a
+              href="#audit-log"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <ShieldCheck className="size-4 shrink-0" />
+              <span>Audit Trail Log 100%</span>
+            </a>
+          </>
+        )}
+
+        {role === 'DIGITAL_MARKETING' && (
+          <>
+            <a
+              href="#ad-campaigns"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <Megaphone className="size-4 shrink-0" />
+              <span>Kampanye &amp; CPL Iklan</span>
+            </a>
+            <a
+              href="#se-feedback"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <MessageSquare className="size-4 shrink-0" />
+              <span>Umpan Balik Kualitas Lead</span>
+            </a>
+            <a
+              href="#ai-ad-optimizer"
+              onClick={() => handleItemClick()}
+              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            >
+              <Sparkles className="size-4 shrink-0" />
+              <span>AI Ad Optimizer (§S18)</span>
+            </a>
+          </>
+        )}
+
+        {/* Project Workflow & Market Intelligence (Fase 1, 1A, 2) */}
+        <div className="pt-4 mt-3 border-t border-warmborder">
+          <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-warmmuted mb-1.5">
+            Pemasaran Proyek
+          </p>
+
+          <button
+            onClick={() => handleItemClick(() => setShowJalurProyekModal(true))}
+            className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+          >
+            <Layers className="size-4 text-terracotta shrink-0" />
+            <span>Jalur Proyek (8 Tahap)</span>
+          </button>
+
+          <button
+            onClick={() => handleItemClick(() => setShowMarketResearchModal(true))}
+            className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+          >
+            <Compass className="size-4 text-terracotta shrink-0" />
+            <span>Riset Pasar (Radius 25km)</span>
+          </button>
+
+          <button
+            onClick={() => handleItemClick(() => setShowSalesTargetModal(true))}
+            className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+          >
+            <TrendingUp className="size-4 text-terracotta shrink-0" />
+            <span>Target Penjualan 100%</span>
+          </button>
+
+          <button
+            onClick={() => handleItemClick(() => setShowContentCalendarModal(true))}
+            className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+          >
+            <Calendar className="size-4 text-terracotta shrink-0" />
+            <span>Kalender Konten (30 Hari)</span>
+          </button>
+
+          <button
+            onClick={() => handleItemClick(() => setShowPlaybookModal(true))}
+            className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+          >
+            <BookOpen className="size-4 text-terracotta shrink-0" />
+            <span>Playbook Sales (SE/TL/SM)</span>
+          </button>
+
+          <button
+            onClick={() => handleItemClick(() => setShowDailyRouteModal(true))}
+            className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+          >
+            <MapPin className="size-4 text-terracotta shrink-0" />
+            <span>Rute Harian Kanvasing</span>
+          </button>
+
+          <button
+            onClick={() =>
+              handleItemClick(() => {
+                setFieldOpsTab('absen');
+                setShowFieldOpsModal(true);
+              })
+            }
+            className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+          >
+            <PhoneCall className="size-4 text-olive shrink-0" />
+            <span>Absen, GPS, Call &amp; AI Guide</span>
+          </button>
+
+          <button
+            onClick={() => handleItemClick(() => setShowWebsiteModal(true))}
+            className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+          >
+            <Globe className="size-4 text-terracotta shrink-0" />
+            <span>Website Landing Page</span>
+          </button>
+
+          <button
+            onClick={() => handleItemClick(() => setShowCrmModal(true))}
+            className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+          >
+            <Users className="size-4 text-terracotta shrink-0" />
+            <span>CRM &amp; Pipeline (7 Stage)</span>
+          </button>
+
+          <button
+            onClick={() => handleItemClick(() => setShowCommissionModal(true))}
+            className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+          >
+            <Percent className="size-4 text-olive shrink-0" />
+            <span>Aturan Komisi Penjualan</span>
+          </button>
+
+          <button
+            onClick={() => handleItemClick(() => setShowKbModal(true))}
+            className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+          >
+            <Database className="size-4 text-olive shrink-0" />
+            <span>Knowledge Base Produk</span>
+          </button>
+
+          <button
+            onClick={() => handleItemClick(() => setShowLoveLetterModal(true))}
+            className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+          >
+            <HeartHandshake className="size-4 text-terracotta shrink-0" />
+            <span>Surat Cinta 99 Keunggulan</span>
+          </button>
+
+          {(role === 'IT' || role === 'DIREKSI') && (
+            <button
+              onClick={() => handleItemClick(() => setShowSuperadminModal(true))}
+              className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+            >
+              <ShieldCheck className="size-4 text-amber-600 shrink-0" />
+              <span>Panel Superadmin Multi-Tenant</span>
+            </button>
+          )}
+        </div>
+      </nav>
+    );
+  };
+
   return (
-    <div className="min-h-screen md:flex bg-sandstone text-espresso font-sans antialiased">
-      {/* Sidebar Desktop */}
-      <aside className="hidden md:flex md:w-64 md:shrink-0 md:flex-col md:sticky md:top-0 md:h-screen bg-white border-r border-warmborder px-5 py-6 justify-between z-30">
-        <div>
+    <div className="min-h-screen md:h-[100dvh] md:overflow-hidden md:flex bg-sandstone text-espresso font-sans antialiased min-h-0">
+      {/* Sidebar Desktop (Fixed 100dvh, Top/Bottom pinned, Nav scrollable) */}
+      <aside
+        aria-label="Sidebar Navigasi Dasbor"
+        className="hidden md:flex md:w-64 md:shrink-0 md:flex-col h-[100dvh] bg-white border-r border-warmborder z-30 min-h-0"
+      >
+        {/* Top Fixed Section */}
+        <div className="shrink-0 px-5 pt-5 pb-3 border-b border-warmborder/60 min-h-0">
           {/* Back to Public Homepage */}
           <button
             onClick={() => setViewMode('homepage')}
-            className="w-full mb-4 py-2 px-3 rounded-xl bg-sandstone hover:bg-warmborder text-[11px] font-bold text-espresso flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-warmborder"
+            className="w-full mb-3 py-1.5 px-3 rounded-xl bg-sandstone hover:bg-warmborder text-[11px] font-bold text-espresso flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-warmborder"
           >
             <span>&larr; Beranda Publik</span>
           </button>
 
           {/* Logo & OS Header */}
-          <div className="flex items-center gap-3 pb-5 border-b border-warmborder">
-            <div className="size-10 rounded-xl bg-terracotta text-white grid place-items-center font-extrabold text-base shadow-sm">
+          <div className="flex items-center gap-3 pb-3 border-b border-warmborder">
+            <div className="size-9 rounded-xl bg-terracotta text-white grid place-items-center font-extrabold text-sm shadow-sm shrink-0">
               OS
             </div>
-            <div>
-              <p className="font-extrabold text-sm tracking-tight text-espresso">Developer Sales OS</p>
-              <p className="text-[11px] text-warmmuted">PT Andara Rejo Makmur</p>
+            <div className="min-w-0">
+              <p className="font-extrabold text-sm tracking-tight text-espresso truncate">Developer Sales OS</p>
+              <p className="text-[10px] text-warmmuted truncate">PT Andara Rejo Makmur</p>
             </div>
           </div>
 
           {/* Role Switcher */}
-          <div className="mt-5">
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-warmmuted mb-2">
+          <div className="mt-3">
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-warmmuted mb-1.5">
               Pilih Role Dashboard
             </label>
             <div className="grid grid-cols-4 gap-1 p-1 bg-sandstone rounded-xl border border-warmborder text-center">
@@ -305,7 +615,7 @@ export default function App() {
                     setRole(r);
                     setToast(`Beralih ke Dashboard ${r === 'DIGITAL_MARKETING' ? 'Digital Marketing' : r}`);
                   }}
-                  className={`py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                  className={`py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
                     role === r
                       ? 'bg-espresso text-white shadow-sm'
                       : 'text-warmmuted hover:text-espresso hover:bg-white/60'
@@ -321,9 +631,9 @@ export default function App() {
           {role === 'SE' && (
             <button
               onClick={() => setToast('Form Lead Baru dibuka')}
-              className="mt-4 w-full h-11 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center justify-center gap-2 hover:bg-espresso/90 cursor-pointer shadow-sm"
+              className="mt-3 w-full h-9 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center justify-center gap-2 hover:bg-espresso/90 cursor-pointer shadow-sm"
             >
-              <Plus className="size-4 text-amber-400" />
+              <Plus className="size-3.5 text-amber-400" />
               <span>Input Lead Baru (SOP ≤5m)</span>
             </button>
           )}
@@ -331,9 +641,9 @@ export default function App() {
           {role === 'DIGITAL_MARKETING' && (
             <button
               onClick={() => setToast('Form Input Biaya Iklan Harian dibuka')}
-              className="mt-4 w-full h-11 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center justify-center gap-2 hover:bg-espresso/90 cursor-pointer shadow-sm"
+              className="mt-3 w-full h-9 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center justify-center gap-2 hover:bg-espresso/90 cursor-pointer shadow-sm"
             >
-              <Plus className="size-4 text-amber-400" />
+              <Plus className="size-3.5 text-amber-400" />
               <span>Input Biaya Iklan (CPL)</span>
             </button>
           )}
@@ -344,9 +654,9 @@ export default function App() {
                 setEditingUnit(null);
                 setShowUnitModal(true);
               }}
-              className="mt-4 w-full h-11 rounded-xl bg-terracotta text-white text-xs font-semibold flex items-center justify-center gap-2 hover:bg-terracotta/90 cursor-pointer shadow-sm"
+              className="mt-3 w-full h-9 rounded-xl bg-terracotta text-white text-xs font-semibold flex items-center justify-center gap-2 hover:bg-terracotta/90 cursor-pointer shadow-sm"
             >
-              <Plus className="size-4 text-white" />
+              <Plus className="size-3.5 text-white" />
               <span>Tambah Unit Proyek</span>
             </button>
           )}
@@ -354,301 +664,114 @@ export default function App() {
           {role === 'DIREKSI' && (
             <button
               onClick={() => setToast('Laporan Konsolidasi Portofolio di-refresh')}
-              className="mt-4 w-full h-11 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center justify-center gap-2 hover:bg-espresso/90 cursor-pointer"
+              className="mt-3 w-full h-9 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center justify-center gap-2 hover:bg-espresso/90 cursor-pointer"
             >
-              <TrendingUp className="size-4 text-amber-400" />
+              <TrendingUp className="size-3.5 text-amber-400" />
               <span>Proyeksi Akhir Bulan</span>
             </button>
           )}
-
-          {/* Navigation Links */}
-          <nav className="mt-5 space-y-1">
-            <a
-              href="#dashboard-main"
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl bg-amber-50 text-terracotta text-xs font-bold"
-            >
-              <LayoutDashboard className="size-4" />
-              <span>Dashboard {role}</span>
-            </a>
-
-            {role === 'SE' && (
-              <>
-                <a
-                  href="#scorecard-bulanan"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <Award className="size-4" />
-                  <span>Scorecard Bulanan</span>
-                </a>
-                <a
-                  href="#laporan-harian"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <FileCheck className="size-4" />
-                  <span>Laporan Harian (13 Item)</span>
-                </a>
-              </>
-            )}
-
-            {role === 'SM' && (
-              <>
-                <a
-                  href="#master-unit"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <Home className="size-4" />
-                  <span>30 Unit The Park</span>
-                </a>
-                <a
-                  href="#tim-se"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <Users className="size-4" />
-                  <span>Pantau Kinerja 3 SE</span>
-                </a>
-              </>
-            )}
-
-            {role === 'DIREKSI' && (
-              <>
-                <a
-                  href="#portofolio-proyek"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <Building2 className="size-4" />
-                  <span>Portofolio Proyek</span>
-                </a>
-                <a
-                  href="#eskalasi-persetujuan"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <ShieldAlert className="size-4" />
-                  <span>Eskalasi Diskon & Refund</span>
-                </a>
-              </>
-            )}
-
-            {role === 'TL' && (
-              <>
-                <a
-                  href="#live-sla"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <Clock className="size-4" />
-                  <span>Radar SLA ≤5 Menit</span>
-                </a>
-                <a
-                  href="#aturan-72jam"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <RefreshCw className="size-4" />
-                  <span>Aturan Pool 72 Jam</span>
-                </a>
-              </>
-            )}
-
-            {role === 'ADMIN' && (
-              <>
-                <a
-                  href="#booking-pipeline"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <CheckCircle2 className="size-4" />
-                  <span>Verifikasi Booking H+1</span>
-                </a>
-                <a
-                  href="#dokumen-kpr"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <FileText className="size-4" />
-                  <span>Checklist KPR & Multi-Bank</span>
-                </a>
-              </>
-            )}
-
-            {role === 'IT' && (
-              <>
-                <a
-                  href="#db-schema"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <Database className="size-4" />
-                  <span>Migrasi Schema devos</span>
-                </a>
-                <a
-                  href="#audit-log"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <ShieldCheck className="size-4" />
-                  <span>Audit Trail Log 100%</span>
-                </a>
-              </>
-            )}
-
-            {role === 'DIGITAL_MARKETING' && (
-              <>
-                <a
-                  href="#ad-campaigns"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <Megaphone className="size-4" />
-                  <span>Kampanye &amp; CPL Iklan</span>
-                </a>
-                <a
-                  href="#se-feedback"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <MessageSquare className="size-4" />
-                  <span>Umpan Balik Kualitas Lead</span>
-                </a>
-                <a
-                  href="#ai-ad-optimizer"
-                  className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
-                >
-                  <Sparkles className="size-4" />
-                  <span>AI Ad Optimizer (§S18)</span>
-                </a>
-              </>
-            )}
-
-            {/* Project Workflow & Market Intelligence (Fase 1, 1A, 2) */}
-            <div className="pt-4 mt-3 border-t border-warmborder">
-              <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-warmmuted mb-1.5">
-                Pemasaran Proyek
-              </p>
-
-              <button
-                onClick={() => setShowJalurProyekModal(true)}
-                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
-              >
-                <Layers className="size-4 text-terracotta" />
-                <span>Jalur Proyek (8 Tahap)</span>
-              </button>
-
-              <button
-                onClick={() => setShowMarketResearchModal(true)}
-                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
-              >
-                <Compass className="size-4 text-terracotta" />
-                <span>Riset Pasar (Radius 25km)</span>
-              </button>
-
-              <button
-                onClick={() => setShowSalesTargetModal(true)}
-                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
-              >
-                <TrendingUp className="size-4 text-terracotta" />
-                <span>Target Penjualan 100%</span>
-              </button>
-
-              <button
-                onClick={() => setShowContentCalendarModal(true)}
-                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
-              >
-                <Calendar className="size-4 text-terracotta" />
-                <span>Kalender Konten (30 Hari)</span>
-              </button>
-
-              <button
-                onClick={() => setShowPlaybookModal(true)}
-                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
-              >
-                <BookOpen className="size-4 text-terracotta" />
-                <span>Playbook Sales (SE/TL/SM)</span>
-              </button>
-
-              <button
-                onClick={() => setShowDailyRouteModal(true)}
-                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
-              >
-                <MapPin className="size-4 text-terracotta" />
-                <span>Rute Harian Kanvasing</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setFieldOpsTab('absen');
-                  setShowFieldOpsModal(true);
-                }}
-                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
-              >
-                <PhoneCall className="size-4 text-olive" />
-                <span>Absen, GPS, Call &amp; AI Guide</span>
-              </button>
-
-              <button
-                onClick={() => setShowWebsiteModal(true)}
-                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
-              >
-                <Globe className="size-4 text-terracotta" />
-                <span>Website Landing Page</span>
-              </button>
-
-              <button
-                onClick={() => setShowCrmModal(true)}
-                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
-              >
-                <Users className="size-4 text-terracotta" />
-                <span>CRM &amp; Pipeline (7 Stage)</span>
-              </button>
-
-              <button
-                onClick={() => setShowCommissionModal(true)}
-                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
-              >
-                <Percent className="size-4 text-olive" />
-                <span>Aturan Komisi Penjualan</span>
-              </button>
-
-              <button
-                onClick={() => setShowKbModal(true)}
-                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
-              >
-                <Database className="size-4 text-olive" />
-                <span>Knowledge Base Produk</span>
-              </button>
-
-              <button
-                onClick={() => setShowLoveLetterModal(true)}
-                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
-              >
-                <HeartHandshake className="size-4 text-terracotta" />
-                <span>Surat Cinta 99 Keunggulan</span>
-              </button>
-
-              {(role === 'IT' || role === 'DIREKSI') && (
-                <button
-                  onClick={() => setShowSuperadminModal(true)}
-                  className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
-                >
-                  <ShieldCheck className="size-4 text-amber-600" />
-                  <span>Panel Superadmin Multi-Tenant</span>
-                </button>
-              )}
-            </div>
-          </nav>
         </div>
 
-        {/* User Badge Footer */}
-        <div className="rounded-2xl bg-sandstone p-3.5 border border-warmborder">
-          <div className="flex items-center gap-2.5">
-            <div className="size-8 rounded-lg bg-espresso text-white grid place-items-center text-xs font-bold">
-              {user.avatarText}
+        {/* Scrollable Navigation List (flex: 1, min-height: 0, overflow-y: auto) */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-1 focus:outline-none overscroll-contain">
+          {renderSidebarNav()}
+        </div>
+
+        {/* User Badge Footer (Fixed shrink-0) */}
+        <div className="shrink-0 p-4 border-t border-warmborder bg-white min-h-0">
+          <div className="rounded-2xl bg-sandstone p-3 border border-warmborder">
+            <div className="flex items-center gap-2.5">
+              <div className="size-8 rounded-lg bg-espresso text-white grid place-items-center text-xs font-bold shrink-0">
+                {user.avatarText}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-espresso truncate">{user.name}</p>
+                <p className="text-[10px] text-warmmuted truncate">{user.roleLabel}</p>
+              </div>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-espresso truncate">{user.name}</p>
-              <p className="text-[10px] text-warmmuted truncate">{user.roleLabel}</p>
+            <div className="mt-2 pt-2 border-t border-warmborder flex items-center justify-between text-[10px] text-warmmuted">
+              <span className="font-semibold text-terracotta">{user.role}</span>
+              <span className="truncate max-w-[120px]">{user.proyek || 'Andara Rejo Makmur'}</span>
             </div>
-          </div>
-          <div className="mt-2 pt-2 border-t border-warmborder flex items-center justify-between text-[10px] text-warmmuted">
-            <span className="font-semibold text-terracotta">{user.role}</span>
-            <span className="truncate max-w-[120px]">{user.proyek || 'Andara Rejo Makmur'}</span>
           </div>
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <main className="flex-1 min-w-0 pb-28 md:pb-12">
+      {/* Mobile Drawer (Laci Navigasi Layar Kecil) */}
+      {isMobileDrawerOpen && (
+        <div
+          className="fixed inset-0 z-50 md:hidden flex"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menu Navigasi Dasbor"
+        >
+          {/* Backdrop */}
+          <div
+            onClick={() => setIsMobileDrawerOpen(false)}
+            className="fixed inset-0 bg-espresso/60 backdrop-blur-xs transition-opacity"
+            aria-hidden="true"
+          />
+
+          {/* Drawer Sheet */}
+          <div className="relative z-10 w-72 max-w-[85vw] h-[100dvh] bg-white shadow-2xl flex flex-col min-h-0 animate-in slide-in-from-left duration-200">
+            {/* Drawer Top Header */}
+            <div className="shrink-0 px-4 pt-4 pb-3 border-b border-warmborder flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="size-8 rounded-xl bg-terracotta text-white grid place-items-center font-extrabold text-xs shadow-sm shrink-0">
+                  OS
+                </div>
+                <div>
+                  <p className="font-extrabold text-xs text-espresso">Developer Sales OS</p>
+                  <p className="text-[10px] text-warmmuted">PT Andara Rejo Makmur</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsMobileDrawerOpen(false)}
+                className="p-1.5 rounded-lg text-warmmuted hover:text-espresso hover:bg-sandstone cursor-pointer"
+                aria-label="Tutup menu navigasi"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            {/* Back to Homepage Button in Drawer */}
+            <div className="shrink-0 px-4 pt-3 pb-2 border-b border-warmborder/60">
+              <button
+                onClick={() => {
+                  setIsMobileDrawerOpen(false);
+                  setViewMode('homepage');
+                }}
+                className="w-full py-1.5 px-3 rounded-xl bg-sandstone hover:bg-warmborder text-[11px] font-bold text-espresso flex items-center justify-center gap-1.5 transition-colors border border-warmborder"
+              >
+                <span>&larr; Beranda Publik</span>
+              </button>
+            </div>
+
+            {/* Scrollable Navigation in Drawer */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-1 overscroll-contain">
+              {renderSidebarNav(() => setIsMobileDrawerOpen(false))}
+            </div>
+
+            {/* User Badge Footer in Drawer */}
+            <div className="shrink-0 p-3.5 border-t border-warmborder bg-white min-h-0">
+              <div className="rounded-xl bg-sandstone p-2.5 border border-warmborder">
+                <div className="flex items-center gap-2">
+                  <div className="size-7 rounded-lg bg-espresso text-white grid place-items-center text-xs font-bold shrink-0">
+                    {user.avatarText}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-espresso truncate">{user.name}</p>
+                    <p className="text-[10px] text-warmmuted truncate">{user.roleLabel}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content Area (Separately scrollable in desktop) */}
+      <main className="flex-1 min-w-0 md:h-[100dvh] md:overflow-y-auto pb-28 md:pb-12 min-h-0 focus:outline-none">
         {/* Header Desktop */}
         <header className="hidden md:flex items-center justify-between px-8 py-5 bg-white border-b border-warmborder sticky top-0 z-20">
           <div>
@@ -680,18 +803,35 @@ export default function App() {
           </div>
         </header>
 
-        {/* Mobile Header */}
-        <div className="md:hidden p-4 bg-white border-b border-warmborder space-y-3">
+        {/* Mobile Header with Drawer Trigger */}
+        <div className="md:hidden p-4 bg-white border-b border-warmborder space-y-3 sticky top-0 z-20">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-wider text-terracotta">
-                Developer Sales OS
-              </p>
-              <h1 className="text-lg font-extrabold text-espresso">Dashboard {role}</h1>
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={() => setIsMobileDrawerOpen(true)}
+                className="p-2 -ml-1 rounded-xl bg-sandstone hover:bg-warmborder text-espresso cursor-pointer border border-warmborder focus:outline-none focus:ring-2 focus:ring-terracotta"
+                aria-label="Buka Menu Navigasi"
+              >
+                <Menu className="size-5 text-espresso" />
+              </button>
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-terracotta leading-none">
+                  Developer Sales OS
+                </p>
+                <h1 className="text-base font-extrabold text-espresso leading-tight">Dashboard {role}</h1>
+              </div>
             </div>
-            <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-sandstone text-espresso border border-warmborder">
-              {user.name.split(' ')[0]}
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setViewMode('homepage')}
+                className="text-xs font-semibold text-terracotta hover:text-espresso"
+              >
+                Beranda
+              </button>
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-sandstone text-espresso border border-warmborder">
+                {user.name.split(' ')[0]}
+              </span>
+            </div>
           </div>
 
           {/* Mobile Role Switcher */}

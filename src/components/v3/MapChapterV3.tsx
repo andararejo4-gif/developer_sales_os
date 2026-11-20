@@ -90,7 +90,7 @@ export const MapChapterV3: React.FC = () => {
   const [currentZoom, setCurrentZoom] = useState<number>(13);
   const [spiderfiedClusterId, setSpiderfiedClusterId] = useState<string | null>(null);
   const [wheelUnlocked, setWheelUnlocked] = useState<boolean>(false);
-  const [showAllBeyond3km, setShowAllBeyond3km] = useState<boolean>(false);
+  const [showOtherFacilities, setShowOtherFacilities] = useState<boolean>(false);
 
   const originPoint = useMemo<[number, number]>(() => {
     if (activeClusterId === 'all') return PROJECT_CENTROID;
@@ -99,9 +99,10 @@ export const MapChapterV3: React.FC = () => {
   }, [activeClusterId]);
 
   // Facilities with dynamic distance calculation, sorted with in-radius first, then ascending distance
-  // Policy: Radius <= 1km shows ALL named facilities (100% no filter); >3km prioritizes landmarks with toggle
+  // Policy B: Homepage default hanya menampilkan fasilitas unggulan (15-25 pin pada 5 km, maks 5 per kategori)
+  // Tombol "Tampilkan fasilitas lainnya" default MATI; bila dinyalakan menampilkan sisanya.
   const poisWithDistance = useMemo(() => {
-    return POIS.map((p) => {
+    const mapped = POIS.map((p) => {
       const meters = haversineMeters(originPoint[0], originPoint[1], p.lat, p.lng);
       const km = parseKm(p.approxDistance);
       return {
@@ -110,23 +111,36 @@ export const MapChapterV3: React.FC = () => {
         km,
         inRadius: meters <= selectedRadius,
       };
-    })
-    .filter((item) => {
-      // Radius <= 1 km: 100% all named facilities included without filter
-      if (item.meters <= 1000 || item.poi.in1km) return true;
-      // 1 km - 3 km: all regional & city facilities included
-      if (item.meters <= 3000) return true;
-      // Above 3 km: landmarks by default, or all if showAllBeyond3km is toggled
-      if (showAllBeyond3km) return true;
-      return item.poi.isStrategic !== false;
-    })
-    .sort((a, b) => {
+    });
+
+    let eligible = mapped;
+    if (!showOtherFacilities) {
+      eligible = mapped.filter((item) => item.poi.unggulan === true);
+    }
+
+    // Maksimal 5 pin per kategori pada radius aktif untuk fasilitas unggulan
+    const categoryCounts: Record<string, number> = {};
+    const sortedByDist = [...eligible].sort((a, b) => a.meters - b.meters);
+    const capped = sortedByDist.filter((item) => {
+      if (showOtherFacilities) return true;
+      const catKey = (item.poi.categoryKey || item.poi.category).toLowerCase();
+      const currentCount = categoryCounts[catKey] || 0;
+      if (item.inRadius && currentCount >= 5) {
+        return false;
+      }
+      if (item.inRadius) {
+        categoryCounts[catKey] = currentCount + 1;
+      }
+      return true;
+    });
+
+    return capped.sort((a, b) => {
       if (a.inRadius !== b.inRadius) {
         return a.inRadius ? -1 : 1;
       }
       return a.meters - b.meters;
     });
-  }, [originPoint, selectedRadius, showAllBeyond3km]);
+  }, [originPoint, selectedRadius, showOtherFacilities]);
 
   // Filtered by active category (9 categories + 'all')
   const filteredPois = useMemo(() => {
@@ -476,8 +490,8 @@ export const MapChapterV3: React.FC = () => {
           }).addTo(layer);
         }
 
-        // Show automatic name pill on zoom >= 15 or when spiderfied
-        const showAutoLabel = currentZoom >= 15 || isSpiderfied || isSelected;
+        // Show automatic name pill on zoom >= 15 or when spiderfied, only for pin unggulan
+        const showAutoLabel = (currentZoom >= 15 || isSpiderfied || isSelected) && (poi.unggulan ?? true);
 
         const poiIcon = L.divIcon({
           className: 'v3-facility-divicon',
@@ -667,33 +681,31 @@ export const MapChapterV3: React.FC = () => {
             })}
           </div>
 
-          {/* Tombol Tampilkan Fasilitas Lainnya untuk radius di atas 3 km */}
-          {selectedRadius >= 3000 && (
-            <div className="mt-2">
-              <button
-                onClick={() => setShowAllBeyond3km((v) => !v)}
-                className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-between ${
-                  showAllBeyond3km
-                    ? 'bg-[#EAF4D3] text-[#0B3D2E] border-[#0B3D2E]'
-                    : 'bg-white text-[#3B5E50] border-[#CFE1D5] hover:text-[#0B3D2E] hover:border-[#2F9E5B]'
+          {/* Tombol Tampilkan Fasilitas Lainnya */}
+          <div className="mt-2">
+            <button
+              onClick={() => setShowOtherFacilities((v) => !v)}
+              className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-between ${
+                showOtherFacilities
+                  ? 'bg-[#EAF4D3] text-[#0B3D2E] border-[#0B3D2E]'
+                  : 'bg-white text-[#3B5E50] border-[#CFE1D5] hover:text-[#0B3D2E] hover:border-[#2F9E5B]'
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <Filter className="size-3.5 text-[#2F9E5B]" />
+                <span>{showOtherFacilities ? 'Fasilitas Lainnya: Tampil' : 'Tampilkan fasilitas lainnya'}</span>
+              </span>
+              <span
+                className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
+                  showOtherFacilities
+                    ? 'bg-[#0B3D2E] text-[#C6F432]'
+                    : 'bg-[#F6FAF7] text-[#3B5E50] border border-[#CFE1D5]'
                 }`}
               >
-                <span className="flex items-center gap-1.5">
-                  <Filter className="size-3.5 text-[#2F9E5B]" />
-                  <span>{showAllBeyond3km ? 'Fasilitas Lainnya: Tampil' : 'Tampilkan fasilitas lainnya'}</span>
-                </span>
-                <span
-                  className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
-                    showAllBeyond3km
-                      ? 'bg-[#0B3D2E] text-[#C6F432]'
-                      : 'bg-[#F6FAF7] text-[#3B5E50] border border-[#CFE1D5]'
-                  }`}
-                >
-                  {showAllBeyond3km ? 'Semua' : 'Landmark'}
-                </span>
-              </button>
-            </div>
-          )}
+                {showOtherFacilities ? 'Semua' : 'Unggulan'}
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* Fokus Klaster */}
@@ -747,10 +759,10 @@ export const MapChapterV3: React.FC = () => {
             <div className="p-3.5 mb-2 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900 text-xs space-y-1">
               <div className="flex items-center gap-1.5 font-bold">
                 <Info className="size-4 text-amber-700 shrink-0" />
-                <span>0 fasilitas {activeCategoryObj.label} dalam {activeRadiusObj.label}</span>
+                <span>Belum ada fasilitas unggulan {activeCategoryObj.label} dalam radius ini</span>
               </div>
               <p className="text-[11px] text-amber-800 leading-snug">
-                Belum ada fasilitas kategori ini di jarak sangat dekat. Coba perbesar radius ke <strong>3 km</strong>, <strong>5 km</strong>, atau <strong>10 km</strong> di atas. Fasilitas di luar radius tetap tercatat di bawah:
+                Fasilitas unggulan kategori ini berada di radius yang lebih luas atau aktifkan &quot;Tampilkan fasilitas lainnya&quot; untuk melihat sarana feeder/pendukung sekitar.
               </p>
             </div>
           )}
@@ -842,35 +854,33 @@ export const MapChapterV3: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-4 sm:mb-6">
           <div className="max-w-2xl">
             <p className="text-xs font-mono uppercase tracking-widest text-[#2F9E5B] font-bold">
-              Bab 04 · Peta Spasial &amp; Fasilitas Lengkap (OpenStreetMap)
+              Bab 04 · Peta Spasial &amp; Fasilitas Unggulan
             </p>
             <h2 className="font-display-v3 text-v3-chapter font-extrabold text-[#0B3D2E] mt-1.5">
-              Peta fasilitas lengkap sekitar hunian.
+              Peta fasilitas unggulan sekitar hunian.
             </h2>
             <p className="text-sm sm:text-base text-[#3B5E50] mt-2 leading-relaxed">
-              Jelajahi 9 kategori fasilitas di sekitar The Park Townhouse Sukoharjo. Radius 1 km menampilkan seluruh fasilitas lingkungan dan kompleks olahraga Gelora Merdeka tanpa filter, terintegrasi dengan landmark regional Solo Baru.
+              Menampilkan fasilitas unggulan di sekitar perumahan; daftar lengkap tersedia di Riset Pasar.
             </p>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap self-start">
             <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white border border-[#CFE1D5] text-xs font-semibold text-[#0B3D2E]">
               <Compass className="size-4 text-[#2F9E5B]" />
-              <span>3 Klaster · {poisWithDistance.length} Fasilitas Terverifikasi</span>
+              <span>3 Klaster · {poisWithDistance.length} Fasilitas {showOtherFacilities ? 'Lengkap' : 'Unggulan'}</span>
             </div>
-            {selectedRadius >= 3000 && (
-              <button
-                onClick={() => setShowAllBeyond3km((v) => !v)}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full border text-xs font-bold transition-all cursor-pointer ${
-                  showAllBeyond3km
-                    ? 'bg-[#0B3D2E] text-[#C6F432] border-[#0B3D2E]'
-                    : 'bg-white text-[#0B3D2E] border-[#CFE1D5] hover:border-[#2F9E5B]'
-                }`}
-                title="Tampilkan fasilitas sekunder di atas 3 km"
-              >
-                <Filter className="size-3.5 text-[#2F9E5B]" />
-                <span>{showAllBeyond3km ? 'Fasilitas Lainnya: Aktif' : 'Tampilkan fasilitas lainnya'}</span>
-              </button>
-            )}
+            <button
+              onClick={() => setShowOtherFacilities((v) => !v)}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full border text-xs font-bold transition-all cursor-pointer ${
+                showOtherFacilities
+                  ? 'bg-[#0B3D2E] text-[#C6F432] border-[#0B3D2E]'
+                  : 'bg-white text-[#0B3D2E] border-[#CFE1D5] hover:border-[#2F9E5B]'
+              }`}
+              title="Tampilkan fasilitas sekunder / lainnya"
+            >
+              <Filter className="size-3.5 text-[#2F9E5B]" />
+              <span>{showOtherFacilities ? 'Fasilitas Lainnya: Aktif' : 'Tampilkan fasilitas lainnya'}</span>
+            </button>
           </div>
         </div>
 
