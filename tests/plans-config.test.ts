@@ -1,17 +1,30 @@
 import { describe, expect, it } from 'bun:test';
 import { PLANS_CONFIG, getPlanDisplayPrice, hasPlanFeature } from '../src/lib/plans/plans-config';
 
-describe('Config-Driven Plans & Feature Flags', () => {
-  it('semua paket harus memiliki harga null dan menampilkan "Hubungi kami"', () => {
-    PLANS_CONFIG.forEach(plan => {
-      expect(plan.price).toBeNull();
-      expect(getPlanDisplayPrice(plan)).toBe('Hubungi kami');
-    });
+describe('Config-Driven Plans & Feature Flags (Blueprint v1.2)', () => {
+  it('semua paket harus memiliki harga usulan 3 bulan kalender yang dapat diubah di database', () => {
+    const gold = PLANS_CONFIG.find(p => p.code === 'gold')!;
+    const plat = PLANS_CONFIG.find(p => p.code === 'platinum')!;
+    const diam = PLANS_CONFIG.find(p => p.code === 'diamond')!;
+
+    expect(gold.price).toBe(4900000);
+    expect(gold.price_status).toBe('usulan');
+    expect(gold.billing_period).toBe('3_bulan_kalender');
+
+    expect(plat.price).toBe(12900000);
+    expect(plat.price_status).toBe('usulan');
+
+    expect(diam.price).toBe(39900000);
+    expect(diam.price_status).toBe('usulan');
+    expect(diam.max_active_projects).toBe(10);
+    expect(diam.max_sales_users).toBe(75);
+
+    expect(getPlanDisplayPrice(gold)).toContain('4.900.000');
   });
 
   it('semua paket (Gold, Platinum, Diamond) harus membuka Surat Cinta 99 Keunggulan gratis', () => {
     ['gold', 'platinum', 'diamond'].forEach(code => {
-      expect(hasPlanFeature(code, 'love_letter_99')).toBe(true);
+      expect(hasPlanFeature(code as any, 'love_letter_99')).toBe(true);
     });
   });
 

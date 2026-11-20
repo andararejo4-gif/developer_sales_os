@@ -1,5 +1,5 @@
 // ============================================================================
-// SALES TARGET TYPES - DEVELOPER SALES OS
+// SALES TARGET TYPES - DEVELOPER SALES OS (Blueprint v1.2 Bab 02 & 05)
 // ============================================================================
 
 export type ScenarioType = 'konservatif' | 'realistis' | 'optimis';
@@ -42,6 +42,45 @@ export interface SeTargetAllocation {
   dailyContactTarget: number;
 }
 
+export interface InventoryConstraint {
+  availableStockUnits: number;
+  monthlyVelocityUnits: number;
+  stockLifespanMonths: number;
+  annualRunRateUnits: number;
+  isAnnualTargetExceedingStock: boolean;
+  stockWarning?: string;
+}
+
+export interface FunnelHypotheses {
+  scenarioA: {
+    source: string;
+    name: string;
+    qualified: number;
+    visits: number;
+    netSales: number;
+    description: string;
+  };
+  scenarioB: {
+    source: string;
+    name: string;
+    leads: number;
+    qualified: number;
+    appointments: number;
+    visits: number;
+    hot: number;
+    bookings: number;
+    netSales: number;
+    description: string;
+  };
+  theoreticalCapacity: {
+    dailyLeadsPerSe: number;
+    headcountSe: number;
+    workingDays: number;
+    calculatedMonthlyCapacity: number;
+    note: string;
+  };
+}
+
 export interface SalesTargetCalculationInput {
   projectId: string;
   projectName: string;
@@ -68,6 +107,8 @@ export interface SalesTargetPlan {
   activeScenario: ScenarioType;
   monthlySchedules: MonthlyScheduleRow[];
   seAllocations: SeTargetAllocation[];
+  inventoryConstraint: InventoryConstraint;
+  funnelHypotheses: FunnelHypotheses;
   generatedAt: string;
-  tokensUsed?: number; // Only for admin/internal tracking, never rendered in client exports
+  tokensUsed?: number;
 }

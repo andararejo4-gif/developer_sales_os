@@ -1,5 +1,7 @@
 // ============================================================================
-// SALES TARGET CALCULATOR - DEVELOPER SALES OS
+// SALES TARGET CALCULATOR - DEVELOPER SALES OS (Blueprint v1.2 Bab 02 & Bab 05)
+// Kendala Stok: Umur stok = unit tersedia / laju jual
+// Dua Funnel Terpisah: Skenario A (U02) & Skenario B (U03) tanpa mencampur denominator
 // ============================================================================
 
 import type {
@@ -10,10 +12,10 @@ import type {
   MonthlyScheduleRow,
   ReverseFunnelRequirements,
   SeTargetAllocation,
+  InventoryConstraint,
+  FunnelHypotheses,
 } from './types';
 
-// Default reverse funnel conversion ratios:
-// 1 Closing requires ~1.5 Bookings, 6 Site Visits, 15 Hot Prospects, 40 Contacts, 120 Leads
 export const FUNNEL_MULTIPLIERS = {
   bookingPerClosing: 1.5,
   visitPerClosing: 6.0,
@@ -26,7 +28,7 @@ export const FUNNEL_MULTIPLIERS = {
 const targetsStore = new Map<string, Map<number, SalesTargetPlan>>();
 
 /**
- * Calculates a complete sales target plan leading to 100% sold out.
+ * Calculates a complete sales target plan leading to 100% sold out with stock constraints.
  */
 export function calculateSalesTargetPlan(
   input: SalesTargetCalculationInput,
@@ -111,50 +113,120 @@ export function calculateSalesTargetPlan(
     });
 
     currentMonth++;
-    if (remainingAfter === 0) break;
   }
 
-  // Calculate allocation per SE
-  const safeHeadcount = Math.max(1, seHeadcount);
-  const unitsPerSe = Number((active.velocityUnitsPerMonth / safeHeadcount).toFixed(2));
-  const revPerSe = Math.round(unitsPerSe * avgPriceIdr);
+  // Headcount distribution
+  const seAllocations: SeTargetAllocation[] = [];
+  const monthlyTarget = active.velocityUnitsPerMonth;
+  const basePerSe = Math.floor(monthlyTarget / seHeadcount);
+  const remainder = monthlyTarget % seHeadcount;
 
-  const seAllocations: SeTargetAllocation[] = Array.from({ length: safeHeadcount }).map((_, idx) => ({
-    seIndex: idx + 1,
-    seName: `Sales Executive ${idx + 1}`,
-    monthlyUnitTarget: unitsPerSe,
-    monthlyRevenueTargetIdr: revPerSe,
-    weeklySiteVisitTarget: Math.round((unitsPerSe * FUNNEL_MULTIPLIERS.visitPerClosing) / 4),
-    dailyContactTarget: Math.round((unitsPerSe * FUNNEL_MULTIPLIERS.contactPerClosing) / 25),
-  }));
+  for (let i = 0; i < seHeadcount; i++) {
+    const units = i < remainder ? basePerSe + 1 : basePerSe;
+    seAllocations.push({
+      seIndex: i + 1,
+      seName: `Sales Executive ${i + 1}`,
+      monthlyUnitTarget: units,
+      monthlyRevenueTargetIdr: units * avgPriceIdr,
+      weeklySiteVisitTarget: Math.round(units * 1.5),
+      dailyContactTarget: Math.max(3, Math.round((units * 10) / 26)),
+    });
+  }
+
+  // Blueprint v1.2: Kendala Stok (Inventory Constraint)
+  const stockLifespanMonths = Number((totalUnits / active.velocityUnitsPerMonth).toFixed(1));
+  const annualRunRateUnits = active.velocityUnitsPerMonth * 12;
+  const isAnnualTargetExceedingStock = annualRunRateUnits > totalUnits;
+
+  const inventoryConstraint: InventoryConstraint = {
+    availableStockUnits: totalUnits,
+    monthlyVelocityUnits: active.velocityUnitsPerMonth,
+    stockLifespanMonths,
+    annualRunRateUnits,
+    isAnnualTargetExceedingStock,
+    stockWarning: isAnnualTargetExceedingStock
+      ? `Stok tersedia (${totalUnits} unit) pada laju ${active.velocityUnitsPerMonth} unit/bulan akan habis dalam ±${stockLifespanMonths} bulan. Target tahunan run-rate (${annualRunRateUnits} unit) membutuhkan pembukaan fase/klaster baru.`
+      : undefined
+  };
+
+  // Blueprint v1.2: Dua Funnel Hipotesis Terpisah (U02 vs U03)
+  const funnelHypotheses: FunnelHypotheses = {
+    scenarioA: {
+      source: 'Dokumen U02 (Rasio Efisiensi Tinggi)',
+      name: 'Funnel Efisiensi Kualifikasi',
+      qualified: 100,
+      visits: 25,
+      netSales: 5,
+      description: 'Hipotesis 100 prospek terkualifikasi menghasilkan 25 kunjungan lokasi dan 5 unit penjualan (rasio visit-to-sale 20%).'
+    },
+    scenarioB: {
+      source: 'Dokumen U03 (Rasio Corong Lengkap)',
+      name: 'Funnel Volume Standar',
+      leads: 600,
+      qualified: 150,
+      appointments: 75,
+      visits: 45,
+      hot: 21,
+      bookings: 7,
+      netSales: 5,
+      description: 'Hipotesis 600 leads umum -> 150 qualified -> 75 janji -> 45 survei -> 21 hot -> 7 booking -> 5 net sales.'
+    },
+    theoreticalCapacity: {
+      dailyLeadsPerSe: 8,
+      headcountSe: seHeadcount,
+      workingDays: 26,
+      calculatedMonthlyCapacity: 8 * seHeadcount * 26,
+      note: `Kapasitas teoritis penanganan (${8 * seHeadcount * 26} lead/bulan) adalah batas beban kerja, bukan kepastian realisasi target.`
+    }
+  };
 
   const plan: SalesTargetPlan = {
-    id: `target-${projectId}-v${version}`,
+    id: `target_plan_${Date.now()}`,
     projectId,
     projectName,
     version,
     totalUnits,
     avgPriceIdr,
     totalProjectRevenueIdr,
-    seHeadcount: safeHeadcount,
+    seHeadcount,
     scenarios,
     activeScenario: chosenScenario,
     monthlySchedules,
     seAllocations,
+    inventoryConstraint,
+    funnelHypotheses,
     generatedAt: new Date().toISOString(),
-    tokensUsed: 890,
   };
 
-  // Cache in store
-  let projMap = targetsStore.get(projectId);
-  if (!projMap) {
-    projMap = new Map();
-    targetsStore.set(projectId, projMap);
-  }
-  projMap.set(version, plan);
-
+  saveSalesTargetPlan(plan);
   return plan;
 }
+
+export function saveSalesTargetPlan(plan: SalesTargetPlan): void {
+  if (!targetsStore.has(plan.projectId)) {
+    targetsStore.set(plan.projectId, new Map());
+  }
+  targetsStore.get(plan.projectId)!.set(plan.version, plan);
+}
+
+export function getSalesTargetPlan(projectId: string, version?: number): SalesTargetPlan | undefined {
+  const projectPlans = targetsStore.get(projectId);
+  if (!projectPlans || projectPlans.size === 0) return undefined;
+
+  if (version !== undefined) {
+    return projectPlans.get(version);
+  }
+
+  const versions = Array.from(projectPlans.keys()).sort((a, b) => b - a);
+  return projectPlans.get(versions[0]);
+}
+
+export function getAllSalesTargetPlanVersions(projectId: string): number[] {
+  const projectPlans = targetsStore.get(projectId);
+  if (!projectPlans) return [];
+  return Array.from(projectPlans.keys()).sort((a, b) => b - a);
+}
+
 
 /**
  * Default ground truth for The Park Townhouse Sukoharjo (30 units, avg Rp 900.000.000)
@@ -171,50 +243,6 @@ export const THE_PARK_DEFAULT_TARGET_PLAN = calculateSalesTargetPlan({
     optimis: 5,
   },
 });
-
-export function getSalesTargetPlan(
-  projectId: string,
-  chosenScenario: ScenarioType = 'realistis',
-  isDemoMode: boolean = false
-): SalesTargetPlan {
-  const projMap = targetsStore.get(projectId);
-  let plan: SalesTargetPlan;
-
-  if (!projMap || projMap.size === 0) {
-    plan = calculateSalesTargetPlan(
-      {
-        projectId,
-        projectName: 'The Park Townhouse Sukoharjo',
-        totalUnits: 30,
-        avgPriceIdr: 900000000,
-        seHeadcount: 3,
-      },
-      chosenScenario
-    );
-  } else {
-    const maxVer = Math.max(...Array.from(projMap.keys()));
-    plan = projMap.get(maxVer)!;
-    if (plan.activeScenario !== chosenScenario) {
-      plan = calculateSalesTargetPlan(
-        {
-          projectId: plan.projectId,
-          projectName: plan.projectName,
-          totalUnits: plan.totalUnits,
-          avgPriceIdr: plan.avgPriceIdr,
-          seHeadcount: plan.seHeadcount,
-        },
-        chosenScenario,
-        plan.version
-      );
-    }
-  }
-
-  if (isDemoMode) {
-    return applySalesTargetTeaser(plan);
-  }
-
-  return plan;
-}
 
 /**
  * Truncate Sales Target Plan to 25% server-side for demo accounts.

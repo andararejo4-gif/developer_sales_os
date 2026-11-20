@@ -9,7 +9,7 @@ describe('Phase 1 Smoke Test: End-to-End Flow & Acceptance Criteria', () => {
   it('Kriteria 1: Factual counter bar membaca angka aktual (bukan teks karangan)', () => {
     expect(FACTUAL_METRICS.length).toBe(4);
     expect(FACTUAL_METRICS[0].value).toBe('99');
-    expect(FACTUAL_METRICS[1].value).toBe('6');
+    expect(FACTUAL_METRICS[1].value).toBe('100');
     expect(FACTUAL_METRICS[2].value).toBe('25 km');
     expect(FACTUAL_METRICS[3].value).toBe('30');
   });

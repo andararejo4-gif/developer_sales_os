@@ -8,9 +8,9 @@ interface HeroProps {
 }
 
 export const FACTUAL_METRICS = [
-  { value: '99', label: 'Poin Keunggulan', desc: 'Kurasi editorial faktual tanpa overpromise' },
-  { value: '6', label: 'Modul Penjualan', desc: 'Dari ekstrak brosur hingga CRM & closing' },
-  { value: '25 km', label: 'Radius Riset', desc: 'Pemetaan fasilitas & kompetitor sekitar' },
+  { value: '99', label: 'Poin Keunggulan', desc: 'Kurasi editorial bersumber dengan pelaporan gap fakta' },
+  { value: '100', label: 'Fitur Software', desc: '17 modul operasional selaras Blueprint v1.2' },
+  { value: '25 km', label: 'Radius Riset', desc: 'Pemetaan 9 cincin fasilitas & kompetitor' },
   { value: '30', label: 'Unit The Park', desc: 'Studi kasus aktif di Sukoharjo' },
 ];
 
@@ -27,12 +27,16 @@ export const Hero: React.FC<HeroProps> = ({ onOpenWizard, onScrollToCaseStudy })
             </p>
 
             <h1 className="text-hero-display font-extrabold text-espresso">
-              Dari brosur proyek menjadi mesin penjualan terstruktur.
+              Upload tiga bahan, dapatkan fondasi pemasaran. Hubungkan akun dan setujui mandat, biarkan pekerjaan rutin berjalan.
             </h1>
 
             <p className="mt-4 sm:mt-5 text-base sm:text-lg text-warmmuted leading-relaxed max-w-2xl">
-              Unggah brosur, pricelist, dan titik koordinat proyek Anda. Sistem menyusun Surat Cinta 99 Keunggulan, riset pasar radius 25 km, jadwal konten, hingga playbook penjualan tim.
+              Cukup masukkan brosur, pricelist, dan titik koordinat. Sistem menghasilkan draf Surat Cinta hingga 99 Keunggulan, riset pasar radius 25 km, kalender konten, hingga rute lapangan tim sales yang siap diverifikasi.
             </p>
+
+            <div className="mt-3 p-3 rounded-md bg-sandstone/80 border border-warmborder text-xs text-warmmuted leading-relaxed max-w-2xl">
+              <span className="font-semibold text-espresso">Batas Sistem yang Transparan:</span> Tiga bahan menghasilkan draf dan simulasi yang dapat diperiksa. Publikasi website, penayangan iklan berbayar, outreach WhatsApp, simulasi KPR resmi, dan transaksi booking memerlukan otorisasi mandat akun dan approval PIC Anda.
+            </div>
 
             {/* Primary & Secondary Actions (48px mobile tap targets) */}
             <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">

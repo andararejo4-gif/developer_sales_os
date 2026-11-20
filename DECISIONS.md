@@ -122,3 +122,25 @@ Dokumen ini mencatat keputusan arsitektural dan teknis yang diambil selama pemba
 - **Prinsip Pengakuan Pendapatan Direksi**:
   - Nilai *Aktual Realisasi* pada dasbor Direksi hanya dihitung dari unit berstatus Akad / Closing (`terjual`). Unit dalam tahap `booking` dicatat sebagai *Pipeline Berjalan*.
 
+
+
+## 16. Penyelarasan Blueprint v1.2 & Supremasi Keputusan Pemilik (20 Nov 2026)
+- **Model Lisensi 3 Bulan Kalender**: Menggantikan skema bulanan/tahunan tak tentu menjadi lisensi 3 bulan kalender dengan satu saldo pool AIC dan jam pendampingan operasional tanpa reset bulanan.
+- **Supremasi Keputusan Pemilik (Owner Primacy)**:
+  - *Tanpa Biaya Setup*: Menolak usulan setup berbayar S01/S03 atau AIC bootstrap khusus 5.270 AIC dari Blueprint. Model murni langganan mandiri. Enam keluaran awal memakai kuota meter reguler dengan cost preview.
+  - *Web/PWA Murni*: Menolak kewajiban aplikasi native Android/iOS untuk background tracking. F98 GPS tugas beroperasi di foreground saat sesi aktif.
+  - *Akun Demo 100% Bebas Countdown*: Menolak tampilan sisa waktu atau hitung mundur untuk akun demo. Tampilan masa lisensi hanya ditampilkan netral pada akun berbayar di menu langganan/invoice.
+- **Katalog 100 Fitur & 48 Agent Registry**:
+  - Didaftarkan ke tabel `features` (F01–F100, M01–M17) dengan batas minimum paket (Gold: 63, Platinum: 88, Diamond: 100) dan tabel `agent_registry` (A01–A48).
+  - F91–F93 dan F97–F99 gratis dan selalu aktif di semua paket.
+  - F100 (AI Guide per aktivitas SE) 5 AIC/kartu hanya di Platinum dan Diamond.
+- **Truth Layer & Surat Cinta "Sampai 99"**:
+  - Validator Surat Cinta diubah untuk menerima $\le 99$ poin bersumber dengan pelaporan data gap (tidak boleh mengarang poin fiktif).
+  - Setiap klaim diikat ke `fact_id` dalam tabel `claims` (claim ledger).
+- **Alokasi Kuota Demo (`demo_aic_per_proyek`)**:
+  - Dihitung dari meter ekstraksi (F01-F06 ~240 AIC) + F13 Generator 99 Keunggulan (400 AIC) + F14 Surat Cinta (100 AIC) = 740 AIC. Dibulatkan aman menjadi **1.000 AIC per proyek demo** untuk mencegah pembengkakan biaya API demo tanpa persetujuan.
+- **Koreksi Matematika Hook Mikro**:
+  - Menghapus klaim *"per fitur lebih hemat"* karena secara matematika per fitur Gold justru paling murah (Rp77,8 rb vs Plat Rp146,6 rb vs Diam Rp399 rb).
+  - Menggunakan dimensi perbandingan yang valid: per proyek, per pengguna tim, dan per 1.000 AIC.
+- **Pencegahan Double-Booking**:
+  - Dijamin melalui transaksi database lock di tabel `units` (`SELECT ... FOR UPDATE`).

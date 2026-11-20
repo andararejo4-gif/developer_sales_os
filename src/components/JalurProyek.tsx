@@ -229,6 +229,48 @@ export function JalurProyek({
           </div>
         )}
 
+        {/* Gerbang Kesiapan G0-G3 (Blueprint v1.2 Bab 05) */}
+        <div className="bg-sandstone/70 border-b border-warmborder px-6 py-3 shrink-0">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+            <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-espresso/70">
+              Gerbang Kesiapan Operasional (Readiness Gates)
+            </span>
+            <span className="text-[11px] text-warmmuted">
+              Keluaran sebelum gerbang lulus berstatus <strong className="text-espresso">draf &amp; simulasi internal</strong>.
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
+              <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <div>
+                <p className="font-bold text-xs text-espresso">G0 · Draft-ready</p>
+                <p className="text-[10px] text-emerald-700 font-medium">Lolos (6 Draf Aktif)</p>
+              </div>
+            </div>
+            <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
+              <span className="size-2 rounded-full bg-amber-400 shrink-0" />
+              <div>
+                <p className="font-bold text-xs text-espresso">G1 · Publish-ready</p>
+                <p className="text-[10px] text-warmmuted">Perlu PIC Approval</p>
+              </div>
+            </div>
+            <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
+              <span className="size-2 rounded-full bg-slate-300 shrink-0" />
+              <div>
+                <p className="font-bold text-xs text-espresso">G2 · Demand-ready</p>
+                <p className="text-[10px] text-warmmuted">Iklan &amp; WA Mandat</p>
+              </div>
+            </div>
+            <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
+              <span className="size-2 rounded-full bg-slate-300 shrink-0" />
+              <div>
+                <p className="font-bold text-xs text-espresso">G3 · Transaction</p>
+                <p className="text-[10px] text-warmmuted">Whitelist Rekening</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Content Stages Timeline */}
         <div className="p-6 overflow-y-auto flex-1 bg-[#FBF9F5] space-y-4">
           <div className="grid grid-cols-1 gap-3.5">

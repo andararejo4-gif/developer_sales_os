@@ -1,10 +1,11 @@
-// Validator Otomatis Guardrail Surat Cinta 99 Keunggulan
-// Menguji kepatuhan terhadap 5 aturan konten:
-// 1. Tepat 99 poin
+// Validator Otomatis Guardrail Surat Cinta Hingga 99 Keunggulan (Blueprint v1.2 Bab 05)
+// Aturan:
+// 1. "Sampai 99 Poin" (maksimal 99). Bila fakta bersumber kurang dari 99, laporkan daftar gap (butuh data: ...), JANGAN isi klaim fiktif.
 // 2. Tanpa janji berlebihan / overpromise (pasti untung, pasti naik, jaminan return)
 // 3. Tidak menyebut jadwal/perencanaan internal developer
 // 4. Tidak ada superlatif mutlak tak berbukti (terbaik se-indonesia, nomor satu di dunia)
 // 5. Jarak/waktu tempuh wajib berformat "sekitar"
+// 6. Setiap klaim bersumber fakta (fact_id) atau caveat bila ilustrasi
 
 import { LoveLetterPoint } from './points-data';
 
@@ -15,12 +16,20 @@ export interface ValidationIssue {
   message: string;
 }
 
+export interface DataGap {
+  category: string;
+  missingCount: number;
+  neededDataPrompt: string;
+}
+
 export interface ValidationResult {
   isValid: boolean;
   totalPoints: number;
   passedCount: number;
+  gapCount: number;
   errors: ValidationIssue[];
   warnings: ValidationIssue[];
+  gaps: DataGap[];
   summary: string;
 }
 
@@ -38,13 +47,30 @@ const FORBIDDEN_WORDS = [
 export function validateLoveLetter(points: LoveLetterPoint[]): ValidationResult {
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
+  const gaps: DataGap[] = [];
 
-  // Aturan 1: Tepat 99 Poin
-  if (points.length !== 99) {
+  // Aturan 1: Maksimal 99 Poin
+  if (points.length > 99) {
     errors.push({
       type: 'error',
-      rule: 'Aturan Panjang Dokumen',
-      message: `Jumlah poin harus tepat 99 poin, saat ini terhitung ${points.length} poin.`
+      rule: 'Batas Maksimum Dokumen',
+      message: `Jumlah keunggulan tidak boleh melebihi 99 poin (saat ini ${points.length} poin).`
+    });
+  }
+
+  // Hitung Gap jika fakta kurang dari 99 (Blueprint v1.2: "sampai 99; fakta kurang = gap, bukan diisi fiktif")
+  const gapCount = Math.max(0, 99 - points.length);
+  if (gapCount > 0) {
+    warnings.push({
+      type: 'warning',
+      rule: 'Kesenjangan Fakta (Data Gap)',
+      message: `Dokumen memiliki ${points.length} poin bersumber. Terdapat gap ${gapCount} keunggulan yang membutuhkan konfirmasi data faktual tambahan.`
+    });
+
+    gaps.push({
+      category: 'Fasilitas & Spesifikasi Tambahan',
+      missingCount: gapCount,
+      neededDataPrompt: `Butuh data tambahan: ${gapCount} poin spesifikasi/fasilitas/legalitas dari developer untuk melengkapi hingga 99 keunggulan.`
     });
   }
 
@@ -100,16 +126,14 @@ export function validateLoveLetter(points: LoveLetterPoint[]): ValidationResult 
       }
     }
 
-    // Aturan 5: Jarak / Waktu Tempuh harus berformat "sekitar"
-    // Misal jika ada kata "menit" atau "km", harus didahului "sekitar"
-    const distanceRegex = /(\d+\s*(?:menit|km|kilometer|meter))/i;
-    if (distanceRegex.test(combinedText)) {
-      if (!combinedText.includes('sekitar') && !combinedText.includes('radius')) {
+    // Aturan 5: Estimasi jarak/waktu wajib menggunakan kata 'sekitar'
+    if (/(menit|km|meter|detik)\b/i.test(combinedText)) {
+      if (!/sekitar|estimasi|kurang lebih|jarak tempuh/i.test(combinedText)) {
         warnings.push({
           pointNumber: p.number,
           type: 'warning',
-          rule: 'Format Jarak Faktual',
-          message: `Poin #${p.number} menyebutkan estimasi waktu/jarak tanpa kata 'sekitar'. Disarankan menggunakan 'sekitar ...'`
+          rule: 'Format Jarak Estimatif',
+          message: `Poin #${p.number} menyebut waktu/jarak tanpa kata 'sekitar'. Disarankan menambahkan untuk kepatuhan hukum.`
         });
       }
     }
@@ -119,16 +143,21 @@ export function validateLoveLetter(points: LoveLetterPoint[]): ValidationResult 
     }
   });
 
-  const isValid = errors.length === 0 && points.length === 99;
+  const isValid = errors.length === 0 && points.length > 0;
+  const summary = isValid 
+    ? (gapCount === 0 
+        ? `Lolos Guardrail Sempurna: Tepat 99 poin tervalidasi bebas dari kata terlarang.`
+        : `Lolos Guardrail Bersumber: ${points.length} poin tervalidasi. Teridentifikasi gap ${gapCount} data yang dilaporkan secara transparan.`)
+    : `Gagal Validasi: Ditemukan ${errors.length} pelanggaran guardrail.`;
 
   return {
     isValid,
     totalPoints: points.length,
     passedCount,
+    gapCount,
     errors,
     warnings,
-    summary: isValid
-      ? `Lolos Validasi 100%! Tepat 99 poin editorial, bebas klaim berlebihan dan mematuhi seluruh guardrail.`
-      : `Gagal Validasi: Ditemukan ${errors.length} pelanggaran aturan guardrail.`
+    gaps,
+    summary
   };
 }
