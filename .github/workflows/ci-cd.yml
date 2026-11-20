@@ -1,0 +1,108 @@
+name: CI/CD Pipeline - Developer Sales OS
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # =========================================================================
+  # STAGE 1: QUALITY GATES & VERIFICATION
+  # =========================================================================
+  quality-check:
+    name: 1. Quality Gates & Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun Environment
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: TypeScript Type Check
+        run: bun run typecheck
+
+      - name: Automated Unit & Guardrail Tests (47 Suites)
+        run: bun test
+
+  # =========================================================================
+  # STAGE 2: PRODUCTION BUILD ON GITHUB RUNNER
+  # =========================================================================
+  build:
+    name: 2. Build on GitHub Server
+    needs: quality-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun Environment
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Compile Production Build
+        run: bun run build
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: developer-sales-os-dist
+          path: dist/
+          retention-days: 7
+
+  # =========================================================================
+  # STAGE 3: ZERO-DOWNTIME DEPLOYMENT TO HADES SERVER (103.127.97.94)
+  # Target Domain: developerproperti.giivepro.com
+  # =========================================================================
+  deploy:
+    name: 3. Deploy to Hades Server
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: developer-sales-os-dist
+          path: dist
+
+      - name: Deploy to Hades Server (103.127.97.94)
+        env:
+          SSH_KEY: ${{ secrets.HADES_SSH_KEY }}
+          SSH_HOST: ${{ secrets.HADES_HOST || '103.127.97.94' }}
+          SSH_USER: ${{ secrets.HADES_USER || 'Hades01' }}
+          REMOTE_DIR: /var/www/developer-sales-os
+        run: |
+          if [ -z "$SSH_KEY" ]; then
+            echo "::warning ::HADES_SSH_KEY secret belum diset di GitHub Repository Secrets. Lewati deployment otomatis."
+            exit 0
+          fi
+
+          echo "Mengonfigurasi autentikasi SSH..."
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+          echo "Melakukan rsync hasil build ke $SSH_USER@$SSH_HOST:$REMOTE_DIR/ ..."
+          rsync -avz --delete dist/ "$SSH_USER@$SSH_HOST:$REMOTE_DIR/"
+
+          echo "Reloading Nginx web server..."
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "sudo nginx -t && sudo systemctl reload nginx"
+
+          echo "Deployment berhasil ke https://developerproperti.giivepro.com !"

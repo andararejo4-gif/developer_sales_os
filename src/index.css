@@ -2,25 +2,33 @@
 @import "leaflet/dist/leaflet.css";
 
 @theme {
-  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
   --color-sandstone: #f5f2eb;
   --color-espresso: #1c1917;
-  --color-warmmuted: #78716c;
+  --color-warmmuted: #57534e;
   --color-terracotta: #b45309;
   --color-olive: #3f6212;
-  --color-warmborder: #e6e0d4;
+  --color-warmborder: #e2dbce;
   --color-surface: #ffffff;
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     background-color: #f5f2eb;
     color: #1c1917;
     font-variant-numeric: tabular-nums lining-nums;
+    overflow-x: hidden;
   }
+
   @media (max-width: 767px) {
     input,
-    textarea {
+    textarea,
+    select {
       font-size: 16px !important;
     }
   }
@@ -30,15 +38,254 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Fluid editorial display scale */
+.text-hero-display {
+  font-size: clamp(2rem, 5.2vw, 3.65rem);
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+}
+
+.text-section-display {
+  font-size: clamp(1.5rem, 3.2vw, 2.25rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
 /* Leaflet map custom override to fit design system */
 .leaflet-popup-content-wrapper {
-  border-radius: 12px;
+  border-radius: 8px;
   background-color: #ffffff;
   color: #1c1917;
-  border: 1px solid #e6e0d4;
-  box-shadow: 0 4px 12px rgba(28, 25, 23, 0.08);
+  border: 1px solid #e2dbce;
+  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.14);
+  padding: 0;
+}
+
+.leaflet-popup-content {
+  margin: 0;
+  width: auto !important;
 }
 
 .leaflet-popup-tip {
   background-color: #ffffff;
+  border: 1px solid #e2dbce;
+}
+
+/* Warm desaturated OSM tiles without needing third-party API keys */
+.editorial-map-tiles {
+  filter: grayscale(88%) sepia(14%) contrast(94%) brightness(102%);
+}
+
+/* Demo 2: 80% White / 20% Cobalt Blue Architectural Theme */
+.theme-blue-v2 {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+.theme-blue-v2 .blue-map-tiles,
+.theme-blue-v2 .editorial-map-tiles {
+  filter: grayscale(92%) contrast(96%) brightness(104%) hue-rotate(190deg) saturate(115%);
+}
+
+.theme-blue-v2 .leaflet-popup-content-wrapper {
+  border-color: #cbd5e1;
+  color: #0f172a;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+}
+
+.theme-blue-v2 .leaflet-popup-tip {
+  border-color: #cbd5e1;
+}
+
+/* ============================================================================
+   Demo 3: "Project Journey" — All-Light Mint/Lime Botanical Architectural Theme
+   ============================================================================ */
+.theme-journey-v3 {
+  --v3-canvas: #f6faf7;
+  --v3-white: #ffffff;
+  --v3-mint: #e4f1e8;
+  --v3-lime-pale: #eaf4d3;
+  --v3-ink: #0b3d2e;
+  --v3-ink-muted: #3b5e50;
+  --v3-emerald: #2f9e5b;
+  --v3-chartreuse: #c6f432;
+  --v3-border: #cfe1d5;
+
+  /* Harmonize all shared modals (Login, Onboarding Wizard, Command Palette, Viewers) */
+  --color-sandstone: #f6faf7;
+  --color-surface: #ffffff;
+  --color-espresso: #0b3d2e;
+  --color-warmmuted: #3b5e50;
+  --color-terracotta: #2f9e5b;
+  --color-olive: #1d7a46;
+  --color-warmborder: #cfe1d5;
+  --color-amber-50: #f2f9e8;
+  --color-amber-100: #eaf4d3;
+  --color-amber-300: #c6f432;
+  --color-amber-400: #c6f432;
+  --color-lime-100: #e4f1e8;
+
+  background-color: var(--v3-canvas);
+  color: var(--v3-ink);
+}
+
+.font-display-v3 {
+  font-family: "Bricolage Grotesque", "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+.text-v3-mega {
+  font-size: clamp(2.45rem, 6.4vw, 5.25rem);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+}
+
+.text-v3-chapter {
+  font-size: clamp(1.75rem, 4.1vw, 3.35rem);
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+}
+
+.text-v3-stat {
+  font-size: clamp(2.75rem, 7vw, 5.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+
+/* Purposeful sole atmospheric mesh gradient behind Hero Chapter 00 */
+@keyframes v3-mesh-drift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-2%, 2%, 0) scale(1.04);
+  }
+}
+
+.v3-hero-mesh {
+  background:
+    radial-gradient(62% 55% at 18% 20%, rgba(198, 244, 50, 0.24) 0%, rgba(198, 244, 50, 0) 70%),
+    radial-gradient(58% 58% at 84% 28%, rgba(47, 158, 91, 0.16) 0%, rgba(47, 158, 91, 0) 72%),
+    linear-gradient(180deg, #f6faf7 0%, #eaf4d3 52%, #f6faf7 100%);
+  animation: v3-mesh-drift 16s ease-in-out infinite;
+}
+
+/* Operational live ticker */
+@keyframes v3-ticker-scroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.v3-ticker-track {
+  display: flex;
+  gap: 0.75rem;
+  width: max-content;
+  animation: v3-ticker-scroll 60s linear infinite;
+}
+
+.v3-ticker-track:hover,
+.v3-ticker-track:focus-within {
+  animation-play-state: paused;
+}
+
+/* Custom range slider for Plan Configurator */
+.v3-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  border-radius: 999px;
+  background: #cfe1d5;
+  outline: none;
+}
+
+.v3-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #0b3d2e;
+  border: 3px solid #c6f432;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(11, 61, 46, 0.22);
+  transition: transform 0.15s ease;
+}
+
+.v3-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.12);
+}
+
+.v3-slider::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #0b3d2e;
+  border: 3px solid #c6f432;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(11, 61, 46, 0.22);
+}
+
+/* Crisp botanical light OSM / CARTO Positron tiles for Map-First Chapter */
+.theme-journey-v3 .editorial-map-tiles {
+  filter: grayscale(82%) sepia(12%) hue-rotate(85deg) contrast(96%) brightness(103%);
+}
+
+.v3-positron-tiles {
+  filter: grayscale(78%) sepia(14%) hue-rotate(84deg) saturate(110%) contrast(95%) brightness(105%);
+}
+
+/* Sole continuous map motion: gentle chartreuse beacon pulse on project hub */
+@keyframes v3-hub-pulse {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.78;
+  }
+  70% {
+    transform: scale(1.85);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.85);
+    opacity: 0;
+  }
+}
+
+.v3-hub-pulse-ring {
+  animation: v3-hub-pulse 2.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v3-hub-pulse-ring {
+    animation: none !important;
+  }
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.theme-journey-v3 .leaflet-popup-content-wrapper {
+  border-color: #cfe1d5;
+  color: #0b3d2e;
+  background-color: #ffffff;
+  box-shadow: 0 12px 32px rgba(11, 61, 46, 0.14);
+}
+
+.theme-journey-v3 .leaflet-popup-tip {
+  border-color: #cfe1d5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v3-hero-mesh,
+  .v3-ticker-track {
+    animation: none !important;
+  }
 }

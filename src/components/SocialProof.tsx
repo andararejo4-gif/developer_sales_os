@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPin, CheckCircle2, ExternalLink } from 'lucide-react';
+import { MapPin, Check, ArrowUpRight } from 'lucide-react';
 
 interface SocialProofProps {
   onOpenLoveLetter: () => void;
@@ -8,91 +8,89 @@ interface SocialProofProps {
 
 export const SocialProof: React.FC<SocialProofProps> = ({ onOpenLoveLetter, onScrollToMap }) => {
   return (
-    <section id="studi-kasus" className="py-12 bg-white border-b border-warmborder">
+    <section id="studi-kasus" className="py-12 sm:py-16 lg:py-20 bg-surface border-b border-warmborder">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-2xl mx-auto mb-8">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-warmmuted">
-            Studi Kasus Nyata &amp; Best Practice
-          </span>
-          <h2 className="text-xl sm:text-2xl font-bold text-espresso mt-1">
-            Terbukti di The Park Townhouse Sukoharjo
-          </h2>
-          <p className="text-xs text-warmmuted mt-1">
-            Diterapkan langsung oleh PT Andara Rejo Makmur untuk mengelola 30 unit townhouse eksklusif bernuansa Jepang.
-          </p>
-        </div>
+        {/* Asymmetric Editorial Split: Left Context + Right Spec Card */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
+          {/* Left Narrative */}
+          <div className="lg:col-span-5 min-w-0">
+            <p className="text-xs font-mono uppercase tracking-widest text-terracotta font-semibold">
+              Studi Kasus Terverifikasi
+            </p>
+            <h2 className="text-section-display font-extrabold text-espresso mt-2">
+              Terbukti di The Park Townhouse Sukoharjo
+            </h2>
+            <p className="text-sm sm:text-base text-warmmuted mt-3 leading-relaxed">
+              Diterapkan langsung oleh PT Andara Rejo Makmur untuk mengelola 30 unit townhouse bernuansa Jepang di tiga klaster: Nagoya, Osaka, dan Tokyo.
+            </p>
 
-        {/* Featured Case Study Card */}
-        <div className="bg-sandstone/40 border border-warmborder rounded-2xl p-6 md:p-8 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-          {/* Visual Showcase Box */}
-          <div className="md:col-span-5 rounded-xl bg-espresso text-white p-6 flex flex-col justify-between min-h-[220px] shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-terracotta/20 rounded-full blur-2xl pointer-events-none" />
-            <div>
-              <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-amber-300 text-[10px] font-bold uppercase tracking-wider">
-                Studi Kasus Publik Terverifikasi
-              </span>
-              <h3 className="text-xl font-extrabold text-white mt-3">The Park Townhouse</h3>
-              <p className="text-xs text-stone-300 mt-1 flex items-center gap-1.5">
-                <MapPin className="size-3.5 text-amber-400" />
-                <span>Mandan, Sukoharjo, Jawa Tengah</span>
-              </p>
-            </div>
-
-            <div className="pt-4 border-t border-white/10 grid grid-cols-3 gap-2 text-center text-xs">
-              <div>
-                <span className="text-[10px] text-stone-400 block">Unit</span>
-                <strong className="text-white font-bold text-sm">30 Unit</strong>
-              </div>
-              <div>
-                <span className="text-[10px] text-stone-400 block">Cluster</span>
-                <strong className="text-white font-bold text-sm">3 Tema</strong>
-              </div>
-              <div>
-                <span className="text-[10px] text-stone-400 block">Status</span>
-                <strong className="text-lime-300 font-bold text-sm">Aktif</strong>
-              </div>
-            </div>
-          </div>
-
-          {/* Details & Live Proofs */}
-          <div className="md:col-span-7 flex flex-col justify-between space-y-4">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 rounded bg-amber-100 text-terracotta text-[10px] font-bold">
-                  PT Andara Rejo Makmur
-                </span>
-                <span className="text-xs text-warmmuted">· 3 Cluster: Nagoya, Osaka, Tokyo</span>
-              </div>
-              <p className="text-xs text-espresso/90 leading-relaxed">
-                Dari katalog brosur mentah dan daftar harga, sistem Developer Sales OS otomatis memetakan 99 keunggulan faktual, menghasilkan simulasi cash tempo 24 bulan dan KPR, serta mengotomasi rutinitas Team Leader berbasis AI.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              <div className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-warmborder">
-                <CheckCircle2 className="size-4 text-olive shrink-0" />
-                <span className="font-semibold text-espresso">SHM Pecah &amp; PBG Lengkap</span>
-              </div>
-              <div className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-warmborder">
-                <CheckCircle2 className="size-4 text-olive shrink-0" />
-                <span className="font-semibold text-espresso">Koordinat Riil Leaflet OSM</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 pt-2">
+            <div className="mt-6 flex flex-col sm:flex-row lg:flex-col xl:flex-row gap-3">
               <button
                 onClick={onOpenLoveLetter}
-                className="px-4 py-2 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                className="min-h-[44px] px-5 rounded-md bg-espresso text-sandstone text-sm font-semibold hover:bg-espresso/90 transition-colors cursor-pointer inline-flex items-center justify-center gap-2"
               >
                 <span>Baca 99 Keunggulan The Park</span>
-                <ExternalLink className="size-3.5" />
+                <ArrowUpRight className="size-4" />
               </button>
               <button
                 onClick={onScrollToMap}
-                className="px-4 py-2 rounded-xl bg-white border border-warmborder text-espresso text-xs font-semibold hover:bg-sandstone transition-all cursor-pointer"
+                className="min-h-[44px] px-5 rounded-md border border-warmborder bg-sandstone/40 text-espresso text-sm font-semibold hover:border-espresso/40 transition-colors cursor-pointer inline-flex items-center justify-center"
               >
-                Lihat di Peta Spasial
+                Lihat Peta Radius 25 km
               </button>
+            </div>
+          </div>
+
+          {/* Right Architectural Spec Sheet Card */}
+          <div className="lg:col-span-7 min-w-0 border border-warmborder rounded-lg bg-sandstone/40 overflow-hidden">
+            {/* Top Project Header */}
+            <div className="p-5 sm:p-7 border-b border-warmborder bg-surface flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg sm:text-xl font-extrabold text-espresso">
+                  The Park Townhouse
+                </h3>
+                <p className="text-xs sm:text-sm text-warmmuted mt-0.5 flex items-center gap-1.5">
+                  <MapPin className="size-3.5 text-terracotta shrink-0" />
+                  <span>Mandan, Sukoharjo, Jawa Tengah</span>
+                </p>
+              </div>
+              <span className="self-start sm:self-auto px-2.5 py-1 rounded text-xs font-semibold bg-olive/10 text-olive border border-olive/20">
+                Status: Aktif
+              </span>
+            </div>
+
+            {/* Data Row */}
+            <div className="grid grid-cols-3 divide-x divide-warmborder border-b border-warmborder bg-surface/60">
+              <div className="p-4 sm:p-5">
+                <span className="text-[11px] font-mono uppercase text-warmmuted block">Total Unit</span>
+                <strong className="text-base sm:text-lg font-extrabold text-espresso mt-0.5 block">30 Unit</strong>
+              </div>
+              <div className="p-4 sm:p-5">
+                <span className="text-[11px] font-mono uppercase text-warmmuted block">Klaster</span>
+                <strong className="text-base sm:text-lg font-extrabold text-espresso mt-0.5 block">3 Tema</strong>
+              </div>
+              <div className="p-4 sm:p-5">
+                <span className="text-[11px] font-mono uppercase text-warmmuted block">Skema</span>
+                <strong className="text-base sm:text-lg font-extrabold text-espresso mt-0.5 block">Tempo 24 Bln</strong>
+              </div>
+            </div>
+
+            {/* Editorial Summary & Checklist */}
+            <div className="p-5 sm:p-7 space-y-4">
+              <p className="text-sm text-espresso/90 leading-relaxed">
+                Dari katalog brosur mentah dan daftar harga resmi, sistem memetakan 99 keunggulan faktual, menyusun simulasi cash tempo 24 bulan dan KPR, serta menjalankan pengawasan lead harian.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="flex items-center gap-2.5 p-3 rounded-md bg-surface border border-warmborder text-sm">
+                  <Check className="size-4 text-olive shrink-0" />
+                  <span className="font-medium text-espresso">SHM Pecah &amp; PBG Lengkap</span>
+                </div>
+                <div className="flex items-center gap-2.5 p-3 rounded-md bg-surface border border-warmborder text-sm">
+                  <Check className="size-4 text-olive shrink-0" />
+                  <span className="font-medium text-espresso">Koordinat Riil OpenStreetMap</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

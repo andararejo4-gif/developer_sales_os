@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PLANS_CONFIG, getPlanDisplayPrice } from '../lib/plans/plans-config';
-import { Check, Minus, Sparkles, ArrowRight } from 'lucide-react';
+import { Check, Minus } from 'lucide-react';
 
 interface PricingTableProps {
   onOpenWizard: () => void;
@@ -9,7 +9,6 @@ interface PricingTableProps {
 export const PricingTable: React.FC<PricingTableProps> = ({ onOpenWizard }) => {
   const [activeTab, setActiveTab] = useState<'cards' | 'matrix'>('cards');
 
-  // Matrix Feature Comparison List
   const comparisonRows = [
     { name: 'Surat Cinta 99 Keunggulan', gold: 'Gratis Semua', plat: 'Gratis Semua', diam: 'Gratis Semua' },
     { name: 'Riset Pasar Radius 500m - 25km', gold: 'Tingkat Dasar', plat: 'Lengkap', diam: 'Lengkap + Berkala' },
@@ -31,68 +30,71 @@ export const PricingTable: React.FC<PricingTableProps> = ({ onOpenWizard }) => {
   ];
 
   return (
-    <section id="paket-harga" className="py-16 md:py-24 bg-sandstone/60 border-b border-warmborder">
+    <section id="paket-harga" className="py-12 sm:py-16 lg:py-20 bg-sandstone border-b border-warmborder">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-3xl mx-auto mb-10">
-          <span className="px-2.5 py-0.5 rounded-md bg-amber-50 text-terracotta text-xs font-bold border border-amber-200">
-            Paket &amp; Feature Flag Dinamis
-          </span>
-          <h2 className="text-2xl sm:text-4xl font-extrabold text-espresso mt-2 tracking-tight">
-            Pilih Kapasitas Mesin Penjualan Proyek Anda
-          </h2>
-          <p className="text-xs sm:text-sm text-warmmuted mt-2">
-            Semua paket otomatis membuka Surat Cinta 99 Keunggulan gratis. Fitur dikontrol secara fleksibel dari panel admin tanpa deploy ulang.
-          </p>
+        {/* Header + View Switcher */}
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-8 sm:mb-10">
+          <div className="max-w-2xl">
+            <p className="text-xs font-mono uppercase tracking-widest text-terracotta font-semibold">
+              Skala &amp; Kapasitas
+            </p>
+            <h2 className="text-section-display font-extrabold text-espresso mt-2">
+              Pilih kapasitas mesin penjualan proyek Anda.
+            </h2>
+            <p className="text-sm sm:text-base text-warmmuted mt-2 leading-relaxed">
+              Seluruh paket membuka Surat Cinta 99 Keunggulan gratis di awal. Fitur dikontrol dinamis sesuai skala tim developer.
+            </p>
+          </div>
 
-          {/* Toggle View Cards vs Matrix */}
-          <div className="mt-6 inline-flex p-1 bg-white rounded-xl border border-warmborder shadow-2xs">
+          <div className="inline-flex self-start p-1 bg-surface rounded-md border border-warmborder">
             <button
               onClick={() => setActiveTab('cards')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'cards' ? 'bg-espresso text-white shadow-xs' : 'text-warmmuted hover:text-espresso'
+              className={`min-h-[44px] px-4 rounded text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
+                activeTab === 'cards' ? 'bg-espresso text-sandstone' : 'text-warmmuted hover:text-espresso'
               }`}
             >
-              Tampilan Paket
+              Ringkasan Paket
             </button>
             <button
               onClick={() => setActiveTab('matrix')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'matrix' ? 'bg-espresso text-white shadow-xs' : 'text-warmmuted hover:text-espresso'
+              className={`min-h-[44px] px-4 rounded text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
+                activeTab === 'matrix' ? 'bg-espresso text-sandstone' : 'text-warmmuted hover:text-espresso'
               }`}
             >
-              Tabel Matriks Lengkap
+              Matriks Fitur
             </button>
           </div>
         </div>
 
         {activeTab === 'cards' ? (
-          /* Cards View */
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 lg:gap-6">
             {PLANS_CONFIG.map((plan) => {
               const isPopular = plan.badge === 'Paling Populer';
-              const isEnterprise = plan.badge === 'Enterprise';
 
               return (
                 <div
                   key={plan.id}
-                  className={`rounded-2xl p-6 md:p-8 flex flex-col justify-between transition-all bg-white border ${
-                    isPopular
-                      ? 'border-terracotta shadow-md ring-2 ring-terracotta/20 relative'
-                      : isEnterprise
-                      ? 'border-warmborder shadow-xs'
-                      : 'border-warmborder shadow-xs'
+                  className={`rounded-lg p-6 sm:p-7 flex flex-col justify-between bg-surface border ${
+                    isPopular ? 'border-terracotta border-2' : 'border-warmborder'
                   }`}
                 >
                   <div>
-                    {plan.badge && (
-                      <span className={`inline-block px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider mb-3 ${
-                        isPopular ? 'bg-amber-100 text-terracotta' : 'bg-sandstone text-espresso'
-                      }`}>
-                        {plan.badge}
-                      </span>
-                    )}
-                    <h3 className="text-xl font-extrabold text-espresso">{plan.name}</h3>
-                    <p className="text-xs text-warmmuted mt-1 min-h-[34px] leading-relaxed">
+                    <div className="flex items-center justify-between gap-2 min-h-[24px]">
+                      <h3 className="text-xl font-extrabold text-espresso">{plan.name}</h3>
+                      {plan.badge && (
+                        <span
+                          className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold uppercase ${
+                            isPopular
+                              ? 'bg-terracotta text-white'
+                              : 'bg-sandstone text-espresso border border-warmborder'
+                          }`}
+                        >
+                          {plan.badge}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-sm text-warmmuted mt-2 leading-relaxed min-h-[44px]">
                       {plan.description}
                     </p>
 
@@ -100,55 +102,55 @@ export const PricingTable: React.FC<PricingTableProps> = ({ onOpenWizard }) => {
                       <span className="text-2xl font-extrabold text-espresso">
                         {getPlanDisplayPrice(plan)}
                       </span>
-                      <p className="text-[11px] text-warmmuted mt-0.5">
-                        Konsultasi kustomisasi sesuai skala unit developer
+                      <p className="text-xs text-warmmuted mt-1">
+                        Penyesuaian sesuai jumlah klaster &amp; unit
                       </p>
                     </div>
 
-                    {/* Highlights */}
-                    <div className="mt-5 space-y-2.5 text-xs">
-                      <div className="flex items-center gap-2 font-semibold text-espresso">
-                        <Check className="size-4 text-olive shrink-0" />
-                        <span>Maks. {plan.max_active_projects >= 999 ? 'Tak Terbatas' : `${plan.max_active_projects} Proyek Aktif`}</span>
-                      </div>
-                      <div className="flex items-center gap-2 font-semibold text-espresso">
-                        <Check className="size-4 text-olive shrink-0" />
-                        <span>Maks. {plan.max_sales_users >= 999 ? 'Tak Terbatas' : `${plan.max_sales_users} User Sales`}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-espresso">
-                        <Check className="size-4 text-olive shrink-0" />
-                        <span>Surat Cinta 99 Keunggulan (Gratis)</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-espresso">
-                        <Check className="size-4 text-olive shrink-0" />
-                        <span>Target Penjualan s.d. Sold Out</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-espresso">
+                    <ul className="mt-5 space-y-2.5 text-sm">
+                      <li className="flex items-center gap-2.5 font-medium text-espresso">
                         <Check className="size-4 text-olive shrink-0" />
                         <span>
-                          {plan.code === 'gold' ? 'Playbook Manual' : 'Playbook + TL Full AI'}
+                          Maks. {plan.max_active_projects >= 999 ? 'Tak Terbatas' : `${plan.max_active_projects} Proyek Aktif`}
                         </span>
-                      </div>
+                      </li>
+                      <li className="flex items-center gap-2.5 font-medium text-espresso">
+                        <Check className="size-4 text-olive shrink-0" />
+                        <span>
+                          Maks. {plan.max_sales_users >= 999 ? 'Tak Terbatas' : `${plan.max_sales_users} User Sales`}
+                        </span>
+                      </li>
+                      <li className="flex items-center gap-2.5 text-espresso/90">
+                        <Check className="size-4 text-olive shrink-0" />
+                        <span>Surat Cinta 99 Keunggulan (Gratis)</span>
+                      </li>
+                      <li className="flex items-center gap-2.5 text-espresso/90">
+                        <Check className="size-4 text-olive shrink-0" />
+                        <span>Target Penjualan s.d. Sold Out</span>
+                      </li>
+                      <li className="flex items-center gap-2.5 text-espresso/90">
+                        <Check className="size-4 text-olive shrink-0" />
+                        <span>{plan.code === 'gold' ? 'Playbook Manual' : 'Playbook + TL Full AI'}</span>
+                      </li>
                       {plan.code === 'diamond' && (
-                        <div className="flex items-center gap-2 text-terracotta font-bold">
-                          <Sparkles className="size-4 text-terracotta shrink-0" />
-                          <span>SM Semi-AI (Manusia Menyetujui)</span>
-                        </div>
+                        <li className="flex items-center gap-2.5 text-terracotta font-semibold">
+                          <Check className="size-4 text-terracotta shrink-0" />
+                          <span>SM Semi-AI (Persetujuan Manusia)</span>
+                        </li>
                       )}
-                    </div>
+                    </ul>
                   </div>
 
-                  <div className="mt-8 pt-4 border-t border-warmborder">
+                  <div className="mt-7 pt-5 border-t border-warmborder">
                     <button
                       onClick={onOpenWizard}
-                      className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                      className={`w-full min-h-[48px] px-4 rounded-md text-sm font-semibold transition-colors cursor-pointer ${
                         isPopular
-                          ? 'bg-terracotta text-white hover:bg-terracotta/90 shadow-xs'
-                          : 'bg-sandstone text-espresso hover:bg-espresso hover:text-white'
+                          ? 'bg-terracotta text-white hover:bg-terracotta/90'
+                          : 'bg-sandstone text-espresso hover:bg-espresso hover:text-sandstone border border-warmborder'
                       }`}
                     >
-                      <span>Mulai dengan {plan.name}</span>
-                      <ArrowRight className="size-3.5" />
+                      Mulai dengan {plan.name}
                     </button>
                   </div>
                 </div>
@@ -156,22 +158,21 @@ export const PricingTable: React.FC<PricingTableProps> = ({ onOpenWizard }) => {
             })}
           </div>
         ) : (
-          /* Matrix View */
-          <div className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-xs">
+          <div className="bg-surface border border-warmborder rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full min-w-[640px] text-left border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-warmborder bg-sandstone/60 font-bold text-espresso">
-                    <th className="py-4 px-6 text-sm">Fitur / Layanan</th>
-                    <th className="py-4 px-4 w-1/4">Gold</th>
-                    <th className="py-4 px-4 w-1/4 bg-amber-50/50 text-terracotta">Platinum (Populer)</th>
-                    <th className="py-4 px-4 w-1/4">Diamond (Enterprise)</th>
+                    <th className="py-3.5 px-4 sm:px-6">Fitur / Layanan</th>
+                    <th className="py-3.5 px-4 w-1/5">Gold</th>
+                    <th className="py-3.5 px-4 w-1/5 text-terracotta">Platinum</th>
+                    <th className="py-3.5 px-4 w-1/5">Diamond</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warmborder">
                   {comparisonRows.map((row, idx) => (
                     <tr key={idx} className="hover:bg-sandstone/30">
-                      <td className="py-3 px-6 font-semibold text-espresso">{row.name}</td>
+                      <td className="py-3 px-4 sm:px-6 font-medium text-espresso">{row.name}</td>
                       <td className="py-3 px-4 text-warmmuted">
                         {typeof row.gold === 'boolean' ? (
                           row.gold ? <Check className="size-4 text-olive" /> : <Minus className="size-4 text-warmmuted/40" />
@@ -179,28 +180,22 @@ export const PricingTable: React.FC<PricingTableProps> = ({ onOpenWizard }) => {
                           <span>{row.gold}</span>
                         )}
                       </td>
-                      <td className="py-3 px-4 bg-amber-50/30 font-semibold text-espresso">
+                      <td className="py-3 px-4 font-semibold text-espresso">
                         {typeof row.plat === 'boolean' ? (
                           row.plat ? <Check className="size-4 text-olive" /> : <Minus className="size-4 text-warmmuted/40" />
                         ) : (
-                          <span className={row.plat.includes('AI') ? 'text-terracotta font-bold' : ''}>{row.plat}</span>
+                          <span className={row.plat.includes('AI') ? 'text-terracotta' : ''}>{row.plat}</span>
                         )}
                       </td>
                       <td className="py-3 px-4 font-semibold text-espresso">
                         {typeof row.diam === 'boolean' ? (
                           row.diam ? <Check className="size-4 text-olive" /> : <Minus className="size-4 text-warmmuted/40" />
                         ) : (
-                          <span className={row.diam.includes('AI') ? 'text-olive font-bold' : ''}>{row.diam}</span>
+                          <span className={row.diam.includes('AI') ? 'text-olive' : ''}>{row.diam}</span>
                         )}
                       </td>
                     </tr>
                   ))}
-                  <tr className="bg-sandstone/40">
-                    <td className="py-4 px-6 font-bold text-espresso">Harga Paket</td>
-                    <td className="py-4 px-4 font-bold text-espresso">Hubungi Kami</td>
-                    <td className="py-4 px-4 font-bold text-terracotta bg-amber-50/50">Hubungi Kami</td>
-                    <td className="py-4 px-4 font-bold text-espresso">Hubungi Kami</td>
-                  </tr>
                 </tbody>
               </table>
             </div>

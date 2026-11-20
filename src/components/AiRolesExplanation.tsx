@@ -1,129 +1,133 @@
 import React from 'react';
-import { UserCheck, Bot, UserCog, CheckCircle2, FileCheck } from 'lucide-react';
+import { Check } from 'lucide-react';
 
 export const AiRolesExplanation: React.FC = () => {
+  const roles = [
+    {
+      code: '01 / COPILOT',
+      title: 'Sales Executive (SE)',
+      mode: 'Manusia Dibantu AI',
+      highlight: false,
+      summary:
+        'Interaksi hangat tetap dipegang manusia: telepon, chat WhatsApp personal, canvassing, open table talk, dan pendampingan survei lokasi.',
+      points: [
+        'Draf balasan cepat merujuk langsung pada 99 Keunggulan.',
+        'Rute canvassing harian tersusun otomatis per jam.',
+        'Input laporan harian sebelum 18.00 WIB via voice-to-text.',
+      ],
+      availability: 'Tersedia di semua paket (Gold, Platinum, Diamond)',
+    },
+    {
+      code: '02 / OTONOM 24/7',
+      title: 'Team Leader (TL)',
+      mode: 'TL Full AI',
+      highlight: true,
+      summary:
+        'AI menjalankan pengawasan teknis secara objektif: kualifikasi BANT, pembagian lead adil, evaluasi respon ≤5 menit, dan penegakan aturan 72 jam.',
+      points: [
+        'Lead tanpa tindak lanjut >72 jam otomatis dialihkan ke SE lain.',
+        'Audit scorecard mingguan berbasis data tanpa bias.',
+        'Direksi dan SM tetap dapat memantau seluruh log audit TL.',
+      ],
+      availability: 'Tersedia di paket Platinum & Diamond',
+    },
+    {
+      code: '03 / APPROVAL',
+      title: 'Sales Manager (SM)',
+      mode: 'SM Semi-AI',
+      highlight: false,
+      summary:
+        'AI menyiapkan analisis dan draf strategi penawaran, namun keputusan final tetap membutuhkan persetujuan eksplisit manusia.',
+      points: [
+        'Rekomendasi penyesuaian promo klaster berbasis serapan unit.',
+        'Setiap keputusan tercatat permanen di log persetujuan.',
+        'Angka harga tanah dan bangunan tidak bisa diubah AI.',
+      ],
+      availability: 'Tersedia penuh di paket Diamond',
+    },
+  ];
+
   return (
-    <section id="peran-ai" className="py-16 md:py-24 bg-white border-b border-warmborder">
+    <section id="peran-ai" className="py-12 sm:py-16 lg:py-20 bg-surface border-b border-warmborder">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-3xl mx-auto mb-12">
-          <span className="px-2.5 py-0.5 rounded-md bg-amber-50 text-terracotta text-xs font-bold border border-amber-200">
-            Kolaborasi Manusia &amp; AI
-          </span>
-          <h2 className="text-2xl sm:text-4xl font-extrabold text-espresso mt-2 tracking-tight">
-            Prinsip Peran AI yang Bertanggung Jawab
+        {/* Left-aligned Editorial Header (breaks centered-heading monotony) */}
+        <div className="max-w-2xl mb-8 sm:mb-12">
+          <p className="text-xs font-mono uppercase tracking-widest text-terracotta font-semibold">
+            Pembagian Peran Manusia &amp; Sistem
+          </p>
+          <h2 className="text-section-display font-extrabold text-espresso mt-2">
+            AI mengotomasi pengawasan, manusia fokus pada closing.
           </h2>
-          <p className="text-xs sm:text-sm text-warmmuted mt-2">
-            Kami tidak menggantikan interaksi hangat manusia, melainkan mengotomasi beban pengawasan dan administrasi agar tim penjualan fokus pada negosiasi dan closing.
+          <p className="text-sm sm:text-base text-warmmuted mt-3 leading-relaxed">
+            Kami memisahkan peran secara tegas agar teknologi tidak menggantikan empati saat negosiasi dengan calon pembeli rumah.
           </p>
         </div>
 
-        {/* 3 Role Columns */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* SE: Dibantu AI */}
-          <div className="bg-sandstone/30 border border-warmborder rounded-2xl p-6 md:p-8 flex flex-col justify-between">
-            <div>
-              <div className="size-12 rounded-xl bg-amber-100 text-terracotta grid place-items-center mb-4">
-                <UserCheck className="size-6" />
-              </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white text-espresso border border-warmborder">
-                Garda Terdepan
-              </span>
-              <h3 className="text-lg font-bold text-espresso mt-2">Sales Executive (SE)</h3>
-              <p className="text-xs font-semibold text-terracotta mt-0.5">SE Dibantu AI (Copilot)</p>
-              <p className="text-xs text-warmmuted mt-3 leading-relaxed">
-                Manusia menjalankan interaksi langsung: panggilan telepon, chat WhatsApp personal, canvassing, open table talk (OTT), dan mendampingi survei lokasi pembeli.
-              </p>
+        {/* Structured 3-Column Hairline Ledger Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 lg:gap-6">
+          {roles.map((role) => (
+            <div
+              key={role.code}
+              className={`rounded-lg p-6 sm:p-7 flex flex-col justify-between border ${
+                role.highlight
+                  ? 'bg-espresso text-sandstone border-espresso'
+                  : 'bg-sandstone/35 text-espresso border-warmborder'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2 pb-4 border-b border-current/15">
+                  <span
+                    className={`text-[11px] font-mono font-semibold tracking-wider ${
+                      role.highlight ? 'text-sandstone/70' : 'text-warmmuted'
+                    }`}
+                  >
+                    {role.code}
+                  </span>
+                  <span
+                    className={`text-xs font-semibold px-2.5 py-0.5 rounded ${
+                      role.highlight
+                        ? 'bg-terracotta text-white'
+                        : 'bg-surface border border-warmborder text-espresso'
+                    }`}
+                  >
+                    {role.mode}
+                  </span>
+                </div>
 
-              <div className="mt-5 space-y-2 text-xs border-t border-warmborder pt-4">
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="size-3.5 text-olive shrink-0 mt-0.5" />
-                  <span>Draf balasan pesan cepat berdasarkan Surat Cinta 99 Keunggulan.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="size-3.5 text-olive shrink-0 mt-0.5" />
-                  <span>Rute harian canvassing otomatis terpeta per jam.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="size-3.5 text-olive shrink-0 mt-0.5" />
-                  <span>Voice-to-text input laporan harian sebelum batas 18.00 WIB.</span>
-                </div>
-              </div>
-            </div>
-            <div className="mt-6 pt-3 border-t border-warmborder text-[11px] text-warmmuted">
-              Tersedia di semua paket (Gold, Platinum, Diamond)
-            </div>
-          </div>
+                <h3 className="text-lg sm:text-xl font-extrabold mt-5">{role.title}</h3>
+                <p
+                  className={`text-sm mt-2.5 leading-relaxed ${
+                    role.highlight ? 'text-sandstone/85' : 'text-warmmuted'
+                  }`}
+                >
+                  {role.summary}
+                </p>
 
-          {/* TL: Full AI */}
-          <div className="bg-espresso text-white rounded-2xl p-6 md:p-8 flex flex-col justify-between shadow-md relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-28 h-28 bg-terracotta/20 rounded-full blur-xl pointer-events-none" />
-            <div>
-              <div className="size-12 rounded-xl bg-terracotta/30 text-amber-400 border border-terracotta/40 grid place-items-center mb-4">
-                <Bot className="size-6" />
+                <ul className="mt-5 space-y-2.5 pt-4 border-t border-current/15 text-sm">
+                  {role.points.map((pt, idx) => (
+                    <li key={idx} className="flex items-start gap-2.5">
+                      <Check
+                        className={`size-4 shrink-0 mt-0.5 ${
+                          role.highlight ? 'text-terracotta' : 'text-olive'
+                        }`}
+                      />
+                      <span className={role.highlight ? 'text-sandstone/90' : 'text-espresso/90'}>
+                        {pt}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white/10 text-amber-300 border border-white/15">
-                Pengawasan Otonom 24/7
-              </span>
-              <h3 className="text-lg font-bold text-white mt-2">Team Leader (TL)</h3>
-              <p className="text-xs font-semibold text-amber-400 mt-0.5">TL Full AI</p>
-              <p className="text-xs text-stone-300 mt-3 leading-relaxed">
-                AI sepenuhnya menyusun dan menjalankan rutinitas supervisor: kualifikasi BANT, pembagian lead cerdas, evaluasi respon &le;5 menit, dan penegakan aturan 72 jam.
-              </p>
 
-              <div className="mt-5 space-y-2 text-xs border-t border-white/10 pt-4 text-stone-200">
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="size-3.5 text-amber-400 shrink-0 mt-0.5" />
-                  <span>Lead mangkrak &gt;72 jam ditarik &amp; dialihkan otomatis ke SE lain.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="size-3.5 text-amber-400 shrink-0 mt-0.5" />
-                  <span>Audit scorecard mingguan tanpa bias personal.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="size-3.5 text-amber-400 shrink-0 mt-0.5" />
-                  <span>Manusia tetap dapat login memantau ringkasan log audit TL.</span>
-                </div>
+              <div
+                className={`mt-6 pt-4 border-t border-current/15 text-xs font-medium ${
+                  role.highlight ? 'text-sandstone/70' : 'text-warmmuted'
+                }`}
+              >
+                {role.availability}
               </div>
             </div>
-            <div className="mt-6 pt-3 border-t border-white/10 text-[11px] text-amber-300">
-              Paket Platinum &amp; Diamond
-            </div>
-          </div>
-
-          {/* SM: Semi AI */}
-          <div className="bg-sandstone/30 border border-warmborder rounded-2xl p-6 md:p-8 flex flex-col justify-between">
-            <div>
-              <div className="size-12 rounded-xl bg-olive/20 text-olive grid place-items-center mb-4">
-                <UserCog className="size-6" />
-              </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white text-espresso border border-warmborder">
-                Keputusan Strategis Manusia
-              </span>
-              <h3 className="text-lg font-bold text-espresso mt-2">Sales Manager (SM)</h3>
-              <p className="text-xs font-semibold text-olive mt-0.5">SM Semi-AI (Manusia Menyetujui)</p>
-              <p className="text-xs text-warmmuted mt-3 leading-relaxed">
-                AI merumuskan rekomendasi penyesuaian target penjualan, pricelist promo, dan strategi canvassing. <strong>Manusia (SM) wajib meninjau dan menyetujui</strong> sebelum diberlakukan.
-              </p>
-
-              <div className="mt-5 space-y-2 text-xs border-t border-warmborder pt-4">
-                <div className="flex items-start gap-2">
-                  <FileCheck className="size-3.5 text-olive shrink-0 mt-0.5" />
-                  <span>Persetujuan tercatat di tabel database <code>approvals</code>.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="size-3.5 text-olive shrink-0 mt-0.5" />
-                  <span>Manusia memiliki kontrol penuh CRUD proyek dan unit.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="size-3.5 text-olive shrink-0 mt-0.5" />
-                  <span>AI tidak dapat mengubah harga sepihak tanpa tanda tangan digital SM.</span>
-                </div>
-              </div>
-            </div>
-            <div className="mt-6 pt-3 border-t border-warmborder text-[11px] text-warmmuted">
-              Fitur Eksklusif Paket Diamond
-            </div>
-          </div>
+          ))}
         </div>
       </div>
     </section>
