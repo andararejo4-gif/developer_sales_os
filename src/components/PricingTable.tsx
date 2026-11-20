@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PLANS_CONFIG, TOPUP_PACKAGES_CONFIG, PACKAGE_EXCLUSIONS_NOTICE, getPlanDisplayPrice } from '../lib/plans/plans-config';
 import { Check, Minus, Zap, Users, FolderGit2, HardDrive, Phone, Sparkles, AlertCircle } from 'lucide-react';
+import { PlanCheckoutModal } from './PlanCheckoutModal';
 
 interface PricingTableProps {
   onOpenWizard: () => void;
@@ -8,10 +9,11 @@ interface PricingTableProps {
 
 export const PricingTable: React.FC<PricingTableProps> = ({ onOpenWizard }) => {
   const [activeTab, setActiveTab] = useState<'cards' | 'matrix' | 'topups'>('cards');
+  const [checkoutPlan, setCheckoutPlan] = useState<'gold' | 'platinum' | 'diamond' | null>(null);
 
   const comparisonRows = [
+    { name: 'Masa langganan: 3 bulan', gold: '3 bulan', plat: '3 bulan', diam: '3 bulan' },
     { name: 'Jumlah Fitur Software Kumulatif', gold: '63 Fitur', plat: '88 Fitur', diam: '100 Fitur' },
-    { name: 'Periode Lisensi', gold: '3 Bulan Kalender', plat: '3 Bulan Kalender', diam: '3 Bulan Kalender' },
     { name: 'Total Saldo AIC (1 Periode)', gold: '20.000 AIC', plat: '70.000 AIC', diam: '240.000 AIC' },
     { name: 'Jam Ops Manusia Pendamping', gold: '2 Jam', plat: '6 Jam', diam: '16 Jam' },
     { name: 'Batas Proyek Aktif', gold: '1 Proyek', plat: '3 Proyek', diam: '10 Proyek' },
@@ -32,6 +34,18 @@ export const PricingTable: React.FC<PricingTableProps> = ({ onOpenWizard }) => {
     { name: 'Sales Manager (SM) Semi-AI', gold: 'Dokumen Manual', plat: 'Dokumen Manual', diam: 'SM Semi-AI (Manusia Setuju)' },
     { name: 'Target Waktu Triage Dukungan', gold: '<= 8 Jam Kerja', plat: '<= 4 Jam Kerja', diam: '<= 1 Jam Kerja + PIC' },
   ];
+
+  const handleScrollToMatrix = () => {
+    setActiveTab('matrix');
+    setTimeout(() => {
+      const el = document.getElementById('row-masa-langganan-matrix');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('bg-terracotta/10');
+        setTimeout(() => el.classList.remove('bg-terracotta/10'), 2000);
+      }
+    }, 100);
+  };
 
   return (
     <section id="paket-harga" className="py-12 sm:py-16 lg:py-20 bg-sandstone border-b border-warmborder">
@@ -172,7 +186,7 @@ export const PricingTable: React.FC<PricingTableProps> = ({ onOpenWizard }) => {
 
                   <div className="mt-7 pt-5 border-t border-warmborder">
                     <button
-                      onClick={onOpenWizard}
+                      onClick={() => setCheckoutPlan(plan.code)}
                       className={`w-full min-h-[48px] px-4 rounded-md text-sm font-semibold transition-colors cursor-pointer ${
                         isPopular
                           ? 'bg-terracotta text-white hover:bg-terracotta/90'
@@ -180,6 +194,13 @@ export const PricingTable: React.FC<PricingTableProps> = ({ onOpenWizard }) => {
                       }`}
                     >
                       Mulai dengan {plan.name}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleScrollToMatrix}
+                      className="mt-2.5 text-xs text-warmmuted hover:text-espresso underline cursor-pointer w-full text-center block transition-colors"
+                    >
+                      Lihat rincian paket &darr;
                     </button>
                   </div>
                 </div>
@@ -200,27 +221,44 @@ export const PricingTable: React.FC<PricingTableProps> = ({ onOpenWizard }) => {
                 </thead>
                 <tbody className="divide-y divide-warmborder">
                   {comparisonRows.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-sandstone/30">
-                      <td className="py-3 px-4 sm:px-6 font-medium text-espresso">{row.name}</td>
+                    <tr
+                      key={idx}
+                      id={idx === 0 ? 'row-masa-langganan-matrix' : undefined}
+                      className={`hover:bg-sandstone/30 transition-colors ${
+                        idx === 0 ? 'bg-sandstone/50 font-bold border-l-4 border-l-terracotta' : ''
+                      }`}
+                    >
+                      <td className="py-3 px-4 sm:px-6 font-medium text-espresso flex items-center gap-2">
+                        <span>{row.name}</span>
+                        {idx === 0 && (
+                          <span className="text-[10px] font-mono text-terracotta uppercase font-bold px-1.5 py-0.5 rounded bg-terracotta/10">
+                            Lisensi Pokok
+                          </span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-warmmuted">
                         {typeof row.gold === 'boolean' ? (
                           row.gold ? <Check className="size-4 text-olive" /> : <Minus className="size-4 text-warmmuted/40" />
                         ) : (
-                          <span>{row.gold}</span>
+                          <span className={idx === 0 ? 'font-bold text-espresso' : ''}>{row.gold}</span>
                         )}
                       </td>
                       <td className="py-3 px-4 font-semibold text-espresso">
                         {typeof row.plat === 'boolean' ? (
                           row.plat ? <Check className="size-4 text-olive" /> : <Minus className="size-4 text-warmmuted/40" />
                         ) : (
-                          <span className={row.plat.includes('AI') ? 'text-terracotta' : ''}>{row.plat}</span>
+                          <span className={row.plat.includes('AI') ? 'text-terracotta' : idx === 0 ? 'font-bold text-terracotta' : ''}>
+                            {row.plat}
+                          </span>
                         )}
                       </td>
                       <td className="py-3 px-4 font-semibold text-espresso">
                         {typeof row.diam === 'boolean' ? (
                           row.diam ? <Check className="size-4 text-olive" /> : <Minus className="size-4 text-warmmuted/40" />
                         ) : (
-                          <span className={row.diam.includes('AI') ? 'text-olive' : ''}>{row.diam}</span>
+                          <span className={row.diam.includes('AI') ? 'text-olive' : idx === 0 ? 'font-bold text-olive' : ''}>
+                            {row.diam}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -276,6 +314,13 @@ export const PricingTable: React.FC<PricingTableProps> = ({ onOpenWizard }) => {
           </div>
         </div>
       </div>
+
+      <PlanCheckoutModal
+        isOpen={!!checkoutPlan}
+        onClose={() => setCheckoutPlan(null)}
+        initialPlanCode={checkoutPlan || 'platinum'}
+        onProceedToOnboarding={onOpenWizard}
+      />
     </section>
   );
 };

@@ -264,7 +264,7 @@ export const PACKAGE_EXCLUSIONS_NOTICE = [
 
 export function getPlanDisplayPrice(plan: PlanDefinition): string {
   if (!plan.price) return 'Hubungi Kami';
-  return `Rp ${plan.price.toLocaleString('id-ID')} / 3 Bulan`;
+  return `Rp ${plan.price.toLocaleString('id-ID')}`;
 }
 
 

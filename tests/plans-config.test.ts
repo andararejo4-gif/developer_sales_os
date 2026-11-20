@@ -19,7 +19,18 @@ describe('Config-Driven Plans & Feature Flags (Blueprint v1.2)', () => {
     expect(diam.max_active_projects).toBe(10);
     expect(diam.max_sales_users).toBe(75);
 
-    expect(getPlanDisplayPrice(gold)).toContain('4.900.000');
+    expect(getPlanDisplayPrice(gold)).toBe('Rp 4.900.000');
+    expect(getPlanDisplayPrice(gold)).not.toContain('/ 3 Bulan');
+    expect(getPlanDisplayPrice(plat)).toBe('Rp 12.900.000');
+    expect(getPlanDisplayPrice(plat)).not.toContain('/ 3 Bulan');
+    expect(getPlanDisplayPrice(diam)).toBe('Rp 39.900.000');
+    expect(getPlanDisplayPrice(diam)).not.toContain('/ 3 Bulan');
+  });
+
+  it('semua paket harus memiliki billing_period 3_bulan_kalender', () => {
+    PLANS_CONFIG.forEach(plan => {
+      expect(plan.billing_period).toBe('3_bulan_kalender');
+    });
   });
 
   it('semua paket (Gold, Platinum, Diamond) harus membuka Surat Cinta 99 Keunggulan gratis', () => {

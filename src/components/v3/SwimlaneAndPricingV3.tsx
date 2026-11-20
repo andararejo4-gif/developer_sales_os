@@ -3,6 +3,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Check, Minus, Sliders } from 'lucide-react';
 import { PLANS_CONFIG, getPlanDisplayPrice } from '../../lib/plans/plans-config';
+import { PlanCheckoutModal } from '../PlanCheckoutModal';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -49,6 +50,7 @@ const SWIMLANES = [
 ];
 
 const MATRIX_ROWS = [
+  { name: 'Masa langganan: 3 bulan', gold: '3 bulan', platinum: '3 bulan', diamond: '3 bulan' },
   { name: 'Surat Cinta 99 Keunggulan', gold: 'Gratis Semua', platinum: 'Gratis Semua', diamond: 'Gratis Semua' },
   { name: 'Riset Pasar Radius 500m - 25km', gold: 'Tingkat Dasar', platinum: 'Lengkap', diamond: 'Lengkap + Berkala' },
   { name: 'Target Penjualan s.d. Sold Out', gold: true, platinum: true, diamond: true },
@@ -68,6 +70,7 @@ export const SwimlaneAndPricingV3: React.FC<SwimlaneAndPricingV3Props> = ({ onOp
   const swimlaneRef = useRef<HTMLElement>(null);
   const [sweepProgress, setSweepProgress] = useState<number>(0.15);
   const [mobileRole, setMobileRole] = useState<string>('tl');
+  const [checkoutPlan, setCheckoutPlan] = useState<'gold' | 'platinum' | 'diamond' | null>(null);
 
   // Plan Configurator inputs
   const [projectCount, setProjectCount] = useState<number>(2);
@@ -388,16 +391,36 @@ export const SwimlaneAndPricingV3: React.FC<SwimlaneAndPricingV3Props> = ({ onOp
                     </ul>
                   </div>
 
-                  <button
-                    onClick={onOpenWizard}
-                    className={`mt-6 w-full min-h-[48px] rounded-full font-bold text-sm transition-colors cursor-pointer ${
-                      isRec
-                        ? 'bg-[#0B3D2E] text-[#C6F432] hover:bg-[#135440]'
-                        : 'bg-[#E4F1E8] text-[#0B3D2E] hover:bg-[#CFE1D5]'
-                    }`}
-                  >
-                    Mulai dengan {plan.name}
-                  </button>
+                  <div className="mt-6 flex flex-col items-center">
+                    <button
+                      onClick={onOpenWizard}
+                      className={`w-full min-h-[48px] rounded-full font-bold text-sm transition-colors cursor-pointer ${
+                        isRec
+                          ? 'bg-[#0B3D2E] text-[#C6F432] hover:bg-[#135440]'
+                          : 'bg-[#E4F1E8] text-[#0B3D2E] hover:bg-[#CFE1D5]'
+                      }`}
+                    >
+                      Mulai dengan {plan.name}
+                    </button>
+                    <a
+                      href="#row-masa-langganan-v3"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const el = document.getElementById('row-masa-langganan-v3') || document.getElementById('row-masa-langganan-v3-mobile');
+                        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                      className="text-xs text-[#2F9E5B] hover:text-[#0B3D2E] underline font-medium text-center block mt-2.5 transition-colors cursor-pointer"
+                    >
+                      Lihat rincian paket &darr;
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setCheckoutPlan(plan.code)}
+                      className="text-[11px] font-mono text-[#3B5E50] hover:text-[#0B3D2E] underline mt-1.5 cursor-pointer block text-center"
+                    >
+                      Lihat Invoice &amp; Checkout &rarr;
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -430,9 +453,18 @@ export const SwimlaneAndPricingV3: React.FC<SwimlaneAndPricingV3Props> = ({ onOp
 
               <div className="divide-y divide-[#CFE1D5]">
                 {MATRIX_ROWS.map((row, idx) => (
-                  <div key={idx} className="bg-white">
-                    <div className="px-3.5 pt-3 pb-1.5 text-xs font-bold text-[#0B3D2E] bg-[#F6FAF7]/70">
-                      {row.name}
+                  <div
+                    key={idx}
+                    id={idx === 0 ? 'row-masa-langganan-v3-mobile' : undefined}
+                    className={`bg-white ${idx === 0 ? 'border-l-4 border-l-[#2F9E5B]' : ''}`}
+                  >
+                    <div className="px-3.5 pt-3 pb-1.5 text-xs font-bold text-[#0B3D2E] bg-[#F6FAF7]/70 flex items-center justify-between">
+                      <span>{row.name}</span>
+                      {idx === 0 && (
+                        <span className="text-[10px] font-mono text-[#2F9E5B] uppercase font-bold">
+                          Lisensi Pokok
+                        </span>
+                      )}
                     </div>
                     <div className="grid grid-cols-3 divide-x divide-[#E4F1E8] text-center">
                       <div className={`py-2.5 px-1.5 flex items-center justify-center leading-tight text-[11px] ${recommendedCode === 'gold' ? 'bg-[#EAF4D3]/55' : ''}`}>
@@ -469,8 +501,19 @@ export const SwimlaneAndPricingV3: React.FC<SwimlaneAndPricingV3Props> = ({ onOp
                 </thead>
                 <tbody className="divide-y divide-[#E4F1E8] text-sm">
                   {MATRIX_ROWS.map((row, idx) => (
-                    <tr key={idx}>
-                      <td className="p-4 font-medium text-[#0B3D2E]">{row.name}</td>
+                    <tr
+                      key={idx}
+                      id={idx === 0 ? 'row-masa-langganan-v3' : undefined}
+                      className={idx === 0 ? 'bg-[#F6FAF7]/80 font-semibold' : undefined}
+                    >
+                      <td className="p-4 font-medium text-[#0B3D2E] flex items-center gap-2">
+                        <span>{row.name}</span>
+                        {idx === 0 && (
+                          <span className="text-[10px] font-mono text-[#2F9E5B] bg-[#EAF4D3] px-2 py-0.5 rounded font-bold uppercase">
+                            Lisensi Pokok
+                          </span>
+                        )}
+                      </td>
                       <td className={`p-4 text-center transition-colors ${recommendedCode === 'gold' ? 'bg-[#EAF4D3]/55' : ''}`}>
                         {renderCell(row.gold)}
                       </td>
@@ -488,6 +531,12 @@ export const SwimlaneAndPricingV3: React.FC<SwimlaneAndPricingV3Props> = ({ onOp
           </div>
         </div>
       </section>
+
+      <PlanCheckoutModal
+        isOpen={!!checkoutPlan}
+        onClose={() => setCheckoutPlan(null)}
+        initialPlanCode={checkoutPlan || 'platinum'}
+      />
     </>
   );
 };

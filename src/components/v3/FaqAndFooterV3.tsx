@@ -31,6 +31,11 @@ const FAQS_V3 = [
     q: 'Format dokumen apa saja yang dapat diunduh?',
     a: 'Seluruh artefak (Surat Cinta 99 Keunggulan, Riset Pasar, Target Penjualan, Kalender Konten, dan Playbook) dapat diekspor ke Microsoft Word (DOCX), PDF siap cetak, dan HTML mandiri.',
   },
+  {
+    num: '06',
+    q: 'Berapa lama masa aktif paket langganan dan bagaimana ketentuan saldonya?',
+    a: 'Masa langganan untuk seluruh paket (Gold, Platinum, Diamond) adalah 3 bulan kalender (90 hari). Seluruh kuota kapasitas, termasuk total saldo AIC dan jam pendampingan operasional, aktif penuh selama masa langganan 3 bulan tanpa pemotongan reset bulanan.',
+  },
 ];
 
 export const FaqAndFooterV3: React.FC<FaqAndFooterV3Props> = ({ onOpenWizard }) => {
