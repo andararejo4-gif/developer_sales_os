@@ -67,7 +67,7 @@ export const RailNavV3: React.FC<RailNavV3Props> = ({
       {/* ========================================================= */}
       {/* DESKTOP & TABLET STICKY TOP CHAPTER NAVBAR (sm:block)     */}
       {/* ========================================================= */}
-      <header className="hidden sm:block sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#CFE1D5]">
+      <header className="hidden sm:block sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#CFE1D5]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
           {/* Brand */}
           <a href="/" className="flex items-center gap-2.5 min-h-[44px] shrink-0">
@@ -155,7 +155,7 @@ export const RailNavV3: React.FC<RailNavV3Props> = ({
       {/* ========================================================= */}
       {/* MOBILE TOP MINI HEADER (<640px)                           */}
       {/* ========================================================= */}
-      <header className="flex sm:hidden sticky top-0 z-40 bg-white border-b border-[#CFE1D5] px-4 h-14 items-center justify-between gap-2">
+      <header className="flex sm:hidden sticky top-0 z-50 bg-white border-b border-[#CFE1D5] px-4 h-14 items-center justify-between gap-2">
         <a href="/" className="flex items-center gap-2 min-h-[44px] min-w-0">
           <div className="size-8 rounded-lg bg-[#0B3D2E] text-[#C6F432] grid place-items-center font-display-v3 font-extrabold text-xs shrink-0">
             GP
@@ -186,7 +186,7 @@ export const RailNavV3: React.FC<RailNavV3Props> = ({
       {/* ========================================================= */}
       <nav
         aria-label="Navigasi bawah mobile"
-        className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[#CFE1D5] pb-safe"
+        className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-[#CFE1D5] pb-safe"
       >
         <div className="grid grid-cols-5 h-16 px-1">
           {[
@@ -232,7 +232,7 @@ export const RailNavV3: React.FC<RailNavV3Props> = ({
 
       {/* Mobile Full Chapter Drawer */}
       {drawerOpen && (
-        <div className="sm:hidden fixed inset-0 z-50 bg-[#0B3D2E]/40 flex items-end">
+        <div className="sm:hidden fixed inset-0 z-[60] bg-[#0B3D2E]/40 flex items-end">
           <div className="w-full bg-white rounded-t-2xl border-t border-[#CFE1D5] p-5 pb-8 space-y-4 max-h-[82dvh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <span className="font-display-v3 font-extrabold text-base text-[#0B3D2E]">

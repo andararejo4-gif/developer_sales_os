@@ -305,10 +305,14 @@ export const InteractiveMap: React.FC = () => {
         distMeters,
         inRadius: distMeters <= selectedRadius,
       };
+    }).sort((a, b) => {
+      if (a.inRadius !== b.inRadius) return a.inRadius ? -1 : 1;
+      return a.distMeters - b.distMeters;
     });
   }, [originPoint, selectedRadius]);
 
   const inRadiusCount = poisWithRadius.filter((p) => p.inRadius).length;
+  const outsideCount = POIS.length - inRadiusCount;
 
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
@@ -618,7 +622,7 @@ export const InteractiveMap: React.FC = () => {
               )}
             </div>
             <span className="font-mono text-warmmuted">
-              {inRadiusCount} dari {POIS.length} POI dalam radius {(selectedRadius / 1000).toFixed(selectedRadius < 1000 ? 1 : 0)} km
+              {inRadiusCount} dalam radius {(selectedRadius / 1000).toFixed(selectedRadius < 1000 ? 1 : 0)} km · {outsideCount} di luar radius
             </span>
           </div>
         </div>
@@ -675,7 +679,7 @@ export const InteractiveMap: React.FC = () => {
                               : 'bg-sandstone text-warmmuted'
                           }`}
                         >
-                          {p.inRadius ? 'Dalam Radius' : p.category}
+                          {p.inRadius ? 'Dalam radius' : 'Di luar radius'}
                         </span>
                       </div>
                       <p className="text-xs text-terracotta font-medium mt-1 flex items-center gap-1.5">
