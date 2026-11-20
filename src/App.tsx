@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { PublicHomepage } from './components/PublicHomepage';
-import { PublicHomepageV2 } from './components/v2/PublicHomepageV2';
 import { PublicHomepageV3 } from './components/v3/PublicHomepageV3';
 import { MarketResearchViewer } from './components/MarketResearchViewer';
 import { SalesTargetViewer } from './components/SalesTargetViewer';
@@ -122,17 +120,6 @@ function StatusBadge({ status }: { status: Status }) {
 
 export default function App() {
   const [viewMode, setViewMode] = useState<'homepage' | 'dashboard'>('homepage');
-  const [demoVersion] = useState<'v1' | 'v2' | 'v3'>(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const d = params.get('demo');
-      if (d === 'v3') return 'v3';
-      if (d === 'v2') return 'v2';
-      return 'v1';
-    } catch {
-      return 'v1';
-    }
-  });
   const [role, setRole] = useState<RoleKey>('SE');
   const user = USERS_BY_ROLE[role];
 
@@ -278,13 +265,7 @@ export default function App() {
       setViewMode('dashboard');
     };
 
-    return demoVersion === 'v3' ? (
-      <PublicHomepageV3 onEnterDashboard={handleEnterDashboard} />
-    ) : demoVersion === 'v2' ? (
-      <PublicHomepageV2 onEnterDashboard={handleEnterDashboard} />
-    ) : (
-      <PublicHomepage onEnterDashboard={handleEnterDashboard} />
-    );
+    return <PublicHomepageV3 onEnterDashboard={handleEnterDashboard} />;
   }
 
   return (
