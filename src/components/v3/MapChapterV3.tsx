@@ -2,7 +2,15 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import gsap from 'gsap';
-import { Compass, Filter, Home, MapPin, Navigation, X } from 'lucide-react';
+import {
+  Compass,
+  Filter,
+  Home,
+  Info,
+  MapPin,
+  Navigation,
+  X,
+} from 'lucide-react';
 import {
   CLUSTERS,
   HOME_SVG_PATH,
@@ -14,6 +22,7 @@ import {
   haversineMeters,
   type ClusterData,
   type POI,
+  type PoiCategoryKey,
 } from '../InteractiveMap';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -24,58 +33,43 @@ function parseKm(approxDistance: string): number {
 }
 
 export interface CategoryFilterOption {
-  id: 'all' | POI['category'];
+  id: string;
   label: string;
-  shortLabel: string;
+  key: PoiCategoryKey | 'all';
 }
 
-export const CATEGORY_OPTIONS: CategoryFilterOption[] = [
-  { id: 'all', label: 'Semua Fasilitas', shortLabel: 'Semua' },
-  { id: 'Fasilitas Medis', label: 'Rumah Sakit & Medis', shortLabel: 'Rumah Sakit' },
-  { id: 'Pendidikan', label: 'Sekolah & Kampus', shortLabel: 'Sekolah' },
-  { id: 'Pusat Belanja', label: 'Pusat Belanja & Pasar', shortLabel: 'Belanja' },
-  { id: 'Transportasi', label: 'Transportasi & Stasiun', shortLabel: 'Transport' },
-  { id: 'Pemerintahan', label: 'Pemerintahan & Sipil', shortLabel: 'Pemerintahan' },
+export const NINE_CATEGORIES: CategoryFilterOption[] = [
+  { id: 'all', label: 'Semua Fasilitas', key: 'all' },
+  { id: 'pendidikan', label: 'Pendidikan', key: 'pendidikan' },
+  { id: 'tempat_ibadah', label: 'Tempat Ibadah', key: 'tempat_ibadah' },
+  { id: 'kesehatan', label: 'Kesehatan', key: 'kesehatan' },
+  { id: 'belanja', label: 'Belanja', key: 'belanja' },
+  { id: 'transportasi', label: 'Transportasi', key: 'transportasi' },
+  { id: 'layanan_publik', label: 'Layanan Publik', key: 'layanan_publik' },
+  { id: 'keuangan', label: 'Keuangan', key: 'keuangan' },
+  { id: 'rekreasi', label: 'Rekreasi', key: 'rekreasi' },
+  { id: 'kuliner', label: 'Kuliner', key: 'kuliner' },
 ];
 
-const CATEGORY_STYLES: Record<
-  POI['category'],
-  { badgeBg: string; badgeText: string; pinBg: string; iconColor: string }
-> = {
-  'Fasilitas Medis': {
-    badgeBg: '#FEE2E2',
-    badgeText: '#991B1B',
-    pinBg: '#DC2626',
-    iconColor: '#FFFFFF',
-  },
-  Pendidikan: {
-    badgeBg: '#DBEAFE',
-    badgeText: '#1E40AF',
-    pinBg: '#2563EB',
-    iconColor: '#FFFFFF',
-  },
-  Pemerintahan: {
-    badgeBg: '#D1FAE5',
-    badgeText: '#065F46',
-    pinBg: '#059669',
-    iconColor: '#FFFFFF',
-  },
-  Transportasi: {
-    badgeBg: '#CCFBF1',
-    badgeText: '#115E59',
-    pinBg: '#0D9488',
-    iconColor: '#FFFFFF',
-  },
-  'Pusat Belanja': {
-    badgeBg: '#FEF3C7',
-    badgeText: '#92400E',
-    pinBg: '#D97706',
-    iconColor: '#FFFFFF',
-  },
+export const CATEGORY_COLORS: Record<string, { pinBg: string; border: string }> = {
+  pendidikan: { pinBg: '#2563EB', border: '#1D4ED8' },
+  tempat_ibadah: { pinBg: '#7C3AED', border: '#6D28D9' },
+  kesehatan: { pinBg: '#DC2626', border: '#B91C1C' },
+  belanja: { pinBg: '#D97706', border: '#B45309' },
+  transportasi: { pinBg: '#0D9488', border: '#0F766E' },
+  layanan_publik: { pinBg: '#059669', border: '#047857' },
+  keuangan: { pinBg: '#4F46E5', border: '#4338CA' },
+  rekreasi: { pinBg: '#16A34A', border: '#15803D' },
+  kuliner: { pinBg: '#EA580C', border: '#C2410C' },
 };
 
+function getCategoryTheme(catKey?: string) {
+  const k = (catKey || '').toLowerCase();
+  return CATEGORY_COLORS[k] || { pinBg: '#0B3D2E', border: '#042219' };
+}
+
 function buildPoiPopupHtml(poi: POI, km: number, inRadius: boolean): string {
-  const catStyle = CATEGORY_STYLES[poi.category];
+  const catColor = getCategoryTheme(poi.categoryKey || poi.category);
   const svgPath = getPoiSvgPath(poi.category);
   const statusBadge = inRadius
     ? `<span style="font-size:10px;font-family:monospace;font-weight:700;padding:2px 7px;border-radius:999px;background:#EAF4D3;color:#0B3D2E;">Dalam radius</span>`
@@ -83,19 +77,19 @@ function buildPoiPopupHtml(poi: POI, km: number, inRadius: boolean): string {
 
   return `
     <div style="font-family:'Plus Jakarta Sans',sans-serif;color:#0B3D2E;padding:2px 0;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-        <div style="width:30px;height:30px;border-radius:999px;background:${catStyle.pinBg};display:grid;place-items:center;flex-shrink:0;">
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;">
+        <div style="width:32px;height:32px;border-radius:999px;background:${catColor.pinBg};display:grid;place-items:center;flex-shrink:0;margin-top:2px;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">${svgPath}</svg>
         </div>
         <div style="min-width:0;flex:1;">
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-            <span style="font-size:9.5px;font-family:monospace;font-weight:800;text-transform:uppercase;color:${catStyle.pinBg};">${poi.category}</span>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px;">
+            <span style="font-size:9.5px;font-family:monospace;font-weight:800;text-transform:uppercase;color:${catColor.pinBg};">${poi.categoryLabel || poi.category}</span>
             ${statusBadge}
           </div>
-          <h4 style="font-size:13.5px;font-weight:800;line-height:1.25;color:#0B3D2E;margin:2px 0 0 0;">${poi.name}</h4>
+          <h4 style="font-size:13.5px;font-weight:800;line-height:1.3;color:#0B3D2E;margin:0;">${poi.name}</h4>
         </div>
       </div>
-      <div style="font-size:11px;font-weight:700;color:#0B3D2E;background:#F6FAF7;border:1px solid #CFE1D5;border-radius:8px;padding:4px 8px;margin-bottom:8px;font-family:monospace;display:flex;align-items:center;justify-content:space-between;">
+      <div style="font-size:11px;font-weight:700;color:#0B3D2E;background:#F6FAF7;border:1px solid #CFE1D5;border-radius:8px;padding:5px 8px;margin-bottom:8px;font-family:monospace;display:flex;align-items:center;justify-content:space-between;">
         <span>${poi.approxDistance}</span>
         <span style="color:#2F9E5B;">(${km.toFixed(1)} km)</span>
       </div>
@@ -135,23 +129,10 @@ function buildClusterPopupHtml(c: ClusterData): string {
   `;
 }
 
-function getHeadlineCounterText(
-  selectedCategory: 'all' | POI['category'],
-  inRadiusCount: number,
-  outsideCount: number,
-  radiusLabel: string
-): string {
-  if (selectedCategory === 'all') {
-    return `${inRadiusCount} dalam radius ${radiusLabel} · ${outsideCount} di luar radius`;
-  }
-  const categoryNames: Record<POI['category'], string> = {
-    'Fasilitas Medis': 'rumah sakit & medis',
-    Pendidikan: 'sekolah & kampus',
-    'Pusat Belanja': 'pusat belanja & pasar',
-    Transportasi: 'titik transportasi',
-    Pemerintahan: 'fasilitas publik/sipil',
-  };
-  return `${inRadiusCount} ${categoryNames[selectedCategory]} dalam radius ${radiusLabel} · ${outsideCount} di luar radius`;
+interface ClusterGroup {
+  id: string;
+  center: [number, number];
+  items: Array<{ poi: POI; km: number; inRadius: boolean }>;
 }
 
 export const MapChapterV3: React.FC = () => {
@@ -164,9 +145,11 @@ export const MapChapterV3: React.FC = () => {
 
   const [selectedRadius, setSelectedRadius] = useState<number>(5000);
   const [activeClusterId, setActiveClusterId] = useState<'all' | ClusterData['id']>('all');
-  const [selectedCategory, setSelectedCategory] = useState<'all' | POI['category']>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedPoi, setSelectedPoi] = useState<POI | null>(null);
   const [selectedCluster, setSelectedCluster] = useState<ClusterData | null>(null);
+  const [currentZoom, setCurrentZoom] = useState<number>(13);
+  const [spiderfiedClusterId, setSpiderfiedClusterId] = useState<string | null>(null);
   const [wheelUnlocked, setWheelUnlocked] = useState<boolean>(false);
 
   const originPoint = useMemo<[number, number]>(() => {
@@ -187,7 +170,6 @@ export const MapChapterV3: React.FC = () => {
         inRadius: meters <= selectedRadius,
       };
     }).sort((a, b) => {
-      // Facilities within radius first!
       if (a.inRadius !== b.inRadius) {
         return a.inRadius ? -1 : 1;
       }
@@ -195,10 +177,12 @@ export const MapChapterV3: React.FC = () => {
     });
   }, [originPoint, selectedRadius]);
 
-  // Filtered by active category (Rumah Sakit, Sekolah, dll)
+  // Filtered by active category (9 categories + 'all')
   const filteredPois = useMemo(() => {
     if (selectedCategory === 'all') return poisWithDistance;
-    return poisWithDistance.filter((item) => item.poi.category === selectedCategory);
+    return poisWithDistance.filter(
+      (item) => (item.poi.categoryKey || item.poi.category.toLowerCase()) === selectedCategory.toLowerCase()
+    );
   }, [poisWithDistance, selectedCategory]);
 
   const inRadiusCount = useMemo(
@@ -216,7 +200,12 @@ export const MapChapterV3: React.FC = () => {
     [selectedRadius]
   );
 
-  // 1. Initialize Leaflet Map with OpenStreetMap clean tiles & immediate mobile touch drag
+  const activeCategoryObj = useMemo(
+    () => NINE_CATEGORIES.find((c) => c.id === selectedCategory) ?? NINE_CATEGORIES[0],
+    [selectedCategory]
+  );
+
+  // 1. Initialize Leaflet Map
   useEffect(() => {
     if (!mapElRef.current || mapRef.current) return;
 
@@ -245,8 +234,13 @@ export const MapChapterV3: React.FC = () => {
     mapRef.current = map;
     layerGroupRef.current = group;
 
-    // Desktop click-to-unlock wheel zoom, mouseleave re-locks so page scroll stays effortless
+    map.on('zoomend', () => {
+      setCurrentZoom(map.getZoom());
+    });
+
+    // Close spiderfy when map clicked
     map.on('click', () => {
+      setSpiderfiedClusterId(null);
       if (window.innerWidth >= 640) {
         map.scrollWheelZoom.enable();
         setWheelUnlocked(true);
@@ -260,7 +254,7 @@ export const MapChapterV3: React.FC = () => {
     };
     container.addEventListener('mouseleave', handleLeave);
 
-    // Arrival flyTo choreography once when section scrolls into view
+    // Initial flyTo on arrival
     let trigger: ScrollTrigger | null = null;
     if (!prefersReduced && sectionRef.current) {
       trigger = ScrollTrigger.create({
@@ -290,7 +284,7 @@ export const MapChapterV3: React.FC = () => {
     };
   }, []);
 
-  // 2. Smooth flyTo when radius or cluster changes (after initial arrival)
+  // 2. Smooth flyTo when radius or cluster changes
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !hasArrivedRef.current) return;
@@ -303,7 +297,7 @@ export const MapChapterV3: React.FC = () => {
     }
   }, [originPoint, activeRadiusObj.zoom, activeClusterId]);
 
-  // 3. Render concentric rings, project beacon, clusters, POIs, and optional dashed route
+  // 3. Render Concentric Rings, Beacon, Clusters, POIs, Clustering & Spiderfy
   useEffect(() => {
     const map = mapRef.current;
     const layer = layerGroupRef.current;
@@ -326,7 +320,7 @@ export const MapChapterV3: React.FC = () => {
       }).addTo(layer);
     });
 
-    // Active emerald radius ring with subtle chartreuse wash
+    // Active emerald radius ring
     L.circle(originPoint, {
       radius: selectedRadius,
       color: '#2F9E5B',
@@ -337,7 +331,7 @@ export const MapChapterV3: React.FC = () => {
       interactive: false,
     }).addTo(layer);
 
-    // Project Centroid Beacon (sole pulsing element — crisp medium scale)
+    // Project Centroid Beacon
     const hubIcon = L.divIcon({
       className: '',
       iconSize: [44, 44],
@@ -353,7 +347,7 @@ export const MapChapterV3: React.FC = () => {
     });
     L.marker(PROJECT_CENTROID, { icon: hubIcon, zIndexOffset: 500 }).addTo(layer);
 
-    // Cluster markers (balanced 26px house pin + crisp pill label with cluster type)
+    // Cluster markers (Nagoya, Osaka, Tokyo)
     CLUSTERS.forEach((c) => {
       const isFocused = activeClusterId === c.id;
       const offsetY = c.id === 'tokyo' ? 10 : c.id === 'osaka' ? -30 : 6;
@@ -409,67 +403,185 @@ export const MapChapterV3: React.FC = () => {
       (item) => item.inRadius || item.poi.name === selectedPoi?.name
     );
 
-    // Facility Markers (distinct category pins + tooltip on hover + rich popup on click/tap)
-    visiblePoiItems.forEach(({ poi, km, inRadius }) => {
-      const isSelected = selectedPoi?.name === poi.name;
-      const catStyle = CATEGORY_STYLES[poi.category];
+    // =========================================================================
+    // SPATIAL CLUSTERING & SPIDERFY ALGORITHM
+    // Pins closer than 36px at current zoom are grouped into a cluster badge.
+    // Clicking zooms or spiderfies without overlapping labels.
+    // =========================================================================
+    const CLUSTER_DISTANCE_PX = 36;
+    const clusters: ClusterGroup[] = [];
+    const assignedIndices = new Set<number>();
 
-      const poiIcon = L.divIcon({
-        className: 'v3-facility-divicon',
-        iconSize: [34, 42],
-        iconAnchor: [17, 40],
-        popupAnchor: [0, -38],
-        html: `
-          <div style="position:relative;width:34px;height:42px;display:flex;flex-direction:column;align-items:center;cursor:pointer;filter:drop-shadow(0 4px 10px rgba(11,61,46,0.3));transition:transform 0.2s ease;${isSelected ? 'transform:scale(1.18);' : ''}">
-            <div style="width:34px;height:34px;border-radius:999px;background:${catStyle.pinBg};border:2.5px solid ${isSelected ? '#C6F432' : '#FFFFFF'};display:grid;place-items:center;box-shadow:0 3px 10px rgba(0,0,0,0.22);">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">${getPoiSvgPath(poi.category)}</svg>
-            </div>
-            <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid ${catStyle.pinBg};margin-top:-1px;"></div>
-          </div>
-        `,
-      });
+    for (let i = 0; i < visiblePoiItems.length; i++) {
+      if (assignedIndices.has(i)) continue;
+      const itemA = visiblePoiItems[i];
+      const pA = map.latLngToLayerPoint([itemA.poi.lat, itemA.poi.lng]);
+      const group: Array<{ poi: POI; km: number; inRadius: boolean }> = [itemA];
+      assignedIndices.add(i);
 
-      const marker = L.marker([poi.lat, poi.lng], {
-        icon: poiIcon,
-        zIndexOffset: isSelected ? 650 : inRadius ? 350 : 250,
-        title: poi.name,
-      }).addTo(layer);
-
-      marker.bindTooltip(poi.name, {
-        direction: 'top',
-        offset: [0, -38],
-        className: 'v3-poi-tooltip',
-      });
-
-      marker.bindPopup(buildPoiPopupHtml(poi, km, inRadius), {
-        offset: [0, -36],
-        maxWidth: 280,
-        minWidth: 240,
-        className: 'v3-poi-popup',
-        autoPan: true,
-      });
-
-      marker.on('click', () => {
-        setSelectedCluster(null);
-        setSelectedPoi(poi);
-        map.panTo([poi.lat, poi.lng], { animate: true, duration: 0.55 });
-      });
-
-      poiMarkersRef.current[poi.name] = marker;
-
-      if (isSelected) {
-        setTimeout(() => {
-          marker.openPopup();
-        }, 60);
+      for (let j = i + 1; j < visiblePoiItems.length; j++) {
+        if (assignedIndices.has(j)) continue;
+        const itemB = visiblePoiItems[j];
+        const pB = map.latLngToLayerPoint([itemB.poi.lat, itemB.poi.lng]);
+        if (pA.distanceTo(pB) <= CLUSTER_DISTANCE_PX) {
+          group.push(itemB);
+          assignedIndices.add(j);
+        }
       }
+
+      const avgLat = group.reduce((acc, curr) => acc + curr.poi.lat, 0) / group.length;
+      const avgLng = group.reduce((acc, curr) => acc + curr.poi.lng, 0) / group.length;
+      clusters.push({
+        id: `clust-${i}-${group[0].poi.name}`,
+        center: [avgLat, avgLng],
+        items: group,
+      });
+    }
+
+    // Render Clusters and Individual Pins
+    clusters.forEach((cg) => {
+      const isSpiderfied = spiderfiedClusterId === cg.id;
+
+      // Group of 2+ items that is NOT spiderfied
+      if (cg.items.length > 1 && !isSpiderfied) {
+        const clusterHtml = `
+          <div class="v3-marker-cluster-badge" style="width:36px;height:36px;font-size:13px;">
+            <span>${cg.items.length}</span>
+            <span class="v3-marker-cluster-pulse"></span>
+          </div>
+        `;
+        const clusterIcon = L.divIcon({
+          className: '',
+          iconSize: [36, 36],
+          iconAnchor: [18, 18],
+          html: clusterHtml,
+        });
+
+        const clusterMarker = L.marker(cg.center, {
+          icon: clusterIcon,
+          zIndexOffset: 550,
+          title: `${cg.items.length} fasilitas di area ini`,
+        }).addTo(layer);
+
+        clusterMarker.bindTooltip(`${cg.items.length} fasilitas berdekatan (Klik untuk perbesar/urai)`, {
+          direction: 'top',
+          offset: [0, -18],
+          className: 'v3-poi-tooltip',
+        });
+
+        clusterMarker.on('click', () => {
+          if (currentZoom < 15) {
+            map.flyTo(cg.center, Math.min(18, currentZoom + 2), { duration: 0.5 });
+          } else {
+            setSpiderfiedClusterId(cg.id);
+          }
+        });
+        return;
+      }
+
+      // If Spiderfied: Draw connecting spider lines from center to expanded pins
+      if (cg.items.length > 1 && isSpiderfied) {
+        L.circleMarker(cg.center, {
+          radius: 4,
+          color: '#0B3D2E',
+          fillColor: '#C6F432',
+          fillOpacity: 1,
+          weight: 2,
+        }).addTo(layer);
+      }
+
+      // Render Individual Pins (or spiderfied child pins)
+      cg.items.forEach(({ poi, km, inRadius }, idx) => {
+        const isSelected = selectedPoi?.name === poi.name;
+        const catColor = getCategoryTheme(poi.categoryKey || poi.category);
+
+        let pinPos: [number, number] = [poi.lat, poi.lng];
+
+        // Position spiderfied child pins in radial circle (spiderfy)
+        if (cg.items.length > 1 && isSpiderfied) {
+          const angle = (idx * 2 * Math.PI) / cg.items.length;
+          const spiderOffsetDeg = 0.00045; // ~40m offset
+          pinPos = [
+            cg.center[0] + Math.sin(angle) * spiderOffsetDeg,
+            cg.center[1] + Math.cos(angle) * spiderOffsetDeg * 1.25,
+          ];
+
+          // Leader line from cluster center to spider pin
+          L.polyline([cg.center, pinPos], {
+            color: '#2F9E5B',
+            weight: 1.5,
+            dashArray: '3 3',
+            opacity: 0.75,
+          }).addTo(layer);
+        }
+
+        // Show automatic name pill on zoom >= 15 or when spiderfied
+        const showAutoLabel = currentZoom >= 15 || isSpiderfied || isSelected;
+
+        const poiIcon = L.divIcon({
+          className: 'v3-facility-divicon',
+          iconSize: [34, showAutoLabel ? 64 : 42],
+          iconAnchor: [17, 40],
+          popupAnchor: [0, -38],
+          html: `
+            <div style="position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;filter:drop-shadow(0 4px 10px rgba(11,61,46,0.3));transition:transform 0.2s ease;${isSelected ? 'transform:scale(1.18);' : ''}">
+              <div style="width:34px;height:34px;border-radius:999px;background:${catColor.pinBg};border:2.5px solid ${isSelected ? '#C6F432' : '#FFFFFF'};display:grid;place-items:center;box-shadow:0 3px 10px rgba(0,0,0,0.22);">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">${getPoiSvgPath(poi.category)}</svg>
+              </div>
+              <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid ${catColor.pinBg};margin-top:-1px;"></div>
+              ${
+                showAutoLabel
+                  ? `<div class="v3-marker-name-pill" style="margin-top:3px;font-size:10px;padding:2px 7px;border-color:${catColor.pinBg};">${poi.name}</div>`
+                  : ''
+              }
+            </div>
+          `,
+        });
+
+        const marker = L.marker(pinPos, {
+          icon: poiIcon,
+          zIndexOffset: isSelected ? 700 : inRadius ? 450 : 250,
+          title: poi.name,
+        }).addTo(layer);
+
+        // Name displayed on hover/focus via tooltip
+        marker.bindTooltip(poi.name, {
+          direction: 'top',
+          offset: [0, -38],
+          className: 'v3-poi-tooltip',
+        });
+
+        // Name and details displayed on click via popup
+        marker.bindPopup(buildPoiPopupHtml(poi, km, inRadius), {
+          offset: [0, -36],
+          maxWidth: 290,
+          minWidth: 250,
+          className: 'v3-poi-popup',
+          autoPan: true,
+        });
+
+        marker.on('click', () => {
+          setSelectedCluster(null);
+          setSelectedPoi(poi);
+          map.panTo(pinPos, { animate: true, duration: 0.55 });
+        });
+
+        poiMarkersRef.current[poi.name] = marker;
+
+        if (isSelected) {
+          setTimeout(() => {
+            marker.openPopup();
+          }, 60);
+        }
+      });
     });
-  }, [originPoint, selectedRadius, activeClusterId, selectedPoi, filteredPois]);
+  }, [originPoint, selectedRadius, activeClusterId, selectedPoi, filteredPois, currentZoom, spiderfiedClusterId]);
 
   const handleSelectPoiFromList = (poi: POI) => {
     setSelectedCluster(null);
     setSelectedPoi(poi);
     if (mapRef.current) {
-      mapRef.current.flyTo([poi.lat, poi.lng], Math.max(activeRadiusObj.zoom, 13), { duration: 0.65 });
+      mapRef.current.flyTo([poi.lat, poi.lng], Math.max(activeRadiusObj.zoom, 14), { duration: 0.65 });
     }
     // Open marker popup automatically after flyTo
     setTimeout(() => {
@@ -491,17 +603,21 @@ export const MapChapterV3: React.FC = () => {
     }
   };
 
-  // Shared Panel Content (used as floating left panel on desktop, below-map panel on tablet/mobile)
+  // Shared Panel Content
   const renderControlPanel = (compact = false) => (
-    <div className={`bg-white border border-[#CFE1D5] rounded-2xl ${compact ? 'p-4 sm:p-5' : 'p-5 shadow-[0_24px_60px_-24px_rgba(11,61,46,0.22)]'} flex flex-col gap-4`}>
-      {/* Summary Header: Dynamic counter from active data, category, and radius */}
-      <div className="flex items-start justify-between gap-2 pb-3 border-b border-[#E4F1E8]">
+    <div
+      className={`bg-white border border-[#CFE1D5] rounded-2xl flex flex-col h-full max-h-full overflow-hidden ${
+        compact ? 'p-4 sm:p-5' : 'p-4 sm:p-5 shadow-[0_24px_60px_-24px_rgba(11,61,46,0.22)]'
+      }`}
+    >
+      {/* Summary Header: N di dalam radius, M di luar radius */}
+      <div className="flex items-start justify-between gap-2 pb-3 border-b border-[#E4F1E8] shrink-0">
         <div>
           <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-[#2F9E5B]">
             Analisis Radius Aktif
           </span>
-          <p className="font-display-v3 font-extrabold text-base sm:text-lg text-[#0B3D2E] mt-0.5 tabular-nums leading-snug">
-            {getHeadlineCounterText(selectedCategory, inRadiusCount, outsideCount, activeRadiusObj.label)}
+          <p className="font-display-v3 font-extrabold text-sm sm:text-base text-[#0B3D2E] mt-0.5 tabular-nums leading-snug">
+            {inRadiusCount} di dalam radius, {outsideCount} di luar radius
           </p>
         </div>
         <span className="px-2.5 py-1 rounded-full bg-[#C6F432] text-[#0B3D2E] font-mono text-xs font-bold shrink-0">
@@ -509,206 +625,234 @@ export const MapChapterV3: React.FC = () => {
         </span>
       </div>
 
-      {/* Category Filter Pills (Pilihan Rumah Sakit, Sekolah, dll) */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[11px] font-mono font-bold uppercase text-[#3B5E50]">
-            Pilihan Kategori Fasilitas
-          </span>
-          {selectedCategory !== 'all' && (
-            <button
-              onClick={() => setSelectedCategory('all')}
-              className="text-[10px] font-mono font-bold text-[#2F9E5B] hover:underline cursor-pointer"
-            >
-              Reset ke Semua
-            </button>
-          )}
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-          {CATEGORY_OPTIONS.map((cat) => {
-            const active = selectedCategory === cat.id;
-            const countInRadius = poisWithDistance.filter(
-              (p) => (cat.id === 'all' || p.poi.category === cat.id) && p.inRadius
-            ).length;
-
-            return (
+      {/* Scrollable Body: Batasi tinggi panel agar tidak melebihi tinggi peta (isi digulir di dalam panel) */}
+      <div
+        data-lenis-prevent
+        className="flex-1 overflow-y-auto overscroll-contain pr-1 space-y-4 no-scrollbar min-h-0 pt-3"
+      >
+        {/* Chip Kategori 2 Kolom dengan Nama Penuh */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-mono font-bold uppercase text-[#3B5E50]">
+              Kategori Fasilitas (9 Pilihan)
+            </span>
+            {selectedCategory !== 'all' && (
               <button
-                key={cat.id}
-                onClick={() => {
-                  setSelectedCategory(cat.id);
-                  if (selectedPoi && selectedPoi.category !== cat.id && cat.id !== 'all') {
-                    setSelectedPoi(null);
-                  }
-                }}
-                className={`min-h-[40px] px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-between gap-1.5 ${
-                  active
-                    ? 'bg-[#0B3D2E] text-[#C6F432] border-[#0B3D2E] shadow-xs'
-                    : 'bg-[#F6FAF7] text-[#0B3D2E] border-[#CFE1D5] hover:border-[#2F9E5B]'
-                }`}
+                onClick={() => setSelectedCategory('all')}
+                className="text-[10px] font-mono font-bold text-[#2F9E5B] hover:underline cursor-pointer"
               >
-                <span className="flex items-center gap-1.5 truncate">
-                  {cat.id === 'all' ? (
-                    <Compass className="size-3.5 shrink-0 text-[#2F9E5B]" />
-                  ) : (
-                    <PoiCategoryIcon category={cat.id} className="size-3.5 shrink-0" />
-                  )}
-                  <span className="truncate">{cat.shortLabel}</span>
-                </span>
-                <span
-                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full shrink-0 ${
+                Reset Semua
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {NINE_CATEGORIES.map((cat) => {
+              const active = selectedCategory === cat.id;
+              const countInRadius = poisWithDistance.filter(
+                (p) =>
+                  (cat.id === 'all' ||
+                    (p.poi.categoryKey || p.poi.category.toLowerCase()) === cat.id.toLowerCase()) &&
+                  p.inRadius
+              ).length;
+
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => {
+                    setSelectedCategory(cat.id);
+                    setSpiderfiedClusterId(null);
+                    if (
+                      selectedPoi &&
+                      cat.id !== 'all' &&
+                      (selectedPoi.categoryKey || selectedPoi.category.toLowerCase()) !== cat.id.toLowerCase()
+                    ) {
+                      setSelectedPoi(null);
+                    }
+                  }}
+                  className={`min-h-[40px] px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-between gap-1.5 ${
                     active
-                      ? 'bg-[#C6F432] text-[#0B3D2E] font-extrabold'
-                      : 'bg-white text-[#3B5E50] border border-[#CFE1D5]'
+                      ? 'bg-[#0B3D2E] text-[#C6F432] border-[#0B3D2E] shadow-xs'
+                      : 'bg-[#F6FAF7] text-[#0B3D2E] border-[#CFE1D5] hover:border-[#2F9E5B]'
+                  }`}
+                  title={cat.label}
+                >
+                  <span className="flex items-center gap-1.5 truncate">
+                    {cat.id === 'all' ? (
+                      <Compass className="size-3.5 shrink-0 text-[#2F9E5B]" />
+                    ) : (
+                      <PoiCategoryIcon category={cat.label} className="size-3.5 shrink-0" />
+                    )}
+                    <span className="truncate">{cat.label}</span>
+                  </span>
+                  <span
+                    className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full shrink-0 ${
+                      active
+                        ? 'bg-[#C6F432] text-[#0B3D2E] font-extrabold'
+                        : 'bg-white text-[#3B5E50] border border-[#CFE1D5]'
+                    }`}
+                  >
+                    {countInRadius}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Radius 3x2 Grid */}
+        <div>
+          <span className="text-[11px] font-mono font-bold uppercase text-[#3B5E50] block mb-2">
+            Radius Pencarian
+          </span>
+          <div className="grid grid-cols-3 gap-1.5">
+            {RADIUS_OPTIONS.map((opt) => {
+              const active = selectedRadius === opt.meters;
+              return (
+                <button
+                  key={opt.meters}
+                  onClick={() => {
+                    setSelectedRadius(opt.meters);
+                    setSpiderfiedClusterId(null);
+                  }}
+                  className={`min-h-[38px] rounded-xl text-xs font-bold transition-colors cursor-pointer border ${
+                    active
+                      ? 'bg-[#0B3D2E] text-[#C6F432] border-[#0B3D2E]'
+                      : 'bg-[#F6FAF7] text-[#0B3D2E] border-[#CFE1D5] hover:border-[#2F9E5B]'
                   }`}
                 >
-                  {countInRadius}
-                </span>
-              </button>
-            );
-          })}
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
 
-      {/* Radius 3x2 Grid (zero horizontal scroll on any screen) */}
-      <div>
-        <span className="text-[11px] font-mono font-bold uppercase text-[#3B5E50] block mb-2">
-          Radius Pencarian
-        </span>
-        <div className="grid grid-cols-3 gap-1.5">
-          {RADIUS_OPTIONS.map((opt) => {
-            const active = selectedRadius === opt.meters;
-            return (
-              <button
-                key={opt.meters}
-                onClick={() => setSelectedRadius(opt.meters)}
-                className={`min-h-[40px] rounded-xl text-xs font-bold transition-colors cursor-pointer border ${
-                  active
-                    ? 'bg-[#0B3D2E] text-[#C6F432] border-[#0B3D2E]'
-                    : 'bg-[#F6FAF7] text-[#0B3D2E] border-[#CFE1D5] hover:border-[#2F9E5B]'
-                }`}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Cluster Focus Pills */}
-      <div>
-        <span className="text-[11px] font-mono font-bold uppercase text-[#3B5E50] block mb-2">
-          Fokus Klaster
-        </span>
-        <div className="grid grid-cols-2 gap-1.5">
-          <button
-            onClick={() => handleSelectCluster('all')}
-            className={`min-h-[40px] px-2.5 rounded-xl text-xs font-bold cursor-pointer border transition-colors ${
-              activeClusterId === 'all'
-                ? 'bg-[#EAF4D3] text-[#0B3D2E] border-[#0B3D2E]'
-                : 'bg-white text-[#3B5E50] border-[#CFE1D5] hover:text-[#0B3D2E]'
-            }`}
-          >
-            Semua (3)
-          </button>
-          {CLUSTERS.map((c) => {
-            const active = activeClusterId === c.id;
-            return (
-              <button
-                key={c.id}
-                onClick={() => handleSelectCluster(c.id)}
-                className={`min-h-[40px] px-2.5 rounded-xl text-xs font-bold cursor-pointer border transition-colors ${
-                  active
-                    ? 'bg-[#EAF4D3] text-[#0B3D2E] border-[#0B3D2E]'
-                    : 'bg-white text-[#3B5E50] border-[#CFE1D5] hover:text-[#0B3D2E]'
-                }`}
-              >
-                {c.shortName}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Distance-Bar Facility List: In-radius first, labeled accordingly */}
-      <div className="pt-1 relative">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[11px] font-mono font-bold uppercase text-[#3B5E50]">
-            Daftar Fasilitas ({filteredPois.length})
+        {/* Fokus Klaster */}
+        <div>
+          <span className="text-[11px] font-mono font-bold uppercase text-[#3B5E50] block mb-2">
+            Fokus Klaster The Park
           </span>
-          {!compact && (
-            <span className="text-[10px] font-mono text-[#3B5E50]/75">
-              Hover &amp; scroll
-            </span>
-          )}
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              onClick={() => handleSelectCluster('all')}
+              className={`min-h-[38px] px-2.5 rounded-xl text-xs font-bold cursor-pointer border transition-colors ${
+                activeClusterId === 'all'
+                  ? 'bg-[#EAF4D3] text-[#0B3D2E] border-[#0B3D2E]'
+                  : 'bg-white text-[#3B5E50] border-[#CFE1D5] hover:text-[#0B3D2E]'
+              }`}
+            >
+              Semua (3)
+            </button>
+            {CLUSTERS.map((c) => {
+              const active = activeClusterId === c.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => handleSelectCluster(c.id)}
+                  className={`min-h-[38px] px-2.5 rounded-xl text-xs font-bold cursor-pointer border transition-colors ${
+                    active
+                      ? 'bg-[#EAF4D3] text-[#0B3D2E] border-[#0B3D2E]'
+                      : 'bg-white text-[#3B5E50] border-[#CFE1D5] hover:text-[#0B3D2E]'
+                  }`}
+                >
+                  {c.shortName}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div
-          data-lenis-prevent
-          className={`space-y-2 ${compact ? '' : 'max-h-[220px] overflow-y-auto overscroll-contain no-scrollbar pb-5'}`}
-        >
-          {filteredPois.map(({ poi, km, inRadius }) => {
-            const isSel = selectedPoi?.name === poi.name;
-            const barWidth = Math.min(100, Math.max(18, (km / 10) * 100));
-            const catStyle = CATEGORY_STYLES[poi.category];
-            return (
-              <button
-                key={poi.name}
-                onClick={() => handleSelectPoiFromList(poi)}
-                className={`w-full text-left p-2.5 rounded-xl border transition-all cursor-pointer ${
-                  isSel
-                    ? 'bg-[#EAF4D3] border-[#0B3D2E] shadow-xs'
-                    : inRadius
-                    ? 'bg-[#F6FAF7] border-[#CFE1D5] hover:border-[#2F9E5B]'
-                    : 'bg-white border-[#E4F1E8] opacity-75 hover:opacity-100 hover:border-[#CFE1D5]'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 min-w-0">
+
+        {/* Daftar Fasilitas */}
+        <div className="pt-1">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-mono font-bold uppercase text-[#3B5E50]">
+              Daftar Fasilitas ({filteredPois.length})
+            </span>
+            <span className="text-[10px] font-mono text-[#3B5E50]/75">
+              Zoom: {currentZoom}x
+            </span>
+          </div>
+
+          {/* Pesan informatif jika kategori kosong pada radius aktif */}
+          {inRadiusCount === 0 && (
+            <div className="p-3.5 mb-2 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900 text-xs space-y-1">
+              <div className="flex items-center gap-1.5 font-bold">
+                <Info className="size-4 text-amber-700 shrink-0" />
+                <span>0 fasilitas {activeCategoryObj.label} dalam {activeRadiusObj.label}</span>
+              </div>
+              <p className="text-[11px] text-amber-800 leading-snug">
+                Belum ada fasilitas kategori ini di jarak sangat dekat. Coba perbesar radius ke <strong>3 km</strong>, <strong>5 km</strong>, atau <strong>10 km</strong> di atas. Fasilitas di luar radius tetap tercatat di bawah:
+              </p>
+            </div>
+          )}
+
+          {/* Daftar: Nama sampai 2 baris (line-clamp-2) & lencana jarak/status di baris terpisah */}
+          <div className="space-y-2">
+            {filteredPois.map(({ poi, km, inRadius }) => {
+              const isSel = selectedPoi?.name === poi.name;
+              const barWidth = Math.min(100, Math.max(16, (km / 12) * 100));
+              const catColor = getCategoryTheme(poi.categoryKey || poi.category);
+
+              return (
+                <button
+                  key={poi.name}
+                  onClick={() => handleSelectPoiFromList(poi)}
+                  className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer ${
+                    isSel
+                      ? 'bg-[#EAF4D3] border-[#0B3D2E] shadow-xs'
+                      : inRadius
+                      ? 'bg-[#F6FAF7] border-[#CFE1D5] hover:border-[#2F9E5B]'
+                      : 'bg-white border-[#E4F1E8] opacity-75 hover:opacity-100 hover:border-[#CFE1D5]'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
                     <span
-                      className="size-6 rounded-full grid place-items-center text-white shrink-0 shadow-xs"
-                      style={{ backgroundColor: catStyle.pinBg }}
+                      className="size-7 rounded-full grid place-items-center text-white shrink-0 shadow-xs mt-0.5"
+                      style={{ backgroundColor: catColor.pinBg }}
                     >
                       <PoiCategoryIcon category={poi.category} className="size-3.5" />
                     </span>
-                    <span className="text-xs font-bold text-[#0B3D2E] truncate">
-                      {poi.name}
-                    </span>
-                  </span>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span
-                      className={`text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded-full ${
-                        inRadius
-                          ? 'bg-[#EAF4D3] text-[#0B3D2E]'
-                          : 'bg-stone-100 text-stone-600 border border-stone-200'
-                      }`}
-                    >
-                      {inRadius ? 'Dalam radius' : 'Di luar radius'}
-                    </span>
-                    <span className="text-[11px] font-mono font-bold text-[#2F9E5B] tabular-nums">
-                      {km.toFixed(1)} km
-                    </span>
-                  </div>
-                </div>
+                    <div className="min-w-0 flex-1">
+                      {/* Nama fasilitas sampai 2 baris */}
+                      <h4 className="text-xs sm:text-[13px] font-bold text-[#0B3D2E] leading-snug line-clamp-2">
+                        {poi.name}
+                      </h4>
 
-                {/* Proportional Distance Bar */}
-                <div className="mt-2 h-1.5 w-full rounded-full bg-[#E4F1E8] overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      isSel ? 'bg-[#0B3D2E]' : inRadius ? 'bg-[#2F9E5B]' : 'bg-[#9FB8A8]'
-                    }`}
-                    style={{ width: `${barWidth}%` }}
-                  />
-                </div>
-                <p className="text-[11px] text-[#3B5E50] mt-1">{poi.approxDistance}</p>
-              </button>
-            );
-          })}
+                      {/* Lencana jarak dan status di baris terpisah */}
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                        <span
+                          className={`text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded-full ${
+                            inRadius
+                              ? 'bg-[#EAF4D3] text-[#0B3D2E]'
+                              : 'bg-stone-100 text-stone-600 border border-stone-200'
+                          }`}
+                        >
+                          {inRadius ? 'Dalam radius' : 'Di luar radius'}
+                        </span>
+                        <span className="text-[10.5px] font-mono font-bold text-[#2F9E5B] tabular-nums">
+                          {km.toFixed(1)} km
+                        </span>
+                        <span className="text-[10px] text-[#3B5E50] font-medium truncate">
+                          · {poi.approxDistance.split('·')[1]?.trim() || poi.approxDistance}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Proportional Distance Bar */}
+                  <div className="mt-2.5 h-1.5 w-full rounded-full bg-[#E4F1E8] overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        isSel ? 'bg-[#0B3D2E]' : inRadius ? 'bg-[#2F9E5B]' : 'bg-[#9FB8A8]'
+                      }`}
+                      style={{ width: `${barWidth}%` }}
+                    />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
-        {!compact && (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute bottom-0 left-0 right-0 h-7 bg-gradient-to-t from-white to-transparent"
-          />
-        )}
       </div>
     </div>
   );
@@ -717,50 +861,59 @@ export const MapChapterV3: React.FC = () => {
     <section
       id="peta-demo"
       ref={sectionRef}
-      className="relative isolate z-0 bg-[#F6FAF7] border-b border-[#CFE1D5] py-14 sm:py-20 scroll-mt-16 sm:scroll-mt-20"
+      className="relative isolate overflow-hidden bg-[#F6FAF7] border-b border-[#CFE1D5] py-10 sm:py-16 scroll-mt-16 sm:scroll-mt-20"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Chapter Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-4 sm:mb-6">
           <div className="max-w-2xl">
             <p className="text-xs font-mono uppercase tracking-widest text-[#2F9E5B] font-bold">
-              Bab 04 · Peta Spasial &amp; Radius Riset
+              Bab 04 · Peta Spasial &amp; Radius Riset (OpenStreetMap)
             </p>
             <h2 className="font-display-v3 text-v3-chapter font-extrabold text-[#0B3D2E] mt-1.5">
               Peta jadi pusat keputusan lokasi.
             </h2>
             <p className="text-sm sm:text-base text-[#3B5E50] mt-2 leading-relaxed">
-              Pilih kategori fasilitas (rumah sakit, sekolah, belanja, dll) dan radius untuk melihat garis jarak dan nilai jual langsung di atas peta The Park Townhouse Sukoharjo.
+              Jelajahi 9 kategori fasilitas di sekitar The Park Townhouse Sukoharjo. Pin berdekatan otomatis dikelompokkan dan dapat diurai (spiderfy).
             </p>
           </div>
 
           <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white border border-[#CFE1D5] text-xs font-semibold text-[#0B3D2E] self-start">
             <Compass className="size-4 text-[#2F9E5B]" />
-            <span>3 Klaster · {POIS.length} Fasilitas Terverifikasi</span>
+            <span>3 Klaster · {POIS.length} Fasilitas OSM Terverifikasi</span>
           </div>
         </div>
 
-        {/* Quick Category Filter Bar above Map */}
+        {/* Quick Category Filter Bar (Horizontal scrollable bar dengan nama penuh) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-4 no-scrollbar">
           <span className="text-xs font-mono font-bold text-[#3B5E50] uppercase shrink-0 mr-1 flex items-center gap-1">
             <Filter className="size-3.5 text-[#2F9E5B]" />
             Kategori:
           </span>
-          {CATEGORY_OPTIONS.map((cat) => {
+          {NINE_CATEGORIES.map((cat) => {
             const active = selectedCategory === cat.id;
             const countInRadius = poisWithDistance.filter(
-              (p) => (cat.id === 'all' || p.poi.category === cat.id) && p.inRadius
+              (p) =>
+                (cat.id === 'all' ||
+                  (p.poi.categoryKey || p.poi.category.toLowerCase()) === cat.id.toLowerCase()) &&
+                p.inRadius
             ).length;
+
             return (
               <button
                 key={cat.id}
                 onClick={() => {
                   setSelectedCategory(cat.id);
-                  if (selectedPoi && selectedPoi.category !== cat.id && cat.id !== 'all') {
+                  setSpiderfiedClusterId(null);
+                  if (
+                    selectedPoi &&
+                    cat.id !== 'all' &&
+                    (selectedPoi.categoryKey || selectedPoi.category.toLowerCase()) !== cat.id.toLowerCase()
+                  ) {
                     setSelectedPoi(null);
                   }
                 }}
-                className={`min-h-[38px] px-3 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0 border ${
+                className={`min-h-[38px] px-3.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0 border ${
                   active
                     ? 'bg-[#0B3D2E] text-[#C6F432] border-[#0B3D2E] shadow-sm'
                     : 'bg-white text-[#3B5E50] border-[#CFE1D5] hover:border-[#2F9E5B] hover:text-[#0B3D2E]'
@@ -769,9 +922,9 @@ export const MapChapterV3: React.FC = () => {
                 {cat.id === 'all' ? (
                   <Compass className="size-3.5 text-[#2F9E5B]" />
                 ) : (
-                  <PoiCategoryIcon category={cat.id} className="size-3.5" />
+                  <PoiCategoryIcon category={cat.label} className="size-3.5" />
                 )}
-                <span>{cat.shortLabel}</span>
+                <span>{cat.label}</span>
                 <span
                   className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
                     active ? 'bg-[#C6F432] text-[#0B3D2E] font-black' : 'bg-[#EAF4D3] text-[#0B3D2E]'
@@ -784,43 +937,45 @@ export const MapChapterV3: React.FC = () => {
           })}
         </div>
 
-        {/* Full-Bleed Map Stage with Isolated Stacking Context (isolate z-0) so navbar (z-50) stays on top */}
-        <div className="relative isolate z-0 rounded-3xl overflow-hidden border border-[#CFE1D5] bg-white shadow-[0_28px_70px_-30px_rgba(11,61,46,0.22)]">
-          {/* Map Canvas — data-lenis-prevent ensures mobile touch drag & pinch-zoom work immediately */}
+        {/* Full-Bleed Map Stage: position: relative; isolation: isolate; overflow: hidden; */}
+        <div className="relative isolate overflow-hidden rounded-3xl border border-[#CFE1D5] bg-white shadow-[0_28px_70px_-30px_rgba(11,61,46,0.22)]">
+          {/* Map Canvas */}
           <div
             ref={mapElRef}
             data-lenis-prevent
-            className="w-full h-[56dvh] min-h-[380px] sm:h-[62dvh] lg:h-[78dvh] lg:min-h-[600px] lg:max-h-[720px] relative z-0 touch-none"
+            className="w-full h-[58dvh] min-h-[420px] sm:h-[64dvh] lg:h-[80dvh] lg:min-h-[640px] lg:max-h-[760px] relative z-0 touch-none"
           />
 
-          {/* DESKTOP FLOATING SOLID WHITE CONTROL PANEL (lg:block, z-20 within isolated map wrapper) */}
-          <div className="hidden lg:block absolute top-5 left-5 z-20 w-[350px]">
+          {/* DESKTOP FLOATING CONTROL PANEL: Batasi tinggi panel agar tidak melebihi tinggi peta (isi digulir di dalam panel) */}
+          <div className="hidden lg:flex flex-col absolute top-4 left-4 bottom-4 z-20 w-[360px] max-h-[calc(100%-2rem)]">
             {renderControlPanel(false)}
           </div>
 
-          {/* DESKTOP SCROLL-ZOOM COMFORT HINT (hidden on mobile, z-20) */}
+          {/* DESKTOP SCROLL-ZOOM COMFORT HINT */}
           <div className="hidden sm:flex absolute bottom-4 right-4 z-20 items-center gap-2 px-3.5 py-2 rounded-full bg-white/95 border border-[#CFE1D5] text-[11px] font-mono font-semibold text-[#0B3D2E] shadow-sm pointer-events-none">
             <span className={`size-2 rounded-full ${wheelUnlocked ? 'bg-[#2F9E5B]' : 'bg-[#9FB8A8]'}`} />
             <span>
-              {wheelUnlocked ? 'Zoom scroll aktif · keluar peta untuk scroll halaman' : 'Klik peta untuk zoom dengan scroll'}
+              {wheelUnlocked
+                ? 'Zoom scroll aktif · keluar peta untuk scroll halaman'
+                : 'Klik peta untuk zoom dengan scroll'}
             </span>
           </div>
 
-          {/* COMPACT FLOATING DETAIL CARD — POI (z-30 inside isolated map wrapper) */}
+          {/* COMPACT FLOATING DETAIL CARD — POI */}
           {selectedPoi && (
             <div className="absolute bottom-2.5 left-2.5 right-2.5 sm:left-auto sm:right-4 sm:bottom-14 sm:w-[340px] z-30 rounded-xl sm:rounded-2xl bg-white/98 border-2 border-[#0B3D2E] p-2.5 sm:p-4 shadow-[0_16px_40px_-14px_rgba(11,61,46,0.3)]">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <span
                     className="size-7 sm:size-8 rounded-full grid place-items-center text-white shrink-0"
-                    style={{ backgroundColor: CATEGORY_STYLES[selectedPoi.category].pinBg }}
+                    style={{ backgroundColor: getCategoryTheme(selectedPoi.categoryKey || selectedPoi.category).pinBg }}
                   >
                     <PoiCategoryIcon category={selectedPoi.category} className="size-3.5 sm:size-4" />
                   </span>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-[9.5px] sm:text-[10px] font-mono font-bold uppercase text-[#2F9E5B]">
-                        {selectedPoi.category}
+                        {selectedPoi.categoryLabel || selectedPoi.category}
                       </span>
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#C6F432] text-[#0B3D2E] text-[10px] font-mono font-bold">
                         <Navigation className="size-2.5" />
@@ -851,7 +1006,7 @@ export const MapChapterV3: React.FC = () => {
             </div>
           )}
 
-          {/* COMPACT FLOATING DETAIL CARD — CLUSTER (z-30 inside isolated map wrapper) */}
+          {/* COMPACT FLOATING DETAIL CARD — CLUSTER */}
           {!selectedPoi && selectedCluster && (
             <div className="absolute bottom-2.5 left-2.5 right-2.5 sm:left-auto sm:right-4 sm:bottom-14 sm:w-[340px] z-30 rounded-xl sm:rounded-2xl bg-white/98 border-2 border-[#0B3D2E] p-2.5 sm:p-4 shadow-[0_16px_40px_-14px_rgba(11,61,46,0.3)]">
               <div className="flex items-start justify-between gap-2">
