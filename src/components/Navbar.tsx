@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { Search, Menu, X, Sparkles } from 'lucide-react';
+import { LABYRINTH_ROUTES, type LabyrinthRouteId } from '../lib/labyrinth/labyrinth-routes';
 
 interface NavbarProps {
+  activeRoute: LabyrinthRouteId;
+  onNavigateRoute: (routeId: LabyrinthRouteId) => void;
   onOpenCommandPalette: () => void;
   onOpenWizard: () => void;
   onOpenLogin: () => void;
@@ -9,25 +12,31 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
+  activeRoute,
+  onNavigateRoute,
   onOpenCommandPalette,
   onOpenWizard,
   onOpenLogin,
-  onScrollTo
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const navLinks = [
-    { label: 'Fitur', sectionId: 'fitur-utama' },
-    { label: 'Alur 6 Langkah', sectionId: 'alur-6-langkah' },
-    { label: 'Peta Radius', sectionId: 'peta-demo' },
-    { label: 'Paket', sectionId: 'paket-harga' },
-    { label: 'Studi Kasus', sectionId: 'studi-kasus' },
-    { label: 'Dokumentasi', sectionId: 'dokumentasi-faq' },
+  const navLinks: { label: string; routeId: LabyrinthRouteId }[] = [
+    { label: 'Beranda', routeId: 'l0-beranda' },
+    { label: 'Ekosistem Produk', routeId: 'l1-ekosistem' },
+    { label: 'Studi Kasus', routeId: 'l1-studi-kasus' },
+    { label: 'Solusi Peran', routeId: 'l1-peran' },
+    { label: 'Paket & Harga', routeId: 'l1-paket' },
   ];
 
-  const handleLinkClick = (sectionId: string) => {
+  const currentMeta = LABYRINTH_ROUTES[activeRoute];
+  const isRouteBranchActive = (routeId: LabyrinthRouteId) => {
+    return activeRoute === routeId || currentMeta?.parentId === routeId;
+  };
+
+  const handleLinkClick = (routeId: LabyrinthRouteId) => {
     setMobileMenuOpen(false);
-    onScrollTo(sectionId);
+    onNavigateRoute(routeId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -35,7 +44,10 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4">
         {/* Brand Logo */}
         <div className="flex items-center gap-3">
-          <a href="/" className="flex items-center gap-2.5 group">
+          <button
+            onClick={() => handleLinkClick('l0-beranda')}
+            className="flex items-center gap-2.5 group text-left cursor-pointer"
+          >
             <div className="size-9 rounded-xl bg-terracotta text-white grid place-items-center font-extrabold text-sm shadow-xs group-hover:scale-105 transition-transform">
               GP
             </div>
@@ -48,17 +60,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
               <p className="text-[10px] text-warmmuted">Mesin Penjualan Properti Multi-Tenant</p>
             </div>
-          </a>
+          </button>
         </div>
 
         {/* Search / Command Palette Trigger (Desktop) */}
         <button
           onClick={onOpenCommandPalette}
-          className="hidden md:flex items-center gap-3 px-3.5 py-2 rounded-xl bg-white border border-warmborder text-xs text-warmmuted hover:border-terracotta/60 hover:text-espresso transition-all shadow-2xs cursor-pointer w-64 justify-between"
+          className="hidden md:flex items-center gap-3 px-3.5 py-2 rounded-xl bg-white border border-warmborder text-xs text-warmmuted hover:border-terracotta/60 hover:text-espresso transition-all shadow-2xs cursor-pointer w-60 justify-between"
         >
           <div className="flex items-center gap-2">
             <Search className="size-3.5 text-warmmuted" />
-            <span>Cari fitur, paket, studi kasus...</span>
+            <span>Cari fitur, studi kasus...</span>
           </div>
           <kbd className="px-1.5 py-0.5 rounded bg-sandstone border border-warmborder text-[10px] font-mono text-warmmuted">
             ⌘K
@@ -66,16 +78,23 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         {/* Desktop Nav Links */}
-        <nav className="hidden lg:flex items-center gap-6">
-          {navLinks.map((link) => (
-            <button
-              key={link.sectionId}
-              onClick={() => handleLinkClick(link.sectionId)}
-              className="text-xs font-semibold text-espresso hover:text-terracotta transition-colors cursor-pointer"
-            >
-              {link.label}
-            </button>
-          ))}
+        <nav className="hidden lg:flex items-center gap-5">
+          {navLinks.map((link) => {
+            const active = isRouteBranchActive(link.routeId);
+            return (
+              <button
+                key={link.routeId}
+                onClick={() => handleLinkClick(link.routeId)}
+                className={`text-xs font-bold transition-colors cursor-pointer px-2.5 py-1.5 rounded-lg ${
+                  active
+                    ? 'text-terracotta bg-amber-50 border border-amber-200'
+                    : 'text-espresso hover:text-terracotta'
+                }`}
+              >
+                {link.label}
+              </button>
+            );
+          })}
         </nav>
 
         {/* Desktop Action Buttons */}
@@ -120,9 +139,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           <nav className="space-y-1">
             {navLinks.map((link) => (
               <button
-                key={link.sectionId}
-                onClick={() => handleLinkClick(link.sectionId)}
-                className="w-full text-left py-2 px-3 rounded-lg text-xs font-semibold text-espresso hover:bg-sandstone"
+                key={link.routeId}
+                onClick={() => handleLinkClick(link.routeId)}
+                className={`w-full text-left py-2 px-3 rounded-lg text-xs font-semibold ${
+                  isRouteBranchActive(link.routeId)
+                    ? 'bg-amber-50 text-terracotta'
+                    : 'text-espresso hover:bg-sandstone'
+                }`}
               >
                 {link.label}
               </button>

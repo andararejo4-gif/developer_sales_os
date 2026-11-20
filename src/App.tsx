@@ -12,6 +12,7 @@ import { ProjectWebsitePreview } from './components/ProjectWebsitePreview';
 import { CrmPipelineView } from './components/CrmPipelineView';
 import { CommissionSettingsModal } from './components/CommissionSettingsModal';
 import { SuperadminPanel } from './components/SuperadminPanel';
+import { FieldOpsModal } from './components/FieldOpsModal';
 import {
   Award,
   BookOpen,
@@ -33,6 +34,7 @@ import {
   Megaphone,
   MessageSquare,
   Percent,
+  PhoneCall,
   Plus,
   RefreshCw,
   Send,
@@ -150,6 +152,8 @@ export default function App() {
   const [showCrmModal, setShowCrmModal] = useState<boolean>(false);
   const [showCommissionModal, setShowCommissionModal] = useState<boolean>(false);
   const [showSuperadminModal, setShowSuperadminModal] = useState<boolean>(false);
+  const [showFieldOpsModal, setShowFieldOpsModal] = useState<boolean>(false);
+  const [fieldOpsTab, setFieldOpsTab] = useState<'absen' | 'gps' | 'call' | 'ai_guide'>('absen');
 
   // Common UI states
   const [toast, setToast] = useState<string | null>(null);
@@ -561,6 +565,17 @@ export default function App() {
               >
                 <MapPin className="size-4 text-terracotta" />
                 <span>Rute Harian Kanvasing</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setFieldOpsTab('absen');
+                  setShowFieldOpsModal(true);
+                }}
+                className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+              >
+                <PhoneCall className="size-4 text-olive" />
+                <span>Absen, GPS, Call &amp; AI Guide</span>
               </button>
 
               <button
@@ -2192,6 +2207,21 @@ export default function App() {
       {showSuperadminModal && (
         <SuperadminPanel
           onClose={() => setShowSuperadminModal(false)}
+        />
+      )}
+
+      {showFieldOpsModal && (
+        <FieldOpsModal
+          projectName="The Park Townhouse Sukoharjo"
+          currentSeName={role === 'SE' ? user.name : 'SE 001 Budi Santoso'}
+          initialTab={fieldOpsTab}
+          planCode="platinum"
+          onClose={() => setShowFieldOpsModal(false)}
+          onUpgradeRequest={() => {
+            setShowFieldOpsModal(false);
+            setViewMode('homepage');
+            setToast('Beralih ke halaman paket untuk konsultasi upgrade Platinum / Diamond');
+          }}
         />
       )}
 

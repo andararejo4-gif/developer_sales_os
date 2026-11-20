@@ -42,6 +42,10 @@ export const PLANS_CONFIG: PlanDefinition[] = [
       { feature_key: 'playbook_tl', feature_name: 'Playbook Team Leader', feature_value: 'dokumen_manual', is_enabled: false }, // not AI
       { feature_key: 'playbook_sm', feature_name: 'Playbook Sales Manager', feature_value: 'dokumen_manual', is_enabled: false }, // not AI
       { feature_key: 'crm_pipeline', feature_name: 'CRM & Pipeline Penjualan', feature_value: 'dasar', is_enabled: true },
+      { feature_key: 'se_attendance', feature_name: 'Absensi Harian SE', feature_value: true, is_enabled: true },
+      { feature_key: 'se_gps_tracking', feature_name: 'Tracking GPS SE / Sales In-House', feature_value: true, is_enabled: true },
+      { feature_key: 'se_call_log', feature_name: 'Log Panggilan Telepon SE', feature_value: true, is_enabled: true },
+      { feature_key: 'se_ai_activity_guide', feature_name: 'Panduan / Guide per Aktivitas SE dengan AI', feature_value: false, is_enabled: false },
       { feature_key: 'support_level', feature_name: 'Dukungan Layanan', feature_value: 'Email', is_enabled: true },
     ]
   },
@@ -66,6 +70,10 @@ export const PLANS_CONFIG: PlanDefinition[] = [
       { feature_key: 'playbook_tl', feature_name: 'Playbook Team Leader', feature_value: 'full_ai', is_enabled: true }, // TL Full AI
       { feature_key: 'playbook_sm', feature_name: 'Playbook Sales Manager', feature_value: 'dokumen_manual', is_enabled: false },
       { feature_key: 'crm_pipeline', feature_name: 'CRM & Pipeline Penjualan', feature_value: 'penuh_kpi_harian', is_enabled: true },
+      { feature_key: 'se_attendance', feature_name: 'Absensi Harian SE', feature_value: true, is_enabled: true },
+      { feature_key: 'se_gps_tracking', feature_name: 'Tracking GPS SE / Sales In-House', feature_value: true, is_enabled: true },
+      { feature_key: 'se_call_log', feature_name: 'Log Panggilan Telepon SE', feature_value: true, is_enabled: true },
+      { feature_key: 'se_ai_activity_guide', feature_name: 'Panduan / Guide per Aktivitas SE dengan AI', feature_value: 'aktif_platinum', is_enabled: true },
       { feature_key: 'support_level', feature_name: 'Dukungan Layanan', feature_value: 'Prioritas', is_enabled: true },
     ]
   },
@@ -90,6 +98,10 @@ export const PLANS_CONFIG: PlanDefinition[] = [
       { feature_key: 'playbook_tl', feature_name: 'Playbook Team Leader', feature_value: 'full_ai', is_enabled: true }, // TL Full AI
       { feature_key: 'playbook_sm', feature_name: 'Playbook Sales Manager', feature_value: 'semi_ai', is_enabled: true }, // SM Semi-AI
       { feature_key: 'crm_pipeline', feature_name: 'CRM & Pipeline Penjualan', feature_value: 'penuh_dasbor_eksekutif', is_enabled: true },
+      { feature_key: 'se_attendance', feature_name: 'Absensi Harian SE', feature_value: true, is_enabled: true },
+      { feature_key: 'se_gps_tracking', feature_name: 'Tracking GPS SE / Sales In-House', feature_value: true, is_enabled: true },
+      { feature_key: 'se_call_log', feature_name: 'Log Panggilan Telepon SE', feature_value: true, is_enabled: true },
+      { feature_key: 'se_ai_activity_guide', feature_name: 'Panduan / Guide per Aktivitas SE dengan AI', feature_value: 'aktif_diamond', is_enabled: true },
       { feature_key: 'support_level', feature_name: 'Dukungan Layanan', feature_value: 'Pendamping Khusus', is_enabled: true },
     ]
   }
