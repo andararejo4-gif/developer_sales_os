@@ -42,6 +42,17 @@ export interface ClusterData {
 }
 
 export const POIS: POI[] = [
+  // 1. Fasilitas Medis / Rumah Sakit
+  {
+    name: 'RS Nirmala Suri Sukoharjo',
+    category: 'Fasilitas Medis',
+    lat: -7.6620,
+    lng: 110.8385,
+    approxDistance: '~1.2 km · 3 mnt berkendara',
+    whyInteresting:
+      'Rumah sakit swasta terkemuka di jalur utama Solo-Sukoharjo dengan IGD 24 jam dan dokter spesialis lengkap.',
+    buyerHighlight: 'Nilai jual: Penanganan medis darurat sangat cepat di bawah 5 menit dari rumah.',
+  },
   {
     name: 'RSUD Ir. Soekarno',
     category: 'Fasilitas Medis',
@@ -51,6 +62,28 @@ export const POIS: POI[] = [
     whyInteresting:
       'Rumah sakit rujukan utama Kabupaten Sukoharjo dengan layanan IGD 24 jam dan poli spesialis lengkap.',
     buyerHighlight: 'Nilai jual: Keamanan medis keluarga & potensi tinggi target sewa dokter/tenaga medis.',
+  },
+  {
+    name: 'RS Indriati Solo Baru',
+    category: 'Fasilitas Medis',
+    lat: -7.6105,
+    lng: 110.8240,
+    approxDistance: '~7.2 km · 11 mnt berkendara',
+    whyInteresting:
+      'Rumah sakit swasta tipe B modern bertaraf internasional di koridor Solo Baru dengan pusat penanganan komprehensif.',
+    buyerHighlight: 'Nilai jual: Akses layanan spesialis rujukan tinggi tanpa harus ke luar kota.',
+  },
+
+  // 2. Pendidikan / Sekolah & Kampus
+  {
+    name: 'SD Negeri Gayam 1 Sukoharjo',
+    category: 'Pendidikan',
+    lat: -7.6740,
+    lng: 110.8412,
+    approxDistance: '~0.5 km · 2 mnt berkendara',
+    whyInteresting:
+      'Sekolah dasar negeri terdekat dengan lingkungan ramah anak, aman dijangkau jalan kaki atau sepeda.',
+    buyerHighlight: 'Nilai jual: Anak sekolah tanpa repot antar-jemput jauh, hemat waktu harian keluarga.',
   },
   {
     name: 'SMA Negeri 1 Sukoharjo',
@@ -63,6 +96,28 @@ export const POIS: POI[] = [
     buyerHighlight: 'Nilai jual: Antar-jemput sekolah di bawah 5 menit tanpa macet panjang.',
   },
   {
+    name: 'SMP Negeri 1 Sukoharjo',
+    category: 'Pendidikan',
+    lat: -7.6815,
+    lng: 110.8360,
+    approxDistance: '~2.8 km · 6 mnt berkendara',
+    whyInteresting:
+      'Sekolah menengah pertama favorit pusat kota dengan fasilitas laboratorium dan ekstrakurikuler berprestasi.',
+    buyerHighlight: 'Nilai jual: Jalur zonasi sekolah negeri favorit sangat menguntungkan penghuni klaster.',
+  },
+  {
+    name: 'Universitas Muhammadiyah Surakarta (UMS)',
+    category: 'Pendidikan',
+    lat: -7.5580,
+    lng: 110.7720,
+    approxDistance: '~15.2 km · 22 mnt berkendara',
+    whyInteresting:
+      'Kampus swasta terkemuka Solo Raya dengan 35.000+ mahasiswa dan fakultas kedokteran & teknik unggulan.',
+    buyerHighlight: 'Nilai jual: Akses pendidikan tinggi terakreditasi Unggul & potensi capital gain sewa kos.',
+  },
+
+  // 3. Pemerintahan & Sipil
+  {
     name: 'Alun-Alun Satya Negara',
     category: 'Pemerintahan',
     lat: -7.6830,
@@ -73,6 +128,18 @@ export const POIS: POI[] = [
     buyerHighlight: 'Nilai jual: Dekat pusat layanan sipil daerah & ruang rekreasi keluarga akhir pekan.',
   },
   {
+    name: 'Kantor Bupati Sukoharjo',
+    category: 'Pemerintahan',
+    lat: -7.6820,
+    lng: 110.8275,
+    approxDistance: '~3.3 km · 8 mnt berkendara',
+    whyInteresting:
+      'Gedung pusat pemerintahan kabupaten dan pusat pelayanan perizinan terpadu (Mall Pelayanan Publik).',
+    buyerHighlight: 'Nilai jual: Kemudahan pengurusan administrasi kependudukan dan perizinan legalitas.',
+  },
+
+  // 4. Transportasi
+  {
     name: 'Stasiun Sukoharjo',
     category: 'Transportasi',
     lat: -7.6850,
@@ -81,6 +148,38 @@ export const POIS: POI[] = [
     whyInteresting:
       'Akses kereta api komuter Batara Kresna yang menghubungkan langsung Sukoharjo – Solo Kota – Wonogiri.',
     buyerHighlight: 'Nilai jual: Mobilitas komuter bebas macet menuju pusat bisnis Kota Solo.',
+  },
+  {
+    name: 'Terminal Bus Sukoharjo',
+    category: 'Transportasi',
+    lat: -7.6910,
+    lng: 110.8360,
+    approxDistance: '~4.5 km · 9 mnt berkendara',
+    whyInteresting:
+      'Terminal bus terpadu Sukoharjo yang melayani rute AKAP lintas Jawa dan angkutan kota antarkecamatan.',
+    buyerHighlight: 'Nilai jual: Kemudahan bepergian luar kota dengan armada bus antarprovinsi.',
+  },
+  {
+    name: 'Stasiun Solobalapan',
+    category: 'Transportasi',
+    lat: -7.5580,
+    lng: 110.8215,
+    approxDistance: '~13.2 km · 20 mnt berkendara',
+    whyInteresting:
+      'Hub utama kereta api eksekutif antarkota & KRL Commuter Line Solo-Yogyakarta dengan jadwal per jam.',
+    buyerHighlight: 'Nilai jual: Mobilitas kilat ke Yogyakarta (45 menit) & kereta cepat antarkota ke Jakarta/Surabaya.',
+  },
+
+  // 5. Pusat Belanja & Pasar
+  {
+    name: 'Pasar Ir. Soekarno Sukoharjo',
+    category: 'Pusat Belanja',
+    lat: -7.6845,
+    lng: 110.8320,
+    approxDistance: '~3.4 km · 7 mnt berkendara',
+    whyInteresting:
+      'Pasar induk tradisional modern Sukoharjo untuk belanja harian segar, sayur mayur, dan sembako murah.',
+    buyerHighlight: 'Nilai jual: Biaya hidup dapur keluarga hemat dan bahan pangan segar setiap subuh.',
   },
   {
     name: 'The Park Mall Solo Baru',

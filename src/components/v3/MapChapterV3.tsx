@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import gsap from 'gsap';
-import { Compass, Home, MapPin, Navigation, X } from 'lucide-react';
+import { Compass, Filter, Home, MapPin, Navigation, X } from 'lucide-react';
 import {
   CLUSTERS,
   HOME_SVG_PATH,
@@ -22,6 +22,21 @@ function parseKm(approxDistance: string): number {
   const m = approxDistance.match(/([\d.]+)\s*km/i);
   return m ? parseFloat(m[1]) : 5;
 }
+
+export interface CategoryFilterOption {
+  id: 'all' | POI['category'];
+  label: string;
+  shortLabel: string;
+}
+
+export const CATEGORY_OPTIONS: CategoryFilterOption[] = [
+  { id: 'all', label: 'Semua Fasilitas', shortLabel: 'Semua' },
+  { id: 'Fasilitas Medis', label: 'Rumah Sakit & Medis', shortLabel: 'Rumah Sakit' },
+  { id: 'Pendidikan', label: 'Sekolah & Kampus', shortLabel: 'Sekolah' },
+  { id: 'Pusat Belanja', label: 'Pusat Belanja & Pasar', shortLabel: 'Belanja' },
+  { id: 'Transportasi', label: 'Transportasi & Stasiun', shortLabel: 'Transport' },
+  { id: 'Pemerintahan', label: 'Pemerintahan & Sipil', shortLabel: 'Pemerintahan' },
+];
 
 const CATEGORY_STYLES: Record<
   POI['category'],
@@ -120,6 +135,25 @@ function buildClusterPopupHtml(c: ClusterData): string {
   `;
 }
 
+function getHeadlineCounterText(
+  selectedCategory: 'all' | POI['category'],
+  inRadiusCount: number,
+  outsideCount: number,
+  radiusLabel: string
+): string {
+  if (selectedCategory === 'all') {
+    return `${inRadiusCount} dalam radius ${radiusLabel} · ${outsideCount} di luar radius`;
+  }
+  const categoryNames: Record<POI['category'], string> = {
+    'Fasilitas Medis': 'rumah sakit & medis',
+    Pendidikan: 'sekolah & kampus',
+    'Pusat Belanja': 'pusat belanja & pasar',
+    Transportasi: 'titik transportasi',
+    Pemerintahan: 'fasilitas publik/sipil',
+  };
+  return `${inRadiusCount} ${categoryNames[selectedCategory]} dalam radius ${radiusLabel} · ${outsideCount} di luar radius`;
+}
+
 export const MapChapterV3: React.FC = () => {
   const sectionRef = useRef<HTMLElement>(null);
   const mapElRef = useRef<HTMLDivElement>(null);
@@ -130,6 +164,7 @@ export const MapChapterV3: React.FC = () => {
 
   const [selectedRadius, setSelectedRadius] = useState<number>(5000);
   const [activeClusterId, setActiveClusterId] = useState<'all' | ClusterData['id']>('all');
+  const [selectedCategory, setSelectedCategory] = useState<'all' | POI['category']>('all');
   const [selectedPoi, setSelectedPoi] = useState<POI | null>(null);
   const [selectedCluster, setSelectedCluster] = useState<ClusterData | null>(null);
   const [wheelUnlocked, setWheelUnlocked] = useState<boolean>(false);
@@ -160,14 +195,20 @@ export const MapChapterV3: React.FC = () => {
     });
   }, [originPoint, selectedRadius]);
 
+  // Filtered by active category (Rumah Sakit, Sekolah, dll)
+  const filteredPois = useMemo(() => {
+    if (selectedCategory === 'all') return poisWithDistance;
+    return poisWithDistance.filter((item) => item.poi.category === selectedCategory);
+  }, [poisWithDistance, selectedCategory]);
+
   const inRadiusCount = useMemo(
-    () => poisWithDistance.filter((item) => item.inRadius).length,
-    [poisWithDistance]
+    () => filteredPois.filter((item) => item.inRadius).length,
+    [filteredPois]
   );
 
   const outsideCount = useMemo(
-    () => POIS.length - inRadiusCount,
-    [inRadiusCount]
+    () => filteredPois.length - inRadiusCount,
+    [filteredPois, inRadiusCount]
   );
 
   const activeRadiusObj = useMemo(
@@ -363,9 +404,8 @@ export const MapChapterV3: React.FC = () => {
       }).addTo(layer);
     }
 
-    // Visible POIs: All facilities in active radius, PLUS explicitly selected facility (even if outside radius)
-    // Verification requirement: At 5 km, 4 facilities display as markers. At 10 km, all 6 appear.
-    const visiblePoiItems = poisWithDistance.filter(
+    // Visible POIs: Filtered by active category and in active radius, PLUS explicitly selected facility
+    const visiblePoiItems = filteredPois.filter(
       (item) => item.inRadius || item.poi.name === selectedPoi?.name
     );
 
@@ -423,7 +463,7 @@ export const MapChapterV3: React.FC = () => {
         }, 60);
       }
     });
-  }, [originPoint, selectedRadius, activeClusterId, selectedPoi, poisWithDistance]);
+  }, [originPoint, selectedRadius, activeClusterId, selectedPoi, filteredPois]);
 
   const handleSelectPoiFromList = (poi: POI) => {
     setSelectedCluster(null);
@@ -454,19 +494,79 @@ export const MapChapterV3: React.FC = () => {
   // Shared Panel Content (used as floating left panel on desktop, below-map panel on tablet/mobile)
   const renderControlPanel = (compact = false) => (
     <div className={`bg-white border border-[#CFE1D5] rounded-2xl ${compact ? 'p-4 sm:p-5' : 'p-5 shadow-[0_24px_60px_-24px_rgba(11,61,46,0.22)]'} flex flex-col gap-4`}>
-      {/* Summary Header: Dynamic counter from active data & filter */}
+      {/* Summary Header: Dynamic counter from active data, category, and radius */}
       <div className="flex items-start justify-between gap-2 pb-3 border-b border-[#E4F1E8]">
         <div>
           <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-[#2F9E5B]">
             Analisis Radius Aktif
           </span>
-          <p className="font-display-v3 font-extrabold text-base sm:text-lg text-[#0B3D2E] mt-0.5 tabular-nums">
-            {inRadiusCount} dalam radius {activeRadiusObj.label} · {outsideCount} di luar radius
+          <p className="font-display-v3 font-extrabold text-base sm:text-lg text-[#0B3D2E] mt-0.5 tabular-nums leading-snug">
+            {getHeadlineCounterText(selectedCategory, inRadiusCount, outsideCount, activeRadiusObj.label)}
           </p>
         </div>
         <span className="px-2.5 py-1 rounded-full bg-[#C6F432] text-[#0B3D2E] font-mono text-xs font-bold shrink-0">
           {activeRadiusObj.label}
         </span>
+      </div>
+
+      {/* Category Filter Pills (Pilihan Rumah Sakit, Sekolah, dll) */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] font-mono font-bold uppercase text-[#3B5E50]">
+            Pilihan Kategori Fasilitas
+          </span>
+          {selectedCategory !== 'all' && (
+            <button
+              onClick={() => setSelectedCategory('all')}
+              className="text-[10px] font-mono font-bold text-[#2F9E5B] hover:underline cursor-pointer"
+            >
+              Reset ke Semua
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+          {CATEGORY_OPTIONS.map((cat) => {
+            const active = selectedCategory === cat.id;
+            const countInRadius = poisWithDistance.filter(
+              (p) => (cat.id === 'all' || p.poi.category === cat.id) && p.inRadius
+            ).length;
+
+            return (
+              <button
+                key={cat.id}
+                onClick={() => {
+                  setSelectedCategory(cat.id);
+                  if (selectedPoi && selectedPoi.category !== cat.id && cat.id !== 'all') {
+                    setSelectedPoi(null);
+                  }
+                }}
+                className={`min-h-[40px] px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-between gap-1.5 ${
+                  active
+                    ? 'bg-[#0B3D2E] text-[#C6F432] border-[#0B3D2E] shadow-xs'
+                    : 'bg-[#F6FAF7] text-[#0B3D2E] border-[#CFE1D5] hover:border-[#2F9E5B]'
+                }`}
+              >
+                <span className="flex items-center gap-1.5 truncate">
+                  {cat.id === 'all' ? (
+                    <Compass className="size-3.5 shrink-0 text-[#2F9E5B]" />
+                  ) : (
+                    <PoiCategoryIcon category={cat.id} className="size-3.5 shrink-0" />
+                  )}
+                  <span className="truncate">{cat.shortLabel}</span>
+                </span>
+                <span
+                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full shrink-0 ${
+                    active
+                      ? 'bg-[#C6F432] text-[#0B3D2E] font-extrabold'
+                      : 'bg-white text-[#3B5E50] border border-[#CFE1D5]'
+                  }`}
+                >
+                  {countInRadius}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Radius 3x2 Grid (zero horizontal scroll on any screen) */}
@@ -533,7 +633,7 @@ export const MapChapterV3: React.FC = () => {
       <div className="pt-1 relative">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[11px] font-mono font-bold uppercase text-[#3B5E50]">
-            Perbandingan Jarak Fasilitas
+            Daftar Fasilitas ({filteredPois.length})
           </span>
           {!compact && (
             <span className="text-[10px] font-mono text-[#3B5E50]/75">
@@ -543,9 +643,9 @@ export const MapChapterV3: React.FC = () => {
         </div>
         <div
           data-lenis-prevent
-          className={`space-y-2 ${compact ? '' : 'max-h-[238px] overflow-y-auto overscroll-contain no-scrollbar pb-5'}`}
+          className={`space-y-2 ${compact ? '' : 'max-h-[220px] overflow-y-auto overscroll-contain no-scrollbar pb-5'}`}
         >
-          {poisWithDistance.map(({ poi, km, inRadius }) => {
+          {filteredPois.map(({ poi, km, inRadius }) => {
             const isSel = selectedPoi?.name === poi.name;
             const barWidth = Math.min(100, Math.max(18, (km / 10) * 100));
             const catStyle = CATEGORY_STYLES[poi.category];
@@ -621,7 +721,7 @@ export const MapChapterV3: React.FC = () => {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Chapter Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-4 sm:mb-6">
           <div className="max-w-2xl">
             <p className="text-xs font-mono uppercase tracking-widest text-[#2F9E5B] font-bold">
               Bab 04 · Peta Spasial &amp; Radius Riset
@@ -630,14 +730,58 @@ export const MapChapterV3: React.FC = () => {
               Peta jadi pusat keputusan lokasi.
             </h2>
             <p className="text-sm sm:text-base text-[#3B5E50] mt-2 leading-relaxed">
-              Pilih fasilitas untuk melihat garis jarak dan nilai jual langsung di atas peta The Park Townhouse Sukoharjo.
+              Pilih kategori fasilitas (rumah sakit, sekolah, belanja, dll) dan radius untuk melihat garis jarak dan nilai jual langsung di atas peta The Park Townhouse Sukoharjo.
             </p>
           </div>
 
           <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white border border-[#CFE1D5] text-xs font-semibold text-[#0B3D2E] self-start">
             <Compass className="size-4 text-[#2F9E5B]" />
-            <span>3 Klaster · 6 Fasilitas Terverifikasi</span>
+            <span>3 Klaster · {POIS.length} Fasilitas Terverifikasi</span>
           </div>
+        </div>
+
+        {/* Quick Category Filter Bar above Map */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-4 no-scrollbar">
+          <span className="text-xs font-mono font-bold text-[#3B5E50] uppercase shrink-0 mr-1 flex items-center gap-1">
+            <Filter className="size-3.5 text-[#2F9E5B]" />
+            Kategori:
+          </span>
+          {CATEGORY_OPTIONS.map((cat) => {
+            const active = selectedCategory === cat.id;
+            const countInRadius = poisWithDistance.filter(
+              (p) => (cat.id === 'all' || p.poi.category === cat.id) && p.inRadius
+            ).length;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => {
+                  setSelectedCategory(cat.id);
+                  if (selectedPoi && selectedPoi.category !== cat.id && cat.id !== 'all') {
+                    setSelectedPoi(null);
+                  }
+                }}
+                className={`min-h-[38px] px-3 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0 border ${
+                  active
+                    ? 'bg-[#0B3D2E] text-[#C6F432] border-[#0B3D2E] shadow-sm'
+                    : 'bg-white text-[#3B5E50] border-[#CFE1D5] hover:border-[#2F9E5B] hover:text-[#0B3D2E]'
+                }`}
+              >
+                {cat.id === 'all' ? (
+                  <Compass className="size-3.5 text-[#2F9E5B]" />
+                ) : (
+                  <PoiCategoryIcon category={cat.id} className="size-3.5" />
+                )}
+                <span>{cat.shortLabel}</span>
+                <span
+                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                    active ? 'bg-[#C6F432] text-[#0B3D2E] font-black' : 'bg-[#EAF4D3] text-[#0B3D2E]'
+                  }`}
+                >
+                  {countInRadius}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Full-Bleed Map Stage with Isolated Stacking Context (isolate z-0) so navbar (z-50) stays on top */}
@@ -650,7 +794,7 @@ export const MapChapterV3: React.FC = () => {
           />
 
           {/* DESKTOP FLOATING SOLID WHITE CONTROL PANEL (lg:block, z-20 within isolated map wrapper) */}
-          <div className="hidden lg:block absolute top-5 left-5 z-20 w-[336px]">
+          <div className="hidden lg:block absolute top-5 left-5 z-20 w-[350px]">
             {renderControlPanel(false)}
           </div>
 
