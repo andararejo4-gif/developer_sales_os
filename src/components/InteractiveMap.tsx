@@ -40,6 +40,8 @@ export interface POI {
   isStrategic?: boolean;
   strategicType?: string;
   strategicTier?: string;
+  in1km?: boolean;
+  osmTags?: Record<string, string>;
 }
 
 export interface ClusterData {
@@ -54,25 +56,28 @@ export interface ClusterData {
   calloutDir: 'top-right' | 'bottom-left' | 'bottom-right';
 }
 
-export const POIS: POI[] = (osmPoisData as any[])
-  .filter((p) => p.isStrategic !== false)
-  .map((p) => ({
-    id: p.id,
-    osmId: p.osmId,
-    name: p.name,
-    category: p.categoryLabel || p.category,
-    categoryKey: p.category as PoiCategoryKey,
-    categoryLabel: p.categoryLabel,
-    subType: p.subType,
-    lat: p.lat,
-    lng: p.lng,
-    approxDistance: p.approxDistance.includes('berkendara') ? p.approxDistance : `${p.approxDistance} berkendara`,
-    whyInteresting: p.whyInteresting,
-    buyerHighlight: p.buyerHighlight,
-    isStrategic: p.isStrategic ?? true,
-    strategicType: p.strategicType,
-    strategicTier: p.strategicTier,
-  }));
+export const POIS: POI[] = (osmPoisData as any[]).map((p) => ({
+  id: p.id,
+  osmId: p.osmId,
+  name: p.name,
+  category: p.categoryLabel || p.category,
+  categoryKey: p.category as PoiCategoryKey,
+  categoryLabel: p.categoryLabel,
+  subType: p.subType,
+  lat: p.lat,
+  lng: p.lng,
+  approxDistance:
+    p.approxDistance.includes('berkendara') || p.approxDistance.includes('jalan kaki')
+      ? p.approxDistance
+      : `${p.approxDistance} berkendara`,
+  whyInteresting: p.whyInteresting,
+  buyerHighlight: p.buyerHighlight,
+  isStrategic: p.isStrategic ?? true,
+  strategicType: p.strategicType,
+  strategicTier: p.strategicTier,
+  osmTags: p.osmTags,
+  in1km: p.in1km,
+}));
 
 export const CLUSTERS: ClusterData[] = [
   {

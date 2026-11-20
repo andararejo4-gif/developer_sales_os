@@ -371,6 +371,36 @@
   pointer-events: none;
 }
 
+/* Active Pin Beacon Ring for Selected POI */
+.v3-pin-active-ring {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50px;
+  height: 50px;
+  border-radius: 999px;
+  border: 2.5px solid #c6f432;
+  box-shadow: 0 0 0 2px #0b3d2e;
+  pointer-events: none;
+  animation: v3-pin-pulse 2s infinite cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@keyframes v3-pin-pulse {
+  0% {
+    transform: translateX(-50%) scale(0.85);
+    opacity: 0.95;
+  }
+  60% {
+    transform: translateX(-50%) scale(1.35);
+    opacity: 0.2;
+  }
+  100% {
+    transform: translateX(-50%) scale(1.5);
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .v3-hero-mesh,
   .v3-ticker-track {
