@@ -129,6 +129,7 @@ interface JalurProyekProps {
   projectName?: string;
   userRole?: string;
   isDemoMode?: boolean;
+  variant?: 'modal' | 'page';
   onOpenStage?: (stageKey: string) => void;
   onClose?: () => void;
 }
@@ -137,6 +138,7 @@ export function JalurProyek({
   projectName = 'The Park Townhouse Sukoharjo',
   userRole = 'DIREKSI',
   isDemoMode = false,
+  variant = 'modal',
   onOpenStage,
   onClose,
 }: JalurProyekProps) {
@@ -173,45 +175,66 @@ export function JalurProyek({
     setToastMessage(`Tahap ${stageKey} berhasil di-regenerate ke versi baru!`);
   };
 
+  const outerClass =
+    variant === 'page'
+      ? 'w-full'
+      : 'fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200';
+  const cardClass =
+    variant === 'page'
+      ? 'bg-white rounded-2xl border border-warmborder w-full flex flex-col overflow-hidden shadow-xs'
+      : 'bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden';
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+    <div className={outerClass}>
+      <div className={cardClass}>
         {/* Header */}
-        <div className="px-6 py-5 bg-sandstone/60 border-b border-warmborder flex items-center justify-between shrink-0">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-terracotta text-white">
-                Jalur Proyek
-              </span>
-              <h2 className="text-lg md:text-xl font-extrabold text-espresso">
-                {projectName}
-              </h2>
-              {isDemoMode && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                  Demo
+        <div className="px-4 py-4 sm:px-6 sm:py-5 bg-sandstone/60 border-b border-warmborder flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
+          <div className="flex items-start justify-between gap-3 min-w-0">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-terracotta text-white shrink-0">
+                  Jalur Proyek
                 </span>
-              )}
+                <h2 className="text-base sm:text-xl font-extrabold text-espresso leading-snug">
+                  {projectName}
+                </h2>
+                {isDemoMode && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
+                    Demo
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-warmmuted mt-1 leading-relaxed">
+                Alur berurutan 8 tahap pemasaran &amp; penjualan. Tiap tahap menjadi masukan tahap berikutnya.
+              </p>
             </div>
-            <p className="text-xs text-warmmuted mt-0.5">
-              Alur berurutan 8 tahap pemasaran & penjualan. Tiap tahap menjadi masukan tahap berikutnya.
-            </p>
+            {variant === 'modal' && onClose && (
+              <button
+                onClick={onClose}
+                aria-label="Tutup Jalur Proyek"
+                className="sm:hidden size-10 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              >
+                <X className="size-5" />
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {canManageProject && (
               <button
                 onClick={() => setShowNewProjectModal(true)}
-                className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-espresso text-white hover:bg-espresso/90 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                className="min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold bg-espresso text-white hover:bg-espresso/90 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm whitespace-nowrap"
               >
                 <Plus className="size-3.5 text-amber-400" />
                 <span>Tambah Proyek Baru</span>
               </button>
             )}
 
-            {onClose && (
+            {variant === 'modal' && onClose && (
               <button
                 onClick={onClose}
-                className="size-9 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso flex items-center justify-center transition-colors cursor-pointer ml-1"
+                aria-label="Tutup Jalur Proyek"
+                className="hidden sm:flex size-9 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso items-center justify-center transition-colors cursor-pointer ml-1"
               >
                 <X className="size-5" />
               </button>

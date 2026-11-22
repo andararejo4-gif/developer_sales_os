@@ -3,7 +3,7 @@
 // GPS-Guided Canvassing Route for Sales Executive (Printable & Mobile-First)
 // ============================================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   MapPin,
   Clock,
@@ -12,60 +12,102 @@ import {
   Navigation,
 } from 'lucide-react';
 import { generateDailyRoutePlan } from '../lib/playbook/route-generator';
+import {
+  getQueryParam,
+  setQueryParam,
+  loadPersistedState,
+  savePersistedState,
+} from '../lib/navigation/router';
 import type { DailyRoutePlan } from '../lib/playbook/types';
+
+const VALID_DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
 interface DailyRouteViewerProps {
   projectId?: string;
   projectName?: string;
+  variant?: 'modal' | 'page';
   onClose?: () => void;
 }
 
 export function DailyRouteViewer({
+  projectId = 'proj-the-park-01',
   projectName = 'The Park Townhouse Sukoharjo',
+  variant = 'modal',
   onClose,
 }: DailyRouteViewerProps) {
-  const [selectedDay, setSelectedDay] = useState<string>('Senin');
+  const [selectedDay, setSelectedDay] = useState<string>(() => {
+    const urlTab = variant === 'page' ? getQueryParam('tab') : null;
+    if (urlTab && VALID_DAYS.includes(urlTab)) return urlTab;
+    return loadPersistedState<string>(`devos_route_day_${projectId}`, 'Senin');
+  });
+
+  useEffect(() => {
+    savePersistedState(`devos_route_day_${projectId}`, selectedDay);
+    if (variant === 'page') {
+      setQueryParam('tab', selectedDay);
+    }
+  }, [selectedDay, projectId, variant]);
+
   const route: DailyRoutePlan = generateDailyRoutePlan(selectedDay);
 
-  const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const days = VALID_DAYS;
+
+  const outerClass =
+    variant === 'page'
+      ? 'w-full'
+      : 'fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200';
+  const cardClass =
+    variant === 'page'
+      ? 'bg-white rounded-2xl border border-warmborder w-full flex flex-col overflow-hidden shadow-xs'
+      : 'bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden';
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+    <div className={outerClass}>
+      <div className={cardClass}>
         {/* Header */}
-        <div className="px-6 py-5 bg-sandstone/60 border-b border-warmborder flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="size-11 rounded-2xl bg-terracotta text-white flex items-center justify-center shadow-sm">
-              <Navigation className="size-6" />
+        <div className="px-4 py-4 sm:px-6 sm:py-5 bg-sandstone/60 border-b border-warmborder flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="size-10 sm:size-11 rounded-2xl bg-terracotta text-white flex items-center justify-center shadow-sm shrink-0">
+              <Navigation className="size-5 sm:size-6" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg md:text-xl font-extrabold text-espresso tracking-tight">
-                  Rute Harian &amp; Kanvasing Sales Executive
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base sm:text-xl font-extrabold text-espresso tracking-tight leading-snug">
+                  Rute Harian &amp; Kanvasing SE
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-terracotta/10 text-terracotta border border-terracotta/20">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-terracotta/10 text-terracotta border border-terracotta/20 shrink-0">
                   {selectedDay}
                 </span>
               </div>
-              <p className="text-xs text-warmmuted">
+              <p className="text-xs text-warmmuted mt-0.5 leading-relaxed">
                 {projectName} · Titik Awal: {route.startPoint.name}
               </p>
             </div>
+            {variant === 'modal' && onClose && (
+              <button
+                onClick={onClose}
+                aria-label="Tutup Rute Harian"
+                className="sm:hidden size-10 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              >
+                <X className="size-5" />
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => window.print()}
-              className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-terracotta text-white hover:bg-terracotta/90 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+              className="min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold bg-terracotta text-white hover:bg-terracotta/90 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm whitespace-nowrap"
             >
-              <Printer className="size-3.5" />
+              <Printer className="size-3.5 shrink-0" />
               <span>Cetak Lembar Rute</span>
             </button>
 
-            {onClose && (
+            {variant === 'modal' && onClose && (
               <button
                 onClick={onClose}
-                className="size-9 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso flex items-center justify-center transition-colors cursor-pointer ml-1"
+                aria-label="Tutup Rute Harian"
+                className="hidden sm:flex size-9 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso items-center justify-center transition-colors cursor-pointer ml-1"
               >
                 <X className="size-5" />
               </button>
@@ -74,9 +116,9 @@ export function DailyRouteViewer({
         </div>
 
         {/* Day Selector Bar */}
-        <div className="px-6 py-3 bg-white border-b border-warmborder flex items-center justify-between gap-3 shrink-0">
-          <span className="text-xs font-bold text-warmmuted">Pilih Hari Kanvasing:</span>
-          <div className="flex gap-1 overflow-x-auto">
+        <div className="px-4 sm:px-6 py-3 bg-white border-b border-warmborder flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
+          <span className="text-xs font-bold text-warmmuted shrink-0">Pilih Hari Kanvasing:</span>
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar snap-x">
             {days.map((day) => (
               <button
                 key={day}

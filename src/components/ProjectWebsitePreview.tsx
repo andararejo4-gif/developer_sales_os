@@ -3,7 +3,7 @@
 // Interactive Landing Page with Installment Simulator & Direct CRM Capture
 // ============================================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Globe,
   Download,
@@ -22,34 +22,77 @@ import {
 } from '../lib/website-generator/the-park-landing-data';
 import { formatRupiah } from '../lib/sales-target/calculator';
 import { LOVE_LETTER_POINTS, type LoveLetterPoint } from '../lib/love-letter/points-data';
+import {
+  getQueryParam,
+  setQueryParam,
+  loadPersistedState,
+  savePersistedState,
+} from '../lib/navigation/router';
 
 interface ProjectWebsitePreviewProps {
+  variant?: 'modal' | 'page';
   onClose?: () => void;
   onLeadCaptured?: (lead: { name: string; phone: string; unit: string; utmSource: string }) => void;
 }
 
 export function ProjectWebsitePreview({
+  variant = 'modal',
   onClose,
   onLeadCaptured,
 }: ProjectWebsitePreviewProps) {
-  const [deviceMode, setDeviceMode] = useState<'desktop' | 'mobile'>('desktop');
+  const [deviceMode, setDeviceMode] = useState<'desktop' | 'mobile'>(() => {
+    const urlTab = variant === 'page' ? getQueryParam('tab') : null;
+    if (urlTab === 'desktop' || urlTab === 'mobile') return urlTab;
+    return loadPersistedState<'desktop' | 'mobile'>('devos_web_device', 'desktop');
+  });
   const [config] = useState(THE_PARK_DEFAULT_WEBSITE_CONFIG);
-  const [selectedUnitIndex, setSelectedUnitIndex] = useState(0);
+  const [selectedUnitIndex, setSelectedUnitIndex] = useState(() =>
+    loadPersistedState<number>('devos_web_unit_idx', 0)
+  );
 
   // Mortgage Calculator States
-  const [selectedPrice, setSelectedPrice] = useState(config.units[0].startingPriceIdr);
-  const [dpPercent, setDpPercent] = useState(10);
-  const [tenorYears, setTenorYears] = useState(15);
+  const [selectedPrice, setSelectedPrice] = useState(() =>
+    loadPersistedState<number>('devos_web_price', config.units[0].startingPriceIdr)
+  );
+  const [dpPercent, setDpPercent] = useState(() =>
+    loadPersistedState<number>('devos_web_dp', 10)
+  );
+  const [tenorYears, setTenorYears] = useState(() =>
+    loadPersistedState<number>('devos_web_tenor', 15)
+  );
   const interestRate = 4.75;
 
   // 99 Points explorer filter
-  const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [activeCategory, setActiveCategory] = useState<string>(() =>
+    loadPersistedState<string>('devos_web_cat', 'all')
+  );
 
   // Lead Form
-  const [leadName, setLeadName] = useState('');
-  const [leadPhone, setLeadPhone] = useState('');
+  const [leadName, setLeadName] = useState(() =>
+    loadPersistedState<string>('devos_web_lead_name', '')
+  );
+  const [leadPhone, setLeadPhone] = useState(() =>
+    loadPersistedState<string>('devos_web_lead_phone', '')
+  );
   const [leadSubmitted, setLeadSubmitted] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    savePersistedState('devos_web_device', deviceMode);
+    if (variant === 'page') {
+      setQueryParam('tab', deviceMode);
+    }
+  }, [deviceMode, variant]);
+
+  useEffect(() => {
+    savePersistedState('devos_web_unit_idx', selectedUnitIndex);
+    savePersistedState('devos_web_price', selectedPrice);
+    savePersistedState('devos_web_dp', dpPercent);
+    savePersistedState('devos_web_tenor', tenorYears);
+    savePersistedState('devos_web_cat', activeCategory);
+    savePersistedState('devos_web_lead_name', leadName);
+    savePersistedState('devos_web_lead_phone', leadPhone);
+  }, [selectedUnitIndex, selectedPrice, dpPercent, tenorYears, activeCategory, leadName, leadPhone]);
 
   const simulation = calculateMortgageInstallment({
     propertyPriceIdr: selectedPrice,
@@ -94,11 +137,20 @@ export function ProjectWebsitePreview({
     setToastMessage('Pesan terkirim! Lead baru otomatis tercatat di CRM Proyek.');
   };
 
+  const outerClass =
+    variant === 'page'
+      ? 'w-full'
+      : 'fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200';
+  const cardClass =
+    variant === 'page'
+      ? 'bg-white rounded-2xl border border-warmborder w-full flex flex-col overflow-hidden shadow-xs'
+      : 'bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden';
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden">
+    <div className={outerClass}>
+      <div className={cardClass}>
         {/* Top Control Bar */}
-        <div className="px-6 py-4 bg-sandstone/60 border-b border-warmborder flex items-center justify-between shrink-0">
+        <div className="px-4 py-4 sm:px-6 bg-sandstone/60 border-b border-warmborder flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-2xl bg-terracotta text-white flex items-center justify-center shadow-sm">
               <Globe className="size-5" />

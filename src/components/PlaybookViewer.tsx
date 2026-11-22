@@ -3,7 +3,7 @@
 // Reverse-Funnel Math, BANT >= 7 Scoring, SOP, & Dual/Triple Role Hierarchy
 // ============================================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   BookOpen,
   Download,
@@ -13,13 +13,23 @@ import {
 } from 'lucide-react';
 import { getPlaybook } from '../lib/playbook/playbook-generator';
 import { generatePlaybookDocx } from '../lib/exporters/playbook-docx';
+import {
+  getQueryParam,
+  setQueryParam,
+  loadPersistedState,
+  savePersistedState,
+} from '../lib/navigation/router';
 import type { PlaybookPlan, PlaybookRole } from '../lib/playbook/types';
+
+type PlaybookTab = 'sop' | 'bant' | 'kpi' | 'funnel';
+const VALID_PLAYBOOK_TABS: PlaybookTab[] = ['sop', 'bant', 'kpi', 'funnel'];
 
 interface PlaybookViewerProps {
   projectId?: string;
   projectName?: string;
   initialRole?: PlaybookRole;
   isDemoMode?: boolean;
+  variant?: 'modal' | 'page';
   onClose?: () => void;
 }
 
@@ -28,23 +38,46 @@ export function PlaybookViewer({
   projectName = 'The Park Townhouse Sukoharjo',
   initialRole = 'SE',
   isDemoMode = false,
+  variant = 'modal',
   onClose,
 }: PlaybookViewerProps) {
-  const [role, setRole] = useState<PlaybookRole>(initialRole);
-  const [playbook, setPlaybook] = useState<PlaybookPlan>(() =>
-    getPlaybook(projectId, initialRole, isDemoMode)
+  const [role, setRole] = useState<PlaybookRole>(() =>
+    loadPersistedState<PlaybookRole>(`devos_playbook_role_${projectId}`, initialRole)
   );
-  const [activeTab, setActiveTab] = useState<'sop' | 'bant' | 'kpi' | 'funnel'>('sop');
+  const [playbook, setPlaybook] = useState<PlaybookPlan>(() =>
+    getPlaybook(projectId, role, isDemoMode)
+  );
+  const [activeTab, setActiveTab] = useState<PlaybookTab>(() => {
+    const urlTab = variant === 'page' ? getQueryParam('tab') : null;
+    if (urlTab && VALID_PLAYBOOK_TABS.includes(urlTab as PlaybookTab)) {
+      return urlTab as PlaybookTab;
+    }
+    return loadPersistedState<PlaybookTab>(`devos_playbook_tab_${projectId}`, 'sop');
+  });
   const [isExporting, setIsExporting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // BANT interactive simulator state (score 1..10 per dimension)
-  const [bantScores, setBantScores] = useState<{ [dim: string]: number }>({
-    Budget: 8,
-    Authority: 8,
-    Need: 9,
-    Timeline: 7,
-  });
+  const [bantScores, setBantScores] = useState<{ [dim: string]: number }>(() =>
+    loadPersistedState<{ [dim: string]: number }>(`devos_playbook_bant_${projectId}`, {
+      Budget: 8,
+      Authority: 8,
+      Need: 9,
+      Timeline: 7,
+    })
+  );
+
+  useEffect(() => {
+    savePersistedState(`devos_playbook_tab_${projectId}`, activeTab);
+    if (variant === 'page') {
+      setQueryParam('tab', activeTab);
+    }
+  }, [activeTab, projectId, variant]);
+
+  useEffect(() => {
+    savePersistedState(`devos_playbook_role_${projectId}`, role);
+    savePersistedState(`devos_playbook_bant_${projectId}`, bantScores);
+  }, [role, bantScores, projectId]);
 
   const handleRoleChange = (newRole: PlaybookRole) => {
     setRole(newRole);
@@ -82,49 +115,68 @@ export function PlaybookViewer({
     }
   };
 
+  const outerClass =
+    variant === 'page'
+      ? 'w-full'
+      : 'fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200';
+  const cardClass =
+    variant === 'page'
+      ? 'bg-white rounded-2xl border border-warmborder w-full flex flex-col overflow-hidden shadow-xs'
+      : 'bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden';
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+    <div className={outerClass}>
+      <div className={cardClass}>
         {/* Header */}
-        <div className="px-6 py-5 bg-sandstone/60 border-b border-warmborder flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="size-11 rounded-2xl bg-terracotta text-white flex items-center justify-center shadow-sm">
-              <BookOpen className="size-6" />
+        <div className="px-4 py-4 sm:px-6 sm:py-5 bg-sandstone/60 border-b border-warmborder flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="size-10 sm:size-11 rounded-2xl bg-terracotta text-white flex items-center justify-center shadow-sm shrink-0">
+              <BookOpen className="size-5 sm:size-6" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg md:text-xl font-extrabold text-espresso tracking-tight">
-                  Playbook Penjualan &amp; Standar Operasional
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base sm:text-xl font-extrabold text-espresso tracking-tight leading-snug">
+                  Playbook Penjualan &amp; SOP
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-terracotta/10 text-terracotta border border-terracotta/20">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-terracotta/10 text-terracotta border border-terracotta/20 shrink-0">
                   Role: {role}
                 </span>
                 {isDemoMode && (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
                     Mode Cuplikan 25% (Demo)
                   </span>
                 )}
               </div>
-              <p className="text-xs text-warmmuted">
+              <p className="text-xs text-warmmuted mt-0.5 leading-relaxed">
                 {projectName} · Panduan Kerja Taktis, Kualifikasi BANT &ge; 7, &amp; KPI Terukur
               </p>
             </div>
+            {variant === 'modal' && onClose && (
+              <button
+                onClick={onClose}
+                aria-label="Tutup Playbook"
+                className="sm:hidden size-10 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              >
+                <X className="size-5" />
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={handleExportDocx}
               disabled={isExporting}
-              className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-terracotta text-white hover:bg-terracotta/90 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+              className="min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold bg-terracotta text-white hover:bg-terracotta/90 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm disabled:opacity-50 whitespace-nowrap"
             >
-              <Download className="size-3.5" />
+              <Download className="size-3.5 shrink-0" />
               <span>{isExporting ? 'Mengekspor...' : 'Ekspor DOCX'}</span>
             </button>
 
-            {onClose && (
+            {variant === 'modal' && onClose && (
               <button
                 onClick={onClose}
-                className="size-9 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso flex items-center justify-center transition-colors cursor-pointer ml-1"
+                aria-label="Tutup Playbook"
+                className="hidden sm:flex size-9 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso items-center justify-center transition-colors cursor-pointer ml-1"
               >
                 <X className="size-5" />
               </button>

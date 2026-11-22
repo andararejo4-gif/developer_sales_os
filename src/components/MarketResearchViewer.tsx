@@ -3,7 +3,7 @@
 // Warm Terracotta & Sandstone Design with Data-Driven SVG Infographics
 // ============================================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Users,
   Compass,
@@ -25,13 +25,23 @@ import {
   regenerateMarketResearch,
 } from '../lib/market-research/market-research-engine';
 import { generateMarketResearchDocx } from '../lib/exporters/market-research-docx';
+import {
+  getQueryParam,
+  setQueryParam,
+  loadPersistedState,
+  savePersistedState,
+} from '../lib/navigation/router';
 import type { MarketResearchReport, TargetPersona, RadiusDistanceMeters } from '../lib/market-research/types';
+
+type ResearchTab = 'personas' | 'facilities' | 'competitors' | 'market_share';
+const VALID_RESEARCH_TABS: ResearchTab[] = ['personas', 'facilities', 'competitors', 'market_share'];
 
 interface MarketResearchViewerProps {
   projectId?: string;
   projectName?: string;
   userRole?: string;
   isDemoMode?: boolean;
+  variant?: 'modal' | 'page';
   onClose?: () => void;
 }
 
@@ -40,17 +50,37 @@ export function MarketResearchViewer({
   projectName = 'The Park Townhouse Sukoharjo',
   userRole = 'DIREKSI',
   isDemoMode = false,
+  variant = 'modal',
   onClose,
 }: MarketResearchViewerProps) {
   const [report, setReport] = useState<MarketResearchReport>(() =>
     getMarketResearchReport({ projectId, isDemoMode })
   );
-  const [activeTab, setActiveTab] = useState<'personas' | 'facilities' | 'competitors' | 'market_share'>('personas');
+  const [activeTab, setActiveTab] = useState<ResearchTab>(() => {
+    const urlTab = variant === 'page' ? getQueryParam('tab') : null;
+    if (urlTab && VALID_RESEARCH_TABS.includes(urlTab as ResearchTab)) {
+      return urlTab as ResearchTab;
+    }
+    return loadPersistedState<ResearchTab>(`devos_research_tab_${projectId}`, 'personas');
+  });
   const [selectedPersona, setSelectedPersona] = useState<TargetPersona>(report.personas[0] || DEFAULT_THE_PARK_RESEARCH_REPORT.personas[0]);
-  const [selectedRadiusRing, setSelectedRadiusRing] = useState<number | 'all'>('all');
+  const [selectedRadiusRing, setSelectedRadiusRing] = useState<number | 'all'>(() =>
+    loadPersistedState<number | 'all'>(`devos_research_radius_${projectId}`, 'all')
+  );
   const [isExporting, setIsExporting] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    savePersistedState(`devos_research_tab_${projectId}`, activeTab);
+    if (variant === 'page') {
+      setQueryParam('tab', activeTab);
+    }
+  }, [activeTab, projectId, variant]);
+
+  useEffect(() => {
+    savePersistedState(`devos_research_radius_${projectId}`, selectedRadiusRing);
+  }, [selectedRadiusRing, projectId]);
 
   const canRegenerate = ['DEVELOPER_OWNER', 'DIREKSI', 'SALES_MANAGER', 'SM'].includes(userRole);
 
@@ -110,41 +140,59 @@ export function MarketResearchViewer({
     ? report.competitors
     : report.competitors.filter((c) => c.radiusRing <= (selectedRadiusRing as RadiusDistanceMeters));
 
+  const outerClass =
+    variant === 'page'
+      ? 'w-full'
+      : 'fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200';
+  const cardClass =
+    variant === 'page'
+      ? 'bg-white rounded-2xl border border-warmborder w-full flex flex-col overflow-hidden shadow-xs'
+      : 'bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden';
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-5 bg-sandstone/60 border-b border-warmborder flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="size-11 rounded-2xl bg-terracotta text-white flex items-center justify-center shadow-sm">
-              <Compass className="size-6" />
+    <div className={outerClass}>
+      <div className={cardClass}>
+        {/* Header (Mobile-first stacking agar judul & tombol tidak berjejalan) */}
+        <div className="px-4 py-4 sm:px-6 sm:py-5 bg-sandstone/60 border-b border-warmborder flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="size-10 sm:size-11 rounded-2xl bg-terracotta text-white flex items-center justify-center shadow-sm shrink-0">
+              <Compass className="size-5 sm:size-6" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg md:text-xl font-extrabold text-espresso tracking-tight">
-                  Riset Pasar & Analisis Kompetisi
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base sm:text-xl font-extrabold text-espresso tracking-tight leading-snug">
+                  Riset Pasar &amp; Analisis Kompetisi
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-terracotta/10 text-terracotta border border-terracotta/20">
+                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-terracotta/10 text-terracotta border border-terracotta/20 shrink-0">
                   v{report.version}
                 </span>
                 {isDemoMode && (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
                     Mode Cuplikan 25% (Demo)
                   </span>
                 )}
               </div>
-              <p className="text-xs text-warmmuted">
-                {report.projectName} · Radius 500m s.d 25km Sukoharjo & Solo Raya
+              <p className="text-xs text-warmmuted mt-0.5 leading-relaxed">
+                {report.projectName} · Radius 500m s.d 25km Sukoharjo &amp; Solo Raya
               </p>
             </div>
+            {variant === 'modal' && onClose && (
+              <button
+                onClick={onClose}
+                aria-label="Tutup Riset Pasar"
+                className="sm:hidden size-10 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              >
+                <X className="size-5" />
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             {canRegenerate && (
               <button
                 onClick={handleRegenerate}
                 disabled={isRegenerating}
-                className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-warmborder text-espresso hover:bg-sandstone flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                className="min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-warmborder text-espresso hover:bg-sandstone flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
               >
                 <RefreshCw className={`size-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
                 <span>{isRegenerating ? 'Meriset Ulang...' : 'Regenerate'}</span>
@@ -154,24 +202,25 @@ export function MarketResearchViewer({
             <button
               onClick={handleExportDocx}
               disabled={isExporting}
-              className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-terracotta text-white hover:bg-terracotta/90 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+              className="min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold bg-terracotta text-white hover:bg-terracotta/90 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm disabled:opacity-50 whitespace-nowrap"
             >
-              <Download className="size-3.5" />
+              <Download className="size-3.5 shrink-0" />
               <span>{isExporting ? 'Mengekspor...' : 'Ekspor DOCX'}</span>
             </button>
 
             <button
               onClick={handlePrintPdf}
-              className="px-3 py-2 rounded-xl text-xs font-semibold bg-sandstone hover:bg-warmborder text-espresso flex items-center gap-1 transition-colors cursor-pointer hidden md:flex"
+              className="min-h-[40px] px-3 py-2 rounded-xl text-xs font-semibold bg-sandstone hover:bg-warmborder text-espresso items-center gap-1 transition-colors cursor-pointer hidden md:flex whitespace-nowrap"
             >
               <ExternalLink className="size-3.5" />
               <span>Cetak PDF</span>
             </button>
 
-            {onClose && (
+            {variant === 'modal' && onClose && (
               <button
                 onClick={onClose}
-                className="size-9 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso flex items-center justify-center transition-colors cursor-pointer ml-1"
+                aria-label="Tutup Riset Pasar"
+                className="hidden sm:flex size-9 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso items-center justify-center transition-colors cursor-pointer ml-1"
               >
                 <X className="size-5" />
               </button>
@@ -180,50 +229,50 @@ export function MarketResearchViewer({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-warmborder px-6 bg-white gap-2 overflow-x-auto shrink-0">
+        <div className="flex border-b border-warmborder px-4 sm:px-6 bg-white gap-1 sm:gap-2 overflow-x-auto no-scrollbar snap-x shrink-0">
           <button
             onClick={() => setActiveTab('personas')}
-            className={`py-3 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            className={`min-h-[44px] py-3 px-3.5 sm:px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 snap-start ${
               activeTab === 'personas'
                 ? 'border-terracotta text-terracotta'
                 : 'border-transparent text-warmmuted hover:text-espresso'
             }`}
           >
-            <Users className="size-4" />
+            <Users className="size-4 shrink-0" />
             <span>5 Persona Target ({report.personas.length})</span>
           </button>
           <button
             onClick={() => setActiveTab('facilities')}
-            className={`py-3 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            className={`min-h-[44px] py-3 px-3.5 sm:px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 snap-start ${
               activeTab === 'facilities'
                 ? 'border-terracotta text-terracotta'
                 : 'border-transparent text-warmmuted hover:text-espresso'
             }`}
           >
-            <Compass className="size-4" />
-            <span>Fasilitas Publik Radius 500m-25km ({report.facilities.length})</span>
+            <Compass className="size-4 shrink-0" />
+            <span>Fasilitas Publik ({report.facilities.length})</span>
           </button>
           <button
             onClick={() => setActiveTab('competitors')}
-            className={`py-3 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            className={`min-h-[44px] py-3 px-3.5 sm:px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 snap-start ${
               activeTab === 'competitors'
                 ? 'border-terracotta text-terracotta'
                 : 'border-transparent text-warmmuted hover:text-espresso'
             }`}
           >
-            <Building className="size-4" />
-            <span>Analisis Kompetitor ({report.competitors.length})</span>
+            <Building className="size-4 shrink-0" />
+            <span>Kompetitor ({report.competitors.length})</span>
           </button>
           <button
             onClick={() => setActiveTab('market_share')}
-            className={`py-3 px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+            className={`min-h-[44px] py-3 px-3.5 sm:px-4 text-xs font-bold border-b-2 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 snap-start ${
               activeTab === 'market_share'
                 ? 'border-terracotta text-terracotta'
                 : 'border-transparent text-warmmuted hover:text-espresso'
             }`}
           >
-            <PieChart className="size-4" />
-            <span>Diagram & Pangsa Pasar (Data-Driven SVG)</span>
+            <PieChart className="size-4 shrink-0" />
+            <span>Pangsa Pasar (SVG)</span>
           </button>
         </div>
 

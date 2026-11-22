@@ -3,7 +3,7 @@
 // Absensi SE, GPS Tracking SE, Log Panggilan, & AI Guide (Platinum / Diamond)
 // ============================================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   MapPin,
   PhoneCall,
@@ -29,14 +29,24 @@ import {
   ALL_SE_ACTIVITY_CATEGORIES,
   PROJECT_BASE_COORDS,
 } from '../lib/field-ops/field-ops-store';
+import {
+  getQueryParam,
+  setQueryParam,
+  loadPersistedState,
+  savePersistedState,
+} from '../lib/navigation/router';
 import type { SeActivityCategory, CallOutcome, GpsActivityType } from '../lib/field-ops/types';
+
+type FieldOpsTab = 'absen' | 'gps' | 'call' | 'ai_guide';
+const VALID_FIELD_TABS: FieldOpsTab[] = ['absen', 'gps', 'call', 'ai_guide'];
 
 interface FieldOpsModalProps {
   projectName?: string;
   currentSeName?: string;
-  initialTab?: 'absen' | 'gps' | 'call' | 'ai_guide';
+  initialTab?: FieldOpsTab;
   planCode?: 'gold' | 'platinum' | 'diamond';
-  onClose: () => void;
+  variant?: 'modal' | 'page';
+  onClose?: () => void;
   onUpgradeRequest?: () => void;
 }
 
@@ -45,30 +55,92 @@ export function FieldOpsModal({
   currentSeName = 'SE 001 Budi Santoso',
   initialTab = 'absen',
   planCode = 'platinum',
+  variant = 'modal',
   onClose,
   onUpgradeRequest,
 }: FieldOpsModalProps) {
-  const [activeTab, setActiveTab] = useState<'absen' | 'gps' | 'call' | 'ai_guide'>(initialTab);
+  const [activeTab, setActiveTab] = useState<FieldOpsTab>(() => {
+    const urlTab = variant === 'page' ? getQueryParam('tab') : null;
+    if (urlTab && VALID_FIELD_TABS.includes(urlTab as FieldOpsTab)) {
+      return urlTab as FieldOpsTab;
+    }
+    return loadPersistedState<FieldOpsTab>('devos_field_ops_tab', initialTab);
+  });
   const [simulatedPlan, setSimulatedPlan] = useState<'gold' | 'platinum' | 'diamond'>(planCode);
 
-  const [attendanceList, setAttendanceList] = useState(() => getAttendanceRecords('proj-the-park-01'));
-  const [gpsLogs, setGpsLogs] = useState(() => getGpsTrackLogs('proj-the-park-01'));
-  const [callLogs, setCallLogs] = useState(() => getCallLogs('proj-the-park-01'));
+  const [attendanceList, setAttendanceList] = useState(() =>
+    loadPersistedState('devos_field_attendance', getAttendanceRecords('proj-the-park-01'))
+  );
+  const [gpsLogs, setGpsLogs] = useState(() =>
+    loadPersistedState('devos_field_gps_logs', getGpsTrackLogs('proj-the-park-01'))
+  );
+  const [callLogs, setCallLogs] = useState(() =>
+    loadPersistedState('devos_field_call_logs', getCallLogs('proj-the-park-01'))
+  );
 
   const [selectedActivity, setSelectedActivity] = useState<SeActivityCategory>('COLD_CALL_SLA_5_MENIT');
   const [toast, setToast] = useState<string | null>(null);
 
   // Add Call Form
-  const [showCallForm, setShowCallForm] = useState(false);
-  const [callLeadName, setCallLeadName] = useState('');
-  const [callPhone, setCallPhone] = useState('');
-  const [callDuration, setCallDuration] = useState(120);
-  const [callOutcome, setCallOutcome] = useState<CallOutcome>('TERJAWAB_TERTARIK');
-  const [callNotes, setCallNotes] = useState('');
+  const [showCallForm, setShowCallForm] = useState(() =>
+    loadPersistedState<boolean>('devos_field_show_call_form', false)
+  );
+  const [callLeadName, setCallLeadName] = useState(() =>
+    loadPersistedState<string>('devos_field_call_lead', '')
+  );
+  const [callPhone, setCallPhone] = useState(() =>
+    loadPersistedState<string>('devos_field_call_phone', '')
+  );
+  const [callDuration, setCallDuration] = useState(() =>
+    loadPersistedState<number>('devos_field_call_dur', 120)
+  );
+  const [callOutcome, setCallOutcome] = useState<CallOutcome>(() =>
+    loadPersistedState<CallOutcome>('devos_field_call_outcome', 'TERJAWAB_TERTARIK')
+  );
+  const [callNotes, setCallNotes] = useState(() =>
+    loadPersistedState<string>('devos_field_call_notes', '')
+  );
 
   // Add GPS Check-in Form
-  const [gpsLocationLabel, setGpsLocationLabel] = useState('Kawasan Bisnis Solo Baru (Ruko Ir. Soekarno)');
-  const [gpsActivityType, setGpsActivityType] = useState<GpsActivityType>('CANVASSING');
+  const [gpsLocationLabel, setGpsLocationLabel] = useState(() =>
+    loadPersistedState<string>('devos_field_gps_label', 'Kawasan Bisnis Solo Baru (Ruko Ir. Soekarno)')
+  );
+  const [gpsActivityType, setGpsActivityType] = useState<GpsActivityType>(() =>
+    loadPersistedState<GpsActivityType>('devos_field_gps_type', 'CANVASSING')
+  );
+
+  useEffect(() => {
+    savePersistedState('devos_field_ops_tab', activeTab);
+    if (variant === 'page') {
+      setQueryParam('tab', activeTab);
+    }
+  }, [activeTab, variant]);
+
+  useEffect(() => {
+    savePersistedState('devos_field_attendance', attendanceList);
+    savePersistedState('devos_field_gps_logs', gpsLogs);
+    savePersistedState('devos_field_call_logs', callLogs);
+    savePersistedState('devos_field_show_call_form', showCallForm);
+    savePersistedState('devos_field_call_lead', callLeadName);
+    savePersistedState('devos_field_call_phone', callPhone);
+    savePersistedState('devos_field_call_dur', callDuration);
+    savePersistedState('devos_field_call_outcome', callOutcome);
+    savePersistedState('devos_field_call_notes', callNotes);
+    savePersistedState('devos_field_gps_label', gpsLocationLabel);
+    savePersistedState('devos_field_gps_type', gpsActivityType);
+  }, [
+    attendanceList,
+    gpsLogs,
+    callLogs,
+    showCallForm,
+    callLeadName,
+    callPhone,
+    callDuration,
+    callOutcome,
+    callNotes,
+    gpsLocationLabel,
+    gpsActivityType,
+  ]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -129,36 +201,48 @@ export function FieldOpsModal({
 
   const aiGuideResult = getAiActivityGuide(selectedActivity, simulatedPlan);
 
+  const outerClass =
+    variant === 'page'
+      ? 'w-full'
+      : 'fixed inset-0 z-50 overflow-y-auto bg-espresso/75 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200';
+  const cardClass =
+    variant === 'page'
+      ? 'bg-sandstone rounded-2xl border border-warmborder w-full flex flex-col overflow-hidden shadow-xs'
+      : 'bg-sandstone rounded-3xl shadow-2xl border border-warmborder w-full max-w-5xl max-h-[94vh] flex flex-col overflow-hidden';
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-espresso/75 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200">
-      <div className="bg-sandstone rounded-3xl shadow-2xl border border-warmborder w-full max-w-5xl max-h-[94vh] flex flex-col overflow-hidden">
+    <div className={outerClass}>
+      <div className={cardClass}>
         {/* Header */}
-        <div className="px-6 py-4 bg-white border-b border-warmborder flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-xl bg-terracotta text-white grid place-items-center font-extrabold shadow-xs">
+        <div className="px-4 py-4 sm:px-6 bg-white border-b border-warmborder flex items-start sm:items-center justify-between gap-3">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="size-10 rounded-xl bg-terracotta text-white grid place-items-center font-extrabold shadow-xs shrink-0">
               <Navigation className="size-5" />
             </div>
-            <div>
-              <h2 className="text-base md:text-lg font-extrabold text-espresso leading-tight">
-                Operasional Lapangan SE &amp; AI Activity Guide
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-extrabold text-espresso leading-snug">
+                Operasional Lapangan SE &amp; AI Guide
               </h2>
-              <p className="text-xs text-warmmuted">
+              <p className="text-xs text-warmmuted mt-0.5 leading-relaxed">
                 {projectName} · Absensi, Tracking GPS, Log Panggilan &amp; Panduan AI
               </p>
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="size-9 rounded-xl bg-sandstone hover:bg-warmborder text-espresso grid place-items-center transition-colors cursor-pointer"
-          >
-            <X className="size-5" />
-          </button>
+          {variant === 'modal' && onClose && (
+            <button
+              onClick={onClose}
+              aria-label="Tutup Operasional Lapangan"
+              className="size-10 rounded-xl bg-sandstone hover:bg-warmborder text-espresso grid place-items-center transition-colors cursor-pointer shrink-0"
+            >
+              <X className="size-5" />
+            </button>
+          )}
         </div>
 
         {/* Navigation Tabs */}
-        <div className="px-6 py-3 bg-white border-b border-warmborder flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
+        <div className="px-4 sm:px-6 py-3 bg-white border-b border-warmborder">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar snap-x">
             {[
               { id: 'absen', label: 'Absensi Harian SE', icon: UserCheck, badge: 'Semua Paket' },
               { id: 'gps', label: 'Tracking GPS SE', icon: MapPin, badge: 'Semua Paket' },

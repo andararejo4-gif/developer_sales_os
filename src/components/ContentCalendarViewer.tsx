@@ -3,7 +3,7 @@
 // Full 30-Day Multi-Platform Social Media Calendar (TOFU, MOFU, BOFU)
 // ============================================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Calendar as CalendarIcon,
   Download,
@@ -22,6 +22,12 @@ import {
   generateContentCalendarSlots,
 } from '../lib/content-calendar/calendar-generator';
 import { generateContentCalendarDocx } from '../lib/exporters/content-calendar-docx';
+import {
+  getQueryParam,
+  setQueryParam,
+  loadPersistedState,
+  savePersistedState,
+} from '../lib/navigation/router';
 import type {
   ContentCalendarPlan,
   ContentSlot,
@@ -31,10 +37,14 @@ import type {
   PostingStatus,
 } from '../lib/content-calendar/types';
 
+type CalendarViewTab = 'month' | 'week' | 'day';
+const VALID_CAL_TABS: CalendarViewTab[] = ['month', 'week', 'day'];
+
 interface ContentCalendarViewerProps {
   projectId?: string;
   projectName?: string;
   isDemoMode?: boolean;
+  variant?: 'modal' | 'page';
   onClose?: () => void;
 }
 
@@ -42,25 +52,84 @@ export function ContentCalendarViewer({
   projectId = 'proj-the-park-01',
   projectName = 'The Park Townhouse Sukoharjo',
   isDemoMode = false,
+  variant = 'modal',
   onClose,
 }: ContentCalendarViewerProps) {
-  const [calendar, setCalendar] = useState<ContentCalendarPlan>(() =>
-    getContentCalendar(projectId, 1, isDemoMode)
+  const [track, setTrack] = useState<ContentTrack>(() =>
+    loadPersistedState<ContentTrack>(`devos_cal_track_${projectId}`, 'OFFICIAL')
   );
+  const [calendar, setCalendar] = useState<ContentCalendarPlan>(() => {
+    const saved = loadPersistedState<ContentCalendarPlan | null>(
+      `devos_cal_plan_${projectId}`,
+      null
+    );
+    if (saved) return saved;
+    const base = getContentCalendar(projectId, 1, isDemoMode);
+    if (track === 'SALES_IN_HOUSE') {
+      const slots = generateContentCalendarSlots('SALES_IN_HOUSE');
+      return { ...base, slots: isDemoMode ? slots.filter((s) => s.dayNumber <= 8) : slots };
+    }
+    return base;
+  });
 
-  const [track, setTrack] = useState<ContentTrack>('OFFICIAL');
-  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month');
-  const [selectedFunnel, setSelectedFunnel] = useState<'all' | FunnelStage>('all');
-  const [selectedPlatform, setSelectedPlatform] = useState<'all' | ContentPlatform>('all');
-  const [selectedStatus, setSelectedStatus] = useState<'all' | PostingStatus>('all');
-  const [selectedDay, setSelectedDay] = useState<number>(1);
-  const [selectedWeek, setSelectedWeek] = useState<number>(1);
+  const [viewMode, setViewMode] = useState<CalendarViewTab>(() => {
+    const urlTab = variant === 'page' ? getQueryParam('tab') : null;
+    if (urlTab && VALID_CAL_TABS.includes(urlTab as CalendarViewTab)) {
+      return urlTab as CalendarViewTab;
+    }
+    return loadPersistedState<CalendarViewTab>(`devos_cal_view_${projectId}`, 'month');
+  });
+  const [selectedFunnel, setSelectedFunnel] = useState<'all' | FunnelStage>(() =>
+    loadPersistedState<'all' | FunnelStage>(`devos_cal_funnel_${projectId}`, 'all')
+  );
+  const [selectedPlatform, setSelectedPlatform] = useState<'all' | ContentPlatform>(() =>
+    loadPersistedState<'all' | ContentPlatform>(`devos_cal_platform_${projectId}`, 'all')
+  );
+  const [selectedStatus, setSelectedStatus] = useState<'all' | PostingStatus>(() =>
+    loadPersistedState<'all' | PostingStatus>(`devos_cal_status_${projectId}`, 'all')
+  );
+  const [selectedDay, setSelectedDay] = useState<number>(() =>
+    loadPersistedState<number>(`devos_cal_day_${projectId}`, 1)
+  );
+  const [selectedWeek, setSelectedWeek] = useState<number>(() =>
+    loadPersistedState<number>(`devos_cal_week_${projectId}`, 1)
+  );
   const [activeSlotModal, setActiveSlotModal] = useState<ContentSlot | null>(null);
 
   // Link input state for the active slot
-  const [linkInput, setLinkInput] = useState<string>('');
+  const [linkInput, setLinkInput] = useState<string>(() =>
+    loadPersistedState<string>(`devos_cal_link_draft_${projectId}`, '')
+  );
   const [isExporting, setIsExporting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    savePersistedState(`devos_cal_view_${projectId}`, viewMode);
+    if (variant === 'page') {
+      setQueryParam('tab', viewMode);
+    }
+  }, [viewMode, projectId, variant]);
+
+  useEffect(() => {
+    savePersistedState(`devos_cal_track_${projectId}`, track);
+    savePersistedState(`devos_cal_plan_${projectId}`, calendar);
+    savePersistedState(`devos_cal_funnel_${projectId}`, selectedFunnel);
+    savePersistedState(`devos_cal_platform_${projectId}`, selectedPlatform);
+    savePersistedState(`devos_cal_status_${projectId}`, selectedStatus);
+    savePersistedState(`devos_cal_day_${projectId}`, selectedDay);
+    savePersistedState(`devos_cal_week_${projectId}`, selectedWeek);
+    savePersistedState(`devos_cal_link_draft_${projectId}`, linkInput);
+  }, [
+    projectId,
+    track,
+    calendar,
+    selectedFunnel,
+    selectedPlatform,
+    selectedStatus,
+    selectedDay,
+    selectedWeek,
+    linkInput,
+  ]);
 
   // Switch Track (Official vs Sales In-House)
   const handleTrackChange = (newTrack: ContentTrack) => {
@@ -134,57 +203,76 @@ export function ContentCalendarViewer({
     }
   };
 
+  const outerClass =
+    variant === 'page'
+      ? 'w-full'
+      : 'fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200';
+  const cardClass =
+    variant === 'page'
+      ? 'bg-white rounded-2xl border border-warmborder w-full flex flex-col overflow-hidden shadow-xs'
+      : 'bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden';
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden">
+    <div className={outerClass}>
+      <div className={cardClass}>
         {/* Header */}
-        <div className="px-6 py-5 bg-sandstone/60 border-b border-warmborder flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="size-11 rounded-2xl bg-terracotta text-white flex items-center justify-center shadow-sm">
-              <CalendarIcon className="size-6" />
+        <div className="px-4 py-4 sm:px-6 sm:py-5 bg-sandstone/60 border-b border-warmborder flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="size-10 sm:size-11 rounded-2xl bg-terracotta text-white flex items-center justify-center shadow-sm shrink-0">
+              <CalendarIcon className="size-5 sm:size-6" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg md:text-xl font-extrabold text-espresso tracking-tight">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base sm:text-xl font-extrabold text-espresso tracking-tight leading-snug">
                   Kalender Konten Media Sosial
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-terracotta/10 text-terracotta border border-terracotta/20">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-terracotta/10 text-terracotta border border-terracotta/20 shrink-0">
                   30 Hari · 3 Slot/Hari
                 </span>
                 {isDemoMode && (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
                     Mode Cuplikan 25% (Demo)
                   </span>
                 )}
               </div>
-              <p className="text-xs text-warmmuted">
+              <p className="text-xs text-warmmuted mt-0.5 leading-relaxed">
                 {projectName} · {calendar.slots.length} Slot Terjadwal ({calendar.postedSlotsCount} Sudah Diposting)
               </p>
             </div>
+            {variant === 'modal' && onClose && (
+              <button
+                onClick={onClose}
+                aria-label="Tutup Kalender Konten"
+                className="sm:hidden size-10 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              >
+                <X className="size-5" />
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               onClick={handleExportDocx}
               disabled={isExporting}
-              className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-terracotta text-white hover:bg-terracotta/90 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+              className="min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold bg-terracotta text-white hover:bg-terracotta/90 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm disabled:opacity-50 whitespace-nowrap"
             >
-              <Download className="size-3.5" />
+              <Download className="size-3.5 shrink-0" />
               <span>{isExporting ? 'Mengekspor...' : 'Ekspor DOCX'}</span>
             </button>
 
             <button
               onClick={() => window.print()}
-              className="px-3 py-2 rounded-xl text-xs font-semibold bg-sandstone hover:bg-warmborder text-espresso flex items-center gap-1 transition-colors cursor-pointer hidden md:flex"
+              className="min-h-[40px] px-3 py-2 rounded-xl text-xs font-semibold bg-sandstone hover:bg-warmborder text-espresso items-center gap-1 transition-colors cursor-pointer hidden md:flex whitespace-nowrap"
             >
               <ExternalLink className="size-3.5" />
               <span>Cetak PDF</span>
             </button>
 
-            {onClose && (
+            {variant === 'modal' && onClose && (
               <button
                 onClick={onClose}
-                className="size-9 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso flex items-center justify-center transition-colors cursor-pointer ml-1"
+                aria-label="Tutup Kalender Konten"
+                className="hidden sm:flex size-9 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso items-center justify-center transition-colors cursor-pointer ml-1"
               >
                 <X className="size-5" />
               </button>

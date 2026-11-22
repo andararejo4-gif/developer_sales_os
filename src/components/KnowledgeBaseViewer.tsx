@@ -1,27 +1,70 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BookOpen, Send, Sparkles, Printer, Search } from 'lucide-react';
 import { THE_PARK_KB_FACTS } from '../lib/kb/the-park-facts';
 import { askProductKnowledge } from '../lib/kb/qa-engine';
 import { PRODUCT_QUIZ_QUESTIONS, gradeQuiz } from '../lib/kb/quiz-engine';
 import { generateProductCardHtml } from '../lib/kb/product-card';
+import {
+  getQueryParam,
+  setQueryParam,
+  loadPersistedState,
+  savePersistedState,
+} from '../lib/navigation/router';
 
-export const KnowledgeBaseViewer: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'facts' | 'tanya' | 'kuis'>('facts');
-  const [searchFact, setSearchFact] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('semua');
+type KbTab = 'facts' | 'tanya' | 'kuis';
+const VALID_KB_TABS: KbTab[] = ['facts', 'tanya', 'kuis'];
+
+export const KnowledgeBaseViewer: React.FC<{ syncUrlTab?: boolean }> = ({ syncUrlTab = true }) => {
+  const [activeTab, setActiveTab] = useState<KbTab>(() => {
+    const urlTab = syncUrlTab ? getQueryParam('tab') : null;
+    if (urlTab && VALID_KB_TABS.includes(urlTab as KbTab)) {
+      return urlTab as KbTab;
+    }
+    return loadPersistedState<KbTab>('devos_kb_tab', 'facts');
+  });
+  const [searchFact, setSearchFact] = useState(() =>
+    loadPersistedState<string>('devos_kb_search', '')
+  );
+  const [selectedCategory, setSelectedCategory] = useState(() =>
+    loadPersistedState<string>('devos_kb_category', 'semua')
+  );
 
   // Tanya Produk State
-  const [chatMessages, setChatMessages] = useState<Array<{ sender: 'user' | 'bot'; text: string; source?: string; isOutOfScope?: boolean }>>([
-    {
-      sender: 'bot',
-      text: 'Halo! Saya asisten Knowledge Base The Park Townhouse Sukoharjo. Tanyakan apa saja seputar tipe unit, harga, luas tanah, jarak fasilitas, atau legalitas.',
-    }
-  ]);
-  const [inputQuery, setInputQuery] = useState('');
+  const [chatMessages, setChatMessages] = useState<Array<{ sender: 'user' | 'bot'; text: string; source?: string; isOutOfScope?: boolean }>>(() =>
+    loadPersistedState('devos_kb_chat', [
+      {
+        sender: 'bot',
+        text: 'Halo! Saya asisten Knowledge Base The Park Townhouse Sukoharjo. Tanyakan apa saja seputar tipe unit, harga, luas tanah, jarak fasilitas, atau legalitas.',
+      },
+    ])
+  );
+  const [inputQuery, setInputQuery] = useState(() =>
+    loadPersistedState<string>('devos_kb_input_query', '')
+  );
 
   // Kuis SE State
-  const [quizAnswers, setQuizAnswers] = useState<{ [qId: number]: number }>({});
-  const [quizResult, setQuizResult] = useState<ReturnType<typeof gradeQuiz> | null>(null);
+  const [quizAnswers, setQuizAnswers] = useState<{ [qId: number]: number }>(() =>
+    loadPersistedState<{ [qId: number]: number }>('devos_kb_quiz_answers', {})
+  );
+  const [quizResult, setQuizResult] = useState<ReturnType<typeof gradeQuiz> | null>(() =>
+    loadPersistedState<ReturnType<typeof gradeQuiz> | null>('devos_kb_quiz_result', null)
+  );
+
+  useEffect(() => {
+    savePersistedState('devos_kb_tab', activeTab);
+    if (syncUrlTab) {
+      setQueryParam('tab', activeTab);
+    }
+  }, [activeTab, syncUrlTab]);
+
+  useEffect(() => {
+    savePersistedState('devos_kb_search', searchFact);
+    savePersistedState('devos_kb_category', selectedCategory);
+    savePersistedState('devos_kb_chat', chatMessages);
+    savePersistedState('devos_kb_input_query', inputQuery);
+    savePersistedState('devos_kb_quiz_answers', quizAnswers);
+    savePersistedState('devos_kb_quiz_result', quizResult);
+  }, [searchFact, selectedCategory, chatMessages, inputQuery, quizAnswers, quizResult]);
 
   const categories = [
     { key: 'semua', label: 'Semua Kategori' },

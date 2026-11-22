@@ -1,19 +1,47 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Search, Download, CheckCircle2 } from 'lucide-react';
 import { THE_PARK_99_POINTS } from '../lib/love-letter/points-data';
 import { generateLoveLetterDocx } from '../lib/love-letter/docx-exporter';
 import { generateLoveLetterHtml } from '../lib/love-letter/html-exporter';
+import {
+  getQueryParam,
+  setQueryParam,
+  loadPersistedState,
+  savePersistedState,
+} from '../lib/navigation/router';
 
 interface ViewerProps {
   isOpen: boolean;
+  variant?: 'modal' | 'page';
   onClose: () => void;
 }
 
-export const LoveLetterViewerModal: React.FC<ViewerProps> = ({ isOpen, onClose }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedChapter, setSelectedChapter] = useState('Semua');
+export const LoveLetterViewerModal: React.FC<ViewerProps> = ({
+  isOpen,
+  variant = 'modal',
+  onClose,
+}) => {
+  const [searchQuery, setSearchQuery] = useState(() =>
+    loadPersistedState<string>('devos_loveletter_search', '')
+  );
+  const [selectedChapter, setSelectedChapter] = useState(() => {
+    const urlTab = variant === 'page' ? getQueryParam('tab') : null;
+    if (urlTab) return urlTab;
+    return loadPersistedState<string>('devos_loveletter_chapter', 'Semua');
+  });
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    savePersistedState('devos_loveletter_chapter', selectedChapter);
+    if (variant === 'page') {
+      setQueryParam('tab', selectedChapter);
+    }
+  }, [selectedChapter, variant]);
+
+  useEffect(() => {
+    savePersistedState('devos_loveletter_search', searchQuery);
+  }, [searchQuery]);
+
+  if (!isOpen && variant === 'modal') return null;
 
   const chapters = [
     'Semua',
@@ -72,46 +100,69 @@ export const LoveLetterViewerModal: React.FC<ViewerProps> = ({ isOpen, onClose }
     }
   };
 
+  const outerClass =
+    variant === 'page'
+      ? 'w-full'
+      : 'fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-espresso/70 backdrop-blur-xs overflow-y-auto';
+  const cardClass =
+    variant === 'page'
+      ? 'w-full bg-white border border-warmborder rounded-2xl shadow-xs overflow-hidden flex flex-col'
+      : 'w-full max-w-5xl bg-white border border-warmborder rounded-2xl shadow-2xl overflow-hidden my-6 max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-espresso/70 backdrop-blur-xs overflow-y-auto">
-      <div className="w-full max-w-5xl bg-white border border-warmborder rounded-2xl shadow-2xl overflow-hidden my-6 max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95">
+    <div className={outerClass}>
+      <div className={cardClass}>
         {/* Header Bar */}
-        <div className="p-5 border-b border-warmborder bg-sandstone/50 flex items-center justify-between gap-4 shrink-0">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="size-6 rounded-md bg-terracotta text-white font-extrabold text-xs grid place-items-center">
-                99
-              </span>
-              <h2 className="text-base sm:text-lg font-extrabold text-espresso">
-                Surat Cinta 99 Keunggulan: The Park Townhouse Sukoharjo
-              </h2>
+        <div className="p-4 sm:p-5 border-b border-warmborder bg-sandstone/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
+          <div className="flex items-start justify-between gap-3 min-w-0">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="size-6 rounded-md bg-terracotta text-white font-extrabold text-xs grid place-items-center shrink-0">
+                  99
+                </span>
+                <h2 className="text-base sm:text-lg font-extrabold text-espresso leading-snug">
+                  Surat Cinta 99 Keunggulan
+                </h2>
+              </div>
+              <p className="text-xs text-warmmuted mt-0.5 leading-relaxed">
+                The Park Townhouse Sukoharjo &middot; Lolos uji guardrail 100%
+              </p>
             </div>
-            <p className="text-xs text-warmmuted mt-0.5">
-              PT Andara Rejo Makmur &middot; Narasi editorial berkelas &middot; Lolos uji guardrail 100%
-            </p>
+            {variant === 'modal' && (
+              <button
+                onClick={onClose}
+                aria-label="Tutup Surat Cinta"
+                className="sm:hidden size-10 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso flex items-center justify-center shrink-0 cursor-pointer"
+              >
+                <X className="size-5" />
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               onClick={handleDownloadDocx}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 cursor-pointer shadow-2xs"
+              className="flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 cursor-pointer shadow-2xs whitespace-nowrap"
             >
-              <Download className="size-3.5" />
+              <Download className="size-3.5 shrink-0" />
               <span>Word (.docx)</span>
             </button>
             <button
               onClick={handlePrintPdf}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-warmborder text-espresso text-xs font-semibold hover:bg-sandstone cursor-pointer"
+              className="flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 rounded-xl bg-white border border-warmborder text-espresso text-xs font-semibold hover:bg-sandstone cursor-pointer whitespace-nowrap"
             >
-              <Download className="size-3.5" />
+              <Download className="size-3.5 shrink-0" />
               <span>Cetak / PDF</span>
             </button>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-warmmuted hover:text-espresso hover:bg-sandstone cursor-pointer"
-            >
-              <X className="size-5" />
-            </button>
+            {variant === 'modal' && (
+              <button
+                onClick={onClose}
+                aria-label="Tutup Surat Cinta"
+                className="hidden sm:flex size-9 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso items-center justify-center cursor-pointer"
+              >
+                <X className="size-5" />
+              </button>
+            )}
           </div>
         </div>
 

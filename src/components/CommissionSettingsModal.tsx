@@ -3,19 +3,31 @@
 // Configurable Commission Sharing Rules for Owner & Sales Manager
 // ============================================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Percent, X } from 'lucide-react';
 import { getCommissionStructure, updateCommissionStructure } from '../lib/crm/crm-store';
+import { loadPersistedState, savePersistedState } from '../lib/navigation/router';
 import type { CommissionStructure } from '../lib/crm/types';
 
 interface CommissionSettingsModalProps {
-  onClose: () => void;
+  variant?: 'modal' | 'page';
+  onClose?: () => void;
   onSaved?: (structure: CommissionStructure) => void;
 }
 
-export function CommissionSettingsModal({ onClose, onSaved }: CommissionSettingsModalProps) {
-  const [comm, setComm] = useState<CommissionStructure>(getCommissionStructure);
+export function CommissionSettingsModal({
+  variant = 'modal',
+  onClose,
+  onSaved,
+}: CommissionSettingsModalProps) {
+  const [comm, setComm] = useState<CommissionStructure>(() =>
+    loadPersistedState<CommissionStructure>('devos_commission_draft', getCommissionStructure())
+  );
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    savePersistedState('devos_commission_draft', comm);
+  }, [comm]);
 
   const totalPercent =
     comm.companySharePercent +
@@ -35,15 +47,26 @@ export function CommissionSettingsModal({ onClose, onSaved }: CommissionSettings
     const saved = updateCommissionStructure(comm);
     if (onSaved) onSaved(saved);
     setToast('Aturan komisi berhasil diperbarui.');
-    setTimeout(() => onClose(), 800);
+    if (variant === 'modal' && onClose) {
+      setTimeout(() => onClose(), 800);
+    }
   };
 
+  const outerClass =
+    variant === 'page'
+      ? 'w-full max-w-xl'
+      : 'fixed inset-0 z-60 bg-espresso/70 backdrop-blur-sm flex items-center justify-center p-4';
+  const cardClass =
+    variant === 'page'
+      ? 'bg-white rounded-2xl p-5 sm:p-6 border border-warmborder w-full shadow-xs space-y-5'
+      : 'bg-white rounded-3xl p-6 border border-warmborder max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95';
+
   return (
-    <div className="fixed inset-0 z-60 bg-espresso/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl p-6 border border-warmborder max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95">
+    <div className={outerClass}>
+      <div className={cardClass}>
         <div className="flex items-center justify-between border-b border-warmborder pb-3">
-          <div className="flex items-center gap-2">
-            <div className="size-8 rounded-xl bg-terracotta text-white flex items-center justify-center">
+          <div className="flex items-center gap-2.5">
+            <div className="size-9 rounded-xl bg-terracotta text-white flex items-center justify-center shrink-0">
               <Percent className="size-4" />
             </div>
             <div>
@@ -51,9 +74,11 @@ export function CommissionSettingsModal({ onClose, onSaved }: CommissionSettings
               <p className="text-[11px] text-warmmuted">Dikelola oleh Owner &amp; Sales Manager</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-warmmuted hover:text-espresso">
-            <X className="size-5" />
-          </button>
+          {variant === 'modal' && onClose && (
+            <button onClick={onClose} className="text-warmmuted hover:text-espresso p-1.5">
+              <X className="size-5" />
+            </button>
+          )}
         </div>
 
         <form onSubmit={handleSave} className="space-y-3.5 text-xs">
