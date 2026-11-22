@@ -5,13 +5,19 @@ import {
   PLAYBOOK_UNIT_CATALOG,
   evaluatePlaybookBant,
 } from '../src/lib/kb/playbook-v1-2-knowledge';
-import { detectUnclearLeadParts } from '../server/ai-engine';
+import {
+  detectUnclearLeadParts,
+  buildNaturalSalutation,
+  formatHumanPaymentScheme,
+  buildFollowupContextGuidance,
+  buildContextualFallbackFollowup,
+} from '../server/ai-engine';
 import { encryptText, decryptText } from '../server/crypto-util';
 
 describe('Playbook v1.2 Knowledge, BANT 0-12 & Lead Clarity Guardrails', () => {
-  it('memiliki 10 tahapan pipeline resmi dan 6 persona pembeli (P1-P6)', () => {
+  it('memiliki 10 tahapan pipeline resmi dan 6 persona pembeli + opsi LAINNYA', () => {
     expect(PLAYBOOK_PIPELINE_STAGES.length).toBe(10);
-    expect(Object.keys(PLAYBOOK_BUYER_PERSONAS)).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6']);
+    expect(Object.keys(PLAYBOOK_BUYER_PERSONAS)).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'LAINNYA']);
     expect(PLAYBOOK_UNIT_CATALOG[0].priceCashIdr).toBe(650000000);
   });
 
@@ -91,5 +97,60 @@ describe('Playbook v1.2 Knowledge, BANT 0-12 & Lead Clarity Guardrails', () => {
     const enc = encryptText(original);
     expect(enc).not.toContain('Nagoya');
     expect(decryptText(enc)).toBe(original);
+  });
+
+  it('menormalisasi sapaan gelar Indonesia dan skema pembayaran agar tidak kaku', () => {
+    const doc = buildNaturalSalutation('Dr. Pak Andi Januar S.Pdi Phd', 'P3');
+    expect(doc.salutation).toBe('Dokter Andi');
+
+    const pak = buildNaturalSalutation('Pak Hendra Kusuma', 'P2');
+    expect(pak.salutation).toBe('Pak Hendra');
+
+    const ibu = buildNaturalSalutation('Ibu Hj. Endang', 'P6');
+    expect(ibu.salutation).toBe('Ibu Hj. Endang');
+
+    expect(formatHumanPaymentScheme('CASH_KERAS')).toBe('cash keras');
+    expect(formatHumanPaymentScheme('CASH_TEMPO_24')).toContain('24 bulan');
+  });
+
+  it('membedakan pesan follow-up Lead Manual (Pasca-Temu) vs Lead WA Inbound (First & Ongoing Turn)', () => {
+    const manualInput = {
+      fullName: 'Dr. Pak Andi Januar S.Pdi Phd',
+      phoneWa: '6287814925892',
+      domicile: 'Plupuh, Sragen, Jawa Tengah',
+      source: 'Walk-in Marketing Gallery',
+      stage: 'NEW',
+      personaCode: 'P3' as const,
+      unitInterest: 'Osaka A.01 (Koridor Sudirman)',
+      paymentScheme: 'CASH_KERAS',
+      bantB: 3,
+      bantA: 1,
+      bantN: 2,
+      bantT: 2,
+      salesNotes: 'Datang sendiri ke gallery, cari rumah tenang ada ruang kerja di rumah.',
+      leadOrigin: 'MANUAL' as const,
+      seName: 'Raka Pratama',
+    };
+
+    const manualGuidance = buildFollowupContextGuidance(manualInput);
+    expect(manualGuidance.trackType).toBe('MANUAL_POST_INTERACTION');
+    const manualDraft = buildContextualFallbackFollowup(manualInput);
+    expect(manualDraft).toContain('Dokter Andi');
+    expect(manualDraft).not.toContain('terima kasih sudah menghubungi');
+    expect(manualDraft).not.toContain('CASH_KERAS');
+
+    const waOngoingInput = {
+      ...manualInput,
+      source: 'WhatsApp Inbound (Baileys)',
+      leadOrigin: 'WA_BAILEYS' as const,
+      lastSalesMessage: 'Apakah akhir pekan ini Dokter Andi sempat mampir melihat lokasi bersama istri?',
+      lastCustomerMessage: 'Kalau hari Minggu jam 10 pagi bisa mas? Sekalian minta simulasi cash kerasnya.',
+      interactionCount: 2,
+    };
+
+    const waGuidance = buildFollowupContextGuidance(waOngoingInput);
+    expect(waGuidance.trackType).toBe('WA_ONGOING_CONVERSATION');
+    const waDraft = buildContextualFallbackFollowup(waOngoingInput);
+    expect(waDraft).not.toContain('terima kasih sudah menghubungi');
   });
 });

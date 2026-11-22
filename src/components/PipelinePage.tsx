@@ -1,7 +1,8 @@
 // ============================================================================
 // PIPELINE & AI LEAD ENGINE PAGE - DEVELOPER SALES OS
-// 10 Tahap Resmi Playbook v1.2, Rubrik BANT 0-12 (Grade A-D), Persona 7 Dimensi,
-// Umpan Balik Kejelasan Lead AI, & Integrasi WhatsApp Baileys Terisolasi Per SE
+// 10 Tahap Resmi Playbook v1.2, Rubrik BANT 0-12 (Grade A-D) + Opsi Lainnya,
+// Persona 7 Dimensi + Opsi Lainnya (Tanpa Nama Tokoh), Collapsible Lead List,
+// WhatsApp Bubble Message Preview, & Integrasi WA Baileys Terisolasi Per SE
 // ============================================================================
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -22,6 +23,9 @@ import {
   UserCheck,
   Search,
   Send,
+  ChevronDown,
+  ChevronUp,
+  CheckCheck,
 } from 'lucide-react';
 import {
   PLAYBOOK_PIPELINE_STAGES,
@@ -68,6 +72,10 @@ export interface PipelineLeadRecord {
   dp_or_sp3k_verified: boolean;
   sales_notes: string;
   next_action: string;
+  lead_origin?: 'MANUAL' | 'WA_BAILEYS';
+  last_customer_message?: string;
+  last_sales_message?: string;
+  interaction_count?: number;
   lost_reason?: string | null;
   response_time_seconds?: number | null;
   created_at: string;
@@ -86,6 +94,8 @@ export interface PipelineLeadRecord {
     recommended_bant: { b: number; a: number; n: number; t: number; total: number; grade: string };
     followup_draft_message: string;
     model: string;
+    prompt_tokens?: number;
+    completion_tokens?: number;
   } | null;
 }
 
@@ -134,6 +144,7 @@ const PAYMENT_SCHEMES = [
 function createDefaultPersonaForm(code: PersonaCode): Record<string, string> {
   const p = PLAYBOOK_BUYER_PERSONAS[code] || PLAYBOOK_BUYER_PERSONAS.P1;
   return {
+    customLabel: code === 'LAINNYA' ? '' : p.archetype,
     profil: p.profil,
     kondisiSaatIni: p.kondisiSaatIni,
     motivasi: p.motivasi,
@@ -151,6 +162,11 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Daftar ID lead yang sedang dibuka detailnya (default kosong = semua tertutup / list ringkas)
+  const [expandedLeadIds, setExpandedLeadIds] = useState<Record<string, boolean>>(() =>
+    loadPersistedState<Record<string, boolean>>(`devos_pl_expanded_${user.email}`, {})
+  );
 
   // Filter & Search (Disinkronkan ke URL ?tab=... dan localStorage)
   const [activeFilter, setActiveFilter] = useState<string>(() => {
@@ -180,21 +196,39 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
   const [formDomicile, setFormDomicile] = useState(() =>
     loadPersistedState(`devos_pl_dom_${user.email}`, '')
   );
-  const [formSource, setFormSource] = useState(() =>
-    loadPersistedState(`devos_pl_src_${user.email}`, LEAD_SOURCES[1])
+
+  // Sumber Lead + Custom
+  const [formSourceSelect, setFormSourceSelect] = useState(() =>
+    loadPersistedState(`devos_pl_src_sel_${user.email}`, LEAD_SOURCES[1])
   );
+  const [formSourceCustom, setFormSourceCustom] = useState(() =>
+    loadPersistedState(`devos_pl_src_cus_${user.email}`, '')
+  );
+
   const [formCode, setFormCode] = useState(() =>
     loadPersistedState(`devos_pl_code_${user.email}`, 'ADS-META-CTWA-01')
   );
   const [formStage, setFormStage] = useState<PipelineStageCode>(() =>
     loadPersistedState<PipelineStageCode>(`devos_pl_stage_${user.email}`, 'NEW')
   );
-  const [formUnit, setFormUnit] = useState(() =>
-    loadPersistedState(`devos_pl_unit_${user.email}`, PLAYBOOK_UNIT_CATALOG[0].label)
+
+  // Unit & Cluster Minat + Custom
+  const [formUnitSelect, setFormUnitSelect] = useState(() =>
+    loadPersistedState(`devos_pl_unit_sel_${user.email}`, PLAYBOOK_UNIT_CATALOG[0].label)
   );
-  const [formPayment, setFormPayment] = useState(() =>
-    loadPersistedState(`devos_pl_pay_${user.email}`, 'KPR')
+  const [formUnitCustom, setFormUnitCustom] = useState(() =>
+    loadPersistedState(`devos_pl_unit_cus_${user.email}`, '')
   );
+
+  // Skema Pembayaran + Custom
+  const [formPaymentSelect, setFormPaymentSelect] = useState(() =>
+    loadPersistedState(`devos_pl_pay_sel_${user.email}`, 'KPR')
+  );
+  const [formPaymentCustom, setFormPaymentCustom] = useState(() =>
+    loadPersistedState(`devos_pl_pay_cus_${user.email}`, '')
+  );
+
+  // Persona + Custom
   const [formPersonaCode, setFormPersonaCode] = useState<PersonaCode>(() =>
     loadPersistedState<PersonaCode>(`devos_pl_pcode_${user.email}`, 'P1')
   );
@@ -204,23 +238,53 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
       createDefaultPersonaForm('P1')
     )
   );
-  const [formBantB, setFormBantB] = useState<number>(() =>
-    loadPersistedState<number>(`devos_pl_bb_${user.email}`, 2)
+
+  // Kualifikasi Skor BANT (0-3) + Opsi Lainnya per dimensi
+  const [formBantBSelect, setFormBantBSelect] = useState<string>(() =>
+    loadPersistedState<string>(`devos_pl_bb_sel_${user.email}`, '2')
   );
-  const [formBantA, setFormBantA] = useState<number>(() =>
-    loadPersistedState<number>(`devos_pl_ba_${user.email}`, 2)
+  const [formBantBCustomText, setFormBantBCustomText] = useState<string>(() =>
+    loadPersistedState<string>(`devos_pl_bb_cus_${user.email}`, '')
   );
-  const [formBantN, setFormBantN] = useState<number>(() =>
-    loadPersistedState<number>(`devos_pl_bn_${user.email}`, 2)
+  const [formBantBCustomScore, setFormBantBCustomScore] = useState<number>(() =>
+    loadPersistedState<number>(`devos_pl_bb_sc_${user.email}`, 2)
   );
-  const [formBantT, setFormBantT] = useState<number>(() =>
-    loadPersistedState<number>(`devos_pl_bt_${user.email}`, 1)
+
+  const [formBantASelect, setFormBantASelect] = useState<string>(() =>
+    loadPersistedState<string>(`devos_pl_ba_sel_${user.email}`, '2')
   );
+  const [formBantACustomText, setFormBantACustomText] = useState<string>(() =>
+    loadPersistedState<string>(`devos_pl_ba_cus_${user.email}`, '')
+  );
+  const [formBantACustomScore, setFormBantACustomScore] = useState<number>(() =>
+    loadPersistedState<number>(`devos_pl_ba_sc_${user.email}`, 2)
+  );
+
+  const [formBantNSelect, setFormBantNSelect] = useState<string>(() =>
+    loadPersistedState<string>(`devos_pl_bn_sel_${user.email}`, '2')
+  );
+  const [formBantNCustomText, setFormBantNCustomText] = useState<string>(() =>
+    loadPersistedState<string>(`devos_pl_bn_cus_${user.email}`, '')
+  );
+  const [formBantNCustomScore, setFormBantNCustomScore] = useState<number>(() =>
+    loadPersistedState<number>(`devos_pl_bn_sc_${user.email}`, 2)
+  );
+
+  const [formBantTSelect, setFormBantTSelect] = useState<string>(() =>
+    loadPersistedState<string>(`devos_pl_bt_sel_${user.email}`, '1')
+  );
+  const [formBantTCustomText, setFormBantTCustomText] = useState<string>(() =>
+    loadPersistedState<string>(`devos_pl_bt_cus_${user.email}`, '')
+  );
+  const [formBantTCustomScore, setFormBantTCustomScore] = useState<number>(() =>
+    loadPersistedState<number>(`devos_pl_bt_sc_${user.email}`, 1)
+  );
+
   const [formNotes, setFormNotes] = useState(() =>
     loadPersistedState(`devos_pl_notes_${user.email}`, '')
   );
 
-  // Form Ingest Pesan WA Masuk (untuk pengujian / sinkronisasi pesan masuk ke nomor WA SE)
+  // Form Ingest Pesan WA Masuk
   const [showWaIngestModal, setShowWaIngestModal] = useState(false);
   const [waSenderName, setWaSenderName] = useState('');
   const [waSenderPhone, setWaSenderPhone] = useState('');
@@ -231,12 +295,18 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
     loadPersistedState<Record<string, string>>(`devos_pl_drafts_${user.email}`, {})
   );
 
+  const effectiveBantB = formBantBSelect === 'LAINNYA' ? formBantBCustomScore : Number(formBantBSelect);
+  const effectiveBantA = formBantASelect === 'LAINNYA' ? formBantACustomScore : Number(formBantASelect);
+  const effectiveBantN = formBantNSelect === 'LAINNYA' ? formBantNCustomScore : Number(formBantNSelect);
+  const effectiveBantT = formBantTSelect === 'LAINNYA' ? formBantTCustomScore : Number(formBantTSelect);
+
   useEffect(() => {
     setQueryParam('tab', activeFilter);
     savePersistedState(`devos_pipeline_filter_${user.email}`, activeFilter);
   }, [activeFilter, user.email]);
 
   useEffect(() => {
+    savePersistedState(`devos_pl_expanded_${user.email}`, expandedLeadIds);
     savePersistedState(`devos_pipeline_search_${user.email}`, searchQuery);
     savePersistedState(`devos_pipeline_form_open_${user.email}`, isLeadFormOpen);
     savePersistedState(`devos_pipeline_edit_id_${user.email}`, editingLeadId);
@@ -244,21 +314,33 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
     savePersistedState(`devos_pl_name_${user.email}`, formName);
     savePersistedState(`devos_pl_phone_${user.email}`, formPhone);
     savePersistedState(`devos_pl_dom_${user.email}`, formDomicile);
-    savePersistedState(`devos_pl_src_${user.email}`, formSource);
+    savePersistedState(`devos_pl_src_sel_${user.email}`, formSourceSelect);
+    savePersistedState(`devos_pl_src_cus_${user.email}`, formSourceCustom);
     savePersistedState(`devos_pl_code_${user.email}`, formCode);
     savePersistedState(`devos_pl_stage_${user.email}`, formStage);
-    savePersistedState(`devos_pl_unit_${user.email}`, formUnit);
-    savePersistedState(`devos_pl_pay_${user.email}`, formPayment);
+    savePersistedState(`devos_pl_unit_sel_${user.email}`, formUnitSelect);
+    savePersistedState(`devos_pl_unit_cus_${user.email}`, formUnitCustom);
+    savePersistedState(`devos_pl_pay_sel_${user.email}`, formPaymentSelect);
+    savePersistedState(`devos_pl_pay_cus_${user.email}`, formPaymentCustom);
     savePersistedState(`devos_pl_pcode_${user.email}`, formPersonaCode);
     savePersistedState(`devos_pl_pprof_${user.email}`, formPersonaProfile);
-    savePersistedState(`devos_pl_bb_${user.email}`, formBantB);
-    savePersistedState(`devos_pl_ba_${user.email}`, formBantA);
-    savePersistedState(`devos_pl_bn_${user.email}`, formBantN);
-    savePersistedState(`devos_pl_bt_${user.email}`, formBantT);
+    savePersistedState(`devos_pl_bb_sel_${user.email}`, formBantBSelect);
+    savePersistedState(`devos_pl_bb_cus_${user.email}`, formBantBCustomText);
+    savePersistedState(`devos_pl_bb_sc_${user.email}`, formBantBCustomScore);
+    savePersistedState(`devos_pl_ba_sel_${user.email}`, formBantASelect);
+    savePersistedState(`devos_pl_ba_cus_${user.email}`, formBantACustomText);
+    savePersistedState(`devos_pl_ba_sc_${user.email}`, formBantACustomScore);
+    savePersistedState(`devos_pl_bn_sel_${user.email}`, formBantNSelect);
+    savePersistedState(`devos_pl_bn_cus_${user.email}`, formBantNCustomText);
+    savePersistedState(`devos_pl_bn_sc_${user.email}`, formBantNCustomScore);
+    savePersistedState(`devos_pl_bt_sel_${user.email}`, formBantTSelect);
+    savePersistedState(`devos_pl_bt_cus_${user.email}`, formBantTCustomText);
+    savePersistedState(`devos_pl_bt_sc_${user.email}`, formBantTCustomScore);
     savePersistedState(`devos_pl_notes_${user.email}`, formNotes);
     savePersistedState(`devos_pl_drafts_${user.email}`, customDrafts);
   }, [
     user.email,
+    expandedLeadIds,
     searchQuery,
     isLeadFormOpen,
     editingLeadId,
@@ -266,17 +348,28 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
     formName,
     formPhone,
     formDomicile,
-    formSource,
+    formSourceSelect,
+    formSourceCustom,
     formCode,
     formStage,
-    formUnit,
-    formPayment,
+    formUnitSelect,
+    formUnitCustom,
+    formPaymentSelect,
+    formPaymentCustom,
     formPersonaCode,
     formPersonaProfile,
-    formBantB,
-    formBantA,
-    formBantN,
-    formBantT,
+    formBantBSelect,
+    formBantBCustomText,
+    formBantBCustomScore,
+    formBantASelect,
+    formBantACustomText,
+    formBantACustomScore,
+    formBantNSelect,
+    formBantNCustomText,
+    formBantNCustomScore,
+    formBantTSelect,
+    formBantTCustomText,
+    formBantTCustomScore,
     formNotes,
     customDrafts,
   ]);
@@ -320,6 +413,13 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
     fetchPipelineAndWa();
   }, [fetchPipelineAndWa]);
 
+  const toggleLeadDetail = (leadId: string) => {
+    setExpandedLeadIds((prev) => ({
+      ...prev,
+      [leadId]: !prev[leadId],
+    }));
+  };
+
   const handleSelectPersonaPreset = (code: PersonaCode) => {
     setFormPersonaCode(code);
     setFormPersonaProfile(createDefaultPersonaForm(code));
@@ -330,17 +430,28 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
     setFormName('');
     setFormPhone('');
     setFormDomicile('');
-    setFormSource(LEAD_SOURCES[1]);
+    setFormSourceSelect(LEAD_SOURCES[1]);
+    setFormSourceCustom('');
     setFormCode('ADS-META-CTWA-01');
     setFormStage('NEW');
-    setFormUnit(PLAYBOOK_UNIT_CATALOG[0].label);
-    setFormPayment('KPR');
+    setFormUnitSelect(PLAYBOOK_UNIT_CATALOG[0].label);
+    setFormUnitCustom('');
+    setFormPaymentSelect('KPR');
+    setFormPaymentCustom('');
     setFormPersonaCode('P1');
     setFormPersonaProfile(createDefaultPersonaForm('P1'));
-    setFormBantB(2);
-    setFormBantA(2);
-    setFormBantN(2);
-    setFormBantT(1);
+    setFormBantBSelect('2');
+    setFormBantBCustomText('');
+    setFormBantBCustomScore(2);
+    setFormBantASelect('2');
+    setFormBantACustomText('');
+    setFormBantACustomScore(2);
+    setFormBantNSelect('2');
+    setFormBantNCustomText('');
+    setFormBantNCustomScore(2);
+    setFormBantTSelect('1');
+    setFormBantTCustomText('');
+    setFormBantTCustomScore(1);
     setFormNotes('');
     setShowPersonaDrawer(false);
   };
@@ -350,45 +461,110 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
     setFormName(lead.full_name);
     setFormPhone(lead.phone_wa);
     setFormDomicile(lead.domicile);
-    setFormSource(lead.source);
+
+    if (LEAD_SOURCES.includes(lead.source)) {
+      setFormSourceSelect(lead.source);
+      setFormSourceCustom('');
+    } else {
+      setFormSourceSelect('LAINNYA');
+      setFormSourceCustom(lead.source);
+    }
+
     setFormCode(lead.content_code);
     setFormStage(lead.stage);
-    setFormUnit(lead.unit_interest);
-    setFormPayment(lead.payment_scheme);
-    setFormPersonaCode(lead.persona_code);
+
+    if (PLAYBOOK_UNIT_CATALOG.some((u) => u.label === lead.unit_interest)) {
+      setFormUnitSelect(lead.unit_interest);
+      setFormUnitCustom('');
+    } else {
+      setFormUnitSelect('LAINNYA');
+      setFormUnitCustom(lead.unit_interest);
+    }
+
+    if (PAYMENT_SCHEMES.some((p) => p.code === lead.payment_scheme)) {
+      setFormPaymentSelect(lead.payment_scheme);
+      setFormPaymentCustom('');
+    } else {
+      setFormPaymentSelect('LAINNYA');
+      setFormPaymentCustom(lead.payment_scheme);
+    }
+
+    const pCode = (lead.persona_code in PLAYBOOK_BUYER_PERSONAS ? lead.persona_code : 'LAINNYA') as PersonaCode;
+    setFormPersonaCode(pCode);
     setFormPersonaProfile(
       Object.keys(lead.persona_profile || {}).length > 0
         ? lead.persona_profile
-        : createDefaultPersonaForm(lead.persona_code)
+        : createDefaultPersonaForm(pCode)
     );
-    setFormBantB(lead.bant_b);
-    setFormBantA(lead.bant_a);
-    setFormBantN(lead.bant_n);
-    setFormBantT(lead.bant_t);
+
+    setFormBantBSelect(String(lead.bant_b));
+    setFormBantASelect(String(lead.bant_a));
+    setFormBantNSelect(String(lead.bant_n));
+    setFormBantTSelect(String(lead.bant_t));
     setFormNotes(lead.sales_notes);
     setIsLeadFormOpen(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSaveLead = async (e: React.FormEvent) => {
     e.preventDefault();
+    const resolvedSource =
+      formSourceSelect === 'LAINNYA' ? formSourceCustom.trim() : formSourceSelect;
+    const resolvedUnit =
+      formUnitSelect === 'LAINNYA' ? formUnitCustom.trim() : formUnitSelect;
+    const resolvedPayment =
+      formPaymentSelect === 'LAINNYA' ? formPaymentCustom.trim() : formPaymentSelect;
+
+    if (!resolvedSource) {
+      showToast('Mohon isi sumber lead pada kolom Lainnya.');
+      return;
+    }
+    if (!resolvedUnit) {
+      showToast('Mohon isi unit & cluster minat pada kolom Lainnya.');
+      return;
+    }
+    if (!resolvedPayment) {
+      showToast('Mohon isi skema pembayaran pada kolom Lainnya.');
+      return;
+    }
+
+    const customBantNotes: string[] = [];
+    if (formBantBSelect === 'LAINNYA' && formBantBCustomText.trim()) {
+      customBantNotes.push(`Budget: ${formBantBCustomText.trim()}`);
+    }
+    if (formBantASelect === 'LAINNYA' && formBantACustomText.trim()) {
+      customBantNotes.push(`Authority: ${formBantACustomText.trim()}`);
+    }
+    if (formBantNSelect === 'LAINNYA' && formBantNCustomText.trim()) {
+      customBantNotes.push(`Need: ${formBantNCustomText.trim()}`);
+    }
+    if (formBantTSelect === 'LAINNYA' && formBantTCustomText.trim()) {
+      customBantNotes.push(`Timeline: ${formBantTCustomText.trim()}`);
+    }
+
+    const enrichedNotes =
+      customBantNotes.length > 0
+        ? `${formNotes.trim()}\n[Keterangan BANT Tambahan: ${customBantNotes.join(' | ')}]`.trim()
+        : formNotes.trim();
+
     setSubmitting(true);
     try {
       const payload = {
         fullName: formName,
         phoneWa: formPhone,
         domicile: formDomicile,
-        source: formSource,
+        source: resolvedSource,
         contentCode: formCode,
         stage: formStage,
-        unitInterest: formUnit,
-        paymentScheme: formPayment,
+        unitInterest: resolvedUnit,
+        paymentScheme: resolvedPayment,
         personaCode: formPersonaCode,
         personaProfile: formPersonaProfile,
-        bantB: formBantB,
-        bantA: formBantA,
-        bantN: formBantN,
-        bantT: formBantT,
-        salesNotes: formNotes,
+        bantB: effectiveBantB,
+        bantA: effectiveBantA,
+        bantN: effectiveBantN,
+        bantT: effectiveBantT,
+        salesNotes: enrichedNotes,
         reanalyze: true,
       };
 
@@ -412,6 +588,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
       if (onDataChanged) onDataChanged();
       const savedLead = data.lead as PipelineLeadRecord;
       if (savedLead.validity_status === 'PERLU_DILENGKAPI') {
+        setExpandedLeadIds((prev) => ({ ...prev, [savedLead.id]: true }));
         showToast('Lead tersimpan dengan catatan AI: Mohon lengkapi bagian yang kurang jelas.');
       } else {
         showToast('Lead berhasil disimpan & dianalisis oleh AI!');
@@ -429,7 +606,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
     let lostReason: string | undefined;
     if (nextStage === 'CLOSED_LOST') {
       const chosen = window.prompt(
-        `Pilih alasan kalah standar (Playbook §13.4):\n${STANDARD_LOST_REASONS.map((r, i) => `${i + 1}. ${r}`).join('\n')}`,
+        `Pilih atau tuliskan alasan kalah (Playbook §13.4):\n${STANDARD_LOST_REASONS.map((r, i) => `${i + 1}. ${r}`).join('\n')}`,
         STANDARD_LOST_REASONS[0]
       );
       if (!chosen) return;
@@ -486,6 +663,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
       });
       if (res.ok) {
         await fetchPipelineAndWa();
+        setExpandedLeadIds((prev) => ({ ...prev, [lead.id]: true }));
         if (onDataChanged) onDataChanged();
         showToast(`Analisis AI untuk ${lead.full_name} berhasil diperbarui!`);
       }
@@ -575,12 +753,12 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
     const draft =
       customDrafts[lead.id] ??
       lead.latest_analysis?.followup_draft_message ??
-      `Halo Bapak/Ibu ${lead.full_name}, terima kasih sudah menghubungi The Park Townhouse Sukoharjo. Saya ${user.name}.`;
+      `Selamat sore ${lead.full_name}, saya ${user.name} dari The Park Townhouse Sukoharjo.`;
 
     await fetch('/api/wa/record-reply', {
       method: 'POST',
       headers: apiHeaders,
-      body: JSON.stringify({ contactPhone: lead.phone_wa }),
+      body: JSON.stringify({ contactPhone: lead.phone_wa, messageText: draft }),
     }).catch(() => {});
 
     fetchPipelineAndWa();
@@ -624,7 +802,12 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
   const qualifiedCount = leads.filter((l) => l.validity_status === 'VALID' && l.bant_total >= 7).length;
   const hotCount = leads.filter((l) => l.validity_status === 'VALID' && (l.grade === 'A' || l.stage === 'HOT_NEGOTIATION')).length;
 
-  const previewBant = evaluatePlaybookBant(formBantB, formBantA, formBantN, formBantT);
+  const previewBant = evaluatePlaybookBant(
+    effectiveBantB,
+    effectiveBantA,
+    effectiveBantN,
+    effectiveBantT
+  );
 
   return (
     <div className="space-y-5">
@@ -843,7 +1026,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
         </div>
       </section>
 
-      {/* Form Input / Edit Lead + Persona 7 Dimensi */}
+      {/* Form Input / Edit Lead + Persona 7 Dimensi + Opsi Lainnya */}
       {isLeadFormOpen && (
         <section className="bg-white border-2 border-terracotta/40 rounded-2xl p-4 sm:p-6 space-y-4">
           <div className="flex items-center justify-between border-b border-warmborder pb-3">
@@ -907,21 +1090,32 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-espresso mb-1">Sumber Lead</label>
+              {/* Dropdown Sumber Lead + Pilihan Lainnya */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-espresso">Sumber Lead</label>
                 <select
-                  value={formSource}
-                  onChange={(e) => setFormSource(e.target.value)}
+                  value={formSourceSelect}
+                  onChange={(e) => setFormSourceSelect(e.target.value)}
                   className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder text-xs bg-white"
                 >
                   {LEAD_SOURCES.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
+                  <option value="LAINNYA">Lainnya (Isi Sendiri...)</option>
                 </select>
+                {formSourceSelect === 'LAINNYA' && (
+                  <input
+                    required
+                    value={formSourceCustom}
+                    onChange={(e) => setFormSourceCustom(e.target.value)}
+                    placeholder="Masukkan sumber lead..."
+                    className="w-full min-h-[40px] px-3 rounded-xl border border-terracotta bg-amber-50/40 text-xs focus:outline-none"
+                  />
+                )}
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-espresso mb-1">Kode Konten / Iklan</label>
+                <label className="block text-xs font-bold text-espresso mb-1.5">Kode Konten / Iklan</label>
                 <input
                   value={formCode}
                   onChange={(e) => setFormCode(e.target.value)}
@@ -930,11 +1124,12 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-espresso mb-1">Unit &amp; Cluster Minat</label>
+              {/* Dropdown Unit & Cluster Minat + Pilihan Lainnya */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-espresso">Unit &amp; Cluster Minat</label>
                 <select
-                  value={formUnit}
-                  onChange={(e) => setFormUnit(e.target.value)}
+                  value={formUnitSelect}
+                  onChange={(e) => setFormUnitSelect(e.target.value)}
                   className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder text-xs bg-white"
                 >
                   {PLAYBOOK_UNIT_CATALOG.map((u) => (
@@ -942,24 +1137,45 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                       {u.label} — Rp{(u.priceCashIdr / 1000000).toFixed(0)} Jt
                     </option>
                   ))}
+                  <option value="LAINNYA">Lainnya (Isi Sendiri...)</option>
                 </select>
+                {formUnitSelect === 'LAINNYA' && (
+                  <input
+                    required
+                    value={formUnitCustom}
+                    onChange={(e) => setFormUnitCustom(e.target.value)}
+                    placeholder="Masukkan unit / cluster minat..."
+                    className="w-full min-h-[40px] px-3 rounded-xl border border-terracotta bg-amber-50/40 text-xs focus:outline-none"
+                  />
+                )}
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-espresso mb-1">Skema Pembayaran</label>
+              {/* Dropdown Skema Pembayaran + Pilihan Lainnya */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-espresso">Skema Pembayaran</label>
                 <select
-                  value={formPayment}
-                  onChange={(e) => setFormPayment(e.target.value)}
+                  value={formPaymentSelect}
+                  onChange={(e) => setFormPaymentSelect(e.target.value)}
                   className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder text-xs bg-white"
                 >
                   {PAYMENT_SCHEMES.map((p) => (
                     <option key={p.code} value={p.code}>{p.label}</option>
                   ))}
+                  <option value="LAINNYA">Lainnya (Isi Sendiri...)</option>
                 </select>
+                {formPaymentSelect === 'LAINNYA' && (
+                  <input
+                    required
+                    value={formPaymentCustom}
+                    onChange={(e) => setFormPaymentCustom(e.target.value)}
+                    placeholder="Masukkan skema pembayaran..."
+                    className="w-full min-h-[40px] px-3 rounded-xl border border-terracotta bg-amber-50/40 text-xs focus:outline-none"
+                  />
+                )}
               </div>
             </div>
 
-            {/* Rubrik BANT 0-3 per huruf (Total 12) sesuai Playbook Bab 5.2 */}
+            {/* Rubrik BANT 0-3 per huruf (Total 12) + Opsi Lainnya di Setiap Dropdown */}
             <div className="p-4 rounded-2xl bg-sandstone/50 border border-warmborder space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs font-extrabold text-espresso">
@@ -970,72 +1186,175 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-                <div>
-                  <label className="block font-bold text-espresso mb-1">B — Budget (0–3)</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                {/* B - Budget */}
+                <div className="space-y-1.5">
+                  <label className="block font-bold text-espresso">B — Budget (0–3)</label>
                   <select
-                    value={formBantB}
-                    onChange={(e) => setFormBantB(Number(e.target.value))}
+                    value={formBantBSelect}
+                    onChange={(e) => setFormBantBSelect(e.target.value)}
                     className="w-full min-h-[42px] px-2.5 rounded-xl border border-warmborder bg-white"
                   >
-                    <option value={0}>0: Belum tahu / &lt; Rp500 jt</option>
-                    <option value={1}>1: Rp500–649 jt / Gaji &lt; Rp15 jt</option>
-                    <option value={2}>2: Sesuai unit, DP belum siap penuh</option>
-                    <option value={3}>3: Dana/DP siap, gaji memenuhi KPR</option>
+                    <option value="0">0: Belum tahu / &lt; Rp500 jt</option>
+                    <option value="1">1: Rp500–649 jt / Gaji &lt; Rp15 jt</option>
+                    <option value="2">2: Sesuai unit, DP belum siap penuh</option>
+                    <option value="3">3: Dana/DP siap, gaji memenuhi KPR</option>
+                    <option value="LAINNYA">Lainnya (Isi Sendiri...)</option>
                   </select>
+                  {formBantBSelect === 'LAINNYA' && (
+                    <div className="p-2.5 rounded-xl bg-white border border-terracotta space-y-1.5">
+                      <input
+                        required
+                        value={formBantBCustomText}
+                        onChange={(e) => setFormBantBCustomText(e.target.value)}
+                        placeholder="Tuliskan kondisi budget pembeli..."
+                        className="w-full min-h-[36px] px-2.5 rounded-lg border border-warmborder text-xs"
+                      />
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-warmmuted">Skor Budget (0–3):</span>
+                        <select
+                          value={formBantBCustomScore}
+                          onChange={(e) => setFormBantBCustomScore(Number(e.target.value))}
+                          className="h-7 px-2 rounded border border-warmborder text-xs font-bold"
+                        >
+                          {[0, 1, 2, 3].map((n) => (
+                            <option key={n} value={n}>{n} Poin</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block font-bold text-espresso mb-1">A — Authority (0–3)</label>
+                {/* A - Authority */}
+                <div className="space-y-1.5">
+                  <label className="block font-bold text-espresso">A — Authority (0–3)</label>
                   <select
-                    value={formBantA}
-                    onChange={(e) => setFormBantA(Number(e.target.value))}
+                    value={formBantASelect}
+                    onChange={(e) => setFormBantASelect(e.target.value)}
                     className="w-full min-h-[42px] px-2.5 rounded-xl border border-warmborder bg-white"
                   >
-                    <option value={0}>0: Tidak diketahui</option>
-                    <option value={1}>1: Pencari info (anak/kerabat)</option>
-                    <option value={2}>2: Pengambil keputusan, pasangan belum ikut</option>
-                    <option value={3}>3: Suami-istri/orang tua terlibat penuh</option>
+                    <option value="0">0: Tidak diketahui</option>
+                    <option value="1">1: Pencari info (anak/kerabat)</option>
+                    <option value="2">2: Pengambil keputusan, pasangan belum ikut</option>
+                    <option value="3">3: Suami-istri/orang tua terlibat penuh</option>
+                    <option value="LAINNYA">Lainnya (Isi Sendiri...)</option>
                   </select>
+                  {formBantASelect === 'LAINNYA' && (
+                    <div className="p-2.5 rounded-xl bg-white border border-terracotta space-y-1.5">
+                      <input
+                        required
+                        value={formBantACustomText}
+                        onChange={(e) => setFormBantACustomText(e.target.value)}
+                        placeholder="Tuliskan pengambil keputusan..."
+                        className="w-full min-h-[36px] px-2.5 rounded-lg border border-warmborder text-xs"
+                      />
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-warmmuted">Skor Authority (0–3):</span>
+                        <select
+                          value={formBantACustomScore}
+                          onChange={(e) => setFormBantACustomScore(Number(e.target.value))}
+                          className="h-7 px-2 rounded border border-warmborder text-xs font-bold"
+                        >
+                          {[0, 1, 2, 3].map((n) => (
+                            <option key={n} value={n}>{n} Poin</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block font-bold text-espresso mb-1">N — Need (0–3)</label>
+                {/* N - Need */}
+                <div className="space-y-1.5">
+                  <label className="block font-bold text-espresso">N — Need (0–3)</label>
                   <select
-                    value={formBantN}
-                    onChange={(e) => setFormBantN(Number(e.target.value))}
+                    value={formBantNSelect}
+                    onChange={(e) => setFormBantNSelect(e.target.value)}
                     className="w-full min-h-[42px] px-2.5 rounded-xl border border-warmborder bg-white"
                   >
-                    <option value={0}>0: Belum jelas</option>
-                    <option value={1}>1: Baru lihat-lihat</option>
-                    <option value={2}>2: Kebutuhan kamar/lokasi jelas</option>
-                    <option value={3}>3: Spesifik &amp; cocok nomor unit tertentu</option>
+                    <option value="0">0: Belum jelas</option>
+                    <option value="1">1: Baru lihat-lihat</option>
+                    <option value="2">2: Kebutuhan kamar/lokasi jelas</option>
+                    <option value="3">3: Spesifik &amp; cocok nomor unit tertentu</option>
+                    <option value="LAINNYA">Lainnya (Isi Sendiri...)</option>
                   </select>
+                  {formBantNSelect === 'LAINNYA' && (
+                    <div className="p-2.5 rounded-xl bg-white border border-terracotta space-y-1.5">
+                      <input
+                        required
+                        value={formBantNCustomText}
+                        onChange={(e) => setFormBantNCustomText(e.target.value)}
+                        placeholder="Tuliskan kebutuhan spesifik pembeli..."
+                        className="w-full min-h-[36px] px-2.5 rounded-lg border border-warmborder text-xs"
+                      />
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-warmmuted">Skor Need (0–3):</span>
+                        <select
+                          value={formBantNCustomScore}
+                          onChange={(e) => setFormBantNCustomScore(Number(e.target.value))}
+                          className="h-7 px-2 rounded border border-warmborder text-xs font-bold"
+                        >
+                          {[0, 1, 2, 3].map((n) => (
+                            <option key={n} value={n}>{n} Poin</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block font-bold text-espresso mb-1">T — Timeline (0–3)</label>
+                {/* T - Timeline */}
+                <div className="space-y-1.5">
+                  <label className="block font-bold text-espresso">T — Timeline (0–3)</label>
                   <select
-                    value={formBantT}
-                    onChange={(e) => setFormBantT(Number(e.target.value))}
+                    value={formBantTSelect}
+                    onChange={(e) => setFormBantTSelect(e.target.value)}
                     className="w-full min-h-[42px] px-2.5 rounded-xl border border-warmborder bg-white"
                   >
-                    <option value={0}>0: &gt; 12 bulan / tidak tahu</option>
-                    <option value={1}>1: 6–12 bulan</option>
-                    <option value={2}>2: 1–6 bulan</option>
-                    <option value={3}>3: &le; 30 hari / ada pemicu mendesak</option>
+                    <option value="0">0: &gt; 12 bulan / tidak tahu</option>
+                    <option value="1">1: 6–12 bulan</option>
+                    <option value="2">2: 1–6 bulan</option>
+                    <option value="3">3: &le; 30 hari / ada pemicu mendesak</option>
+                    <option value="LAINNYA">Lainnya (Isi Sendiri...)</option>
                   </select>
+                  {formBantTSelect === 'LAINNYA' && (
+                    <div className="p-2.5 rounded-xl bg-white border border-terracotta space-y-1.5">
+                      <input
+                        required
+                        value={formBantTCustomText}
+                        onChange={(e) => setFormBantTCustomText(e.target.value)}
+                        placeholder="Tuliskan target waktu beli..."
+                        className="w-full min-h-[36px] px-2.5 rounded-lg border border-warmborder text-xs"
+                      />
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-warmmuted">Skor Timeline (0–3):</span>
+                        <select
+                          value={formBantTCustomScore}
+                          onChange={(e) => setFormBantTCustomScore(Number(e.target.value))}
+                          className="h-7 px-2 rounded border border-warmborder text-xs font-bold"
+                        >
+                          {[0, 1, 2, 3].map((n) => (
+                            <option key={n} value={n}>{n} Poin</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Tombol Masukkan Persona Pembeli (Sesuai Struktur Tabel Playbook Hal. 9-11) */}
+            {/* Tombol Masukkan Persona Pembeli (Tanpa Nama Tokoh + Ada Pilihan Lainnya) */}
             <div className="border border-warmborder rounded-2xl overflow-hidden">
               <div className="p-3.5 bg-sandstone/60 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <UserCheck className="size-4 text-terracotta" />
                   <span className="text-xs font-extrabold text-espresso">
-                    Persona Pembeli: {formPersonaCode} — {PLAYBOOK_BUYER_PERSONAS[formPersonaCode].name} ({PLAYBOOK_BUYER_PERSONAS[formPersonaCode].archetype})
+                    Template Persona: {formPersonaCode} ·{' '}
+                    {formPersonaCode === 'LAINNYA'
+                      ? formPersonaProfile.customLabel || 'Lainnya (Kustom)'
+                      : PLAYBOOK_BUYER_PERSONAS[formPersonaCode].archetype}
                   </span>
                 </div>
                 <button
@@ -1043,7 +1362,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                   onClick={() => setShowPersonaDrawer((prev) => !prev)}
                   className="min-h-[38px] px-3 py-1.5 rounded-xl bg-espresso text-white text-xs font-bold cursor-pointer"
                 >
-                  {showPersonaDrawer ? 'Tutup Detail Persona' : 'Masukkan Persona Pembeli (P1–P6)'}
+                  {showPersonaDrawer ? 'Tutup Detail Persona' : 'Masukkan Persona Pembeli'}
                 </button>
               </div>
 
@@ -1051,9 +1370,9 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                 <div className="p-4 bg-white space-y-4 border-t border-warmborder">
                   <div>
                     <span className="block text-[11px] font-bold uppercase tracking-wider text-warmmuted mb-2">
-                      Pilih Template Persona Resmi Playbook v1.2 (P1–P6):
+                      Pilih Template Persona Pembeli:
                     </span>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                       {(Object.keys(PLAYBOOK_BUYER_PERSONAS) as PersonaCode[]).map((pKey) => {
                         const pObj = PLAYBOOK_BUYER_PERSONAS[pKey];
                         const isSel = formPersonaCode === pKey;
@@ -1062,23 +1381,40 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                             key={pKey}
                             type="button"
                             onClick={() => handleSelectPersonaPreset(pKey)}
-                            className={`p-2.5 rounded-xl text-left border text-xs transition-all cursor-pointer ${
+                            className={`p-3 rounded-xl text-left border text-xs transition-all cursor-pointer ${
                               isSel
                                 ? 'bg-amber-50 border-terracotta text-espresso font-bold'
                                 : 'bg-sandstone/40 border-warmborder text-warmmuted hover:text-espresso'
                             }`}
                           >
                             <span className="font-extrabold text-terracotta">{pKey}</span> · {pObj.archetype}
-                            <span className="block text-[11px] text-warmmuted truncate mt-0.5">
-                              "{pObj.name}"
-                            </span>
                           </button>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* Tabel 8 Dimensi Persona sesuai Gambar Playbook yang Dikirim User */}
+                  {formPersonaCode === 'LAINNYA' && (
+                    <div>
+                      <label className="block text-xs font-bold text-espresso mb-1">
+                        Nama / Kategori Persona Pembeli Kustom *
+                      </label>
+                      <input
+                        required
+                        value={formPersonaProfile.customLabel || ''}
+                        onChange={(e) =>
+                          setFormPersonaProfile((prev) => ({
+                            ...prev,
+                            customLabel: e.target.value,
+                          }))
+                        }
+                        placeholder="Contoh: Pasangan Ekspatriat / Pengusaha Kuliner Solo Baru"
+                        className="w-full min-h-[42px] px-3 rounded-xl border border-terracotta bg-amber-50/30 text-xs focus:outline-none"
+                      />
+                    </div>
+                  )}
+
+                  {/* Tabel 8 Dimensi Persona sesuai Gambar Playbook */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     {[
                       { key: 'profil', label: 'Profil (Usia, Pekerjaan, Penghasilan Gabungan)' },
@@ -1095,6 +1431,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                         <textarea
                           rows={2}
                           value={formPersonaProfile[dim.key] || ''}
+                          placeholder={`Isi ${dim.label.toLowerCase()}...`}
                           onChange={(e) =>
                             setFormPersonaProfile((prev) => ({
                               ...prev,
@@ -1112,7 +1449,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
 
             <div>
               <label className="block text-xs font-bold text-espresso mb-1">
-                Catatan Kebutuhan, Anggaran &amp;Konteks Prospek * (Digunakan AI untuk Analisa &amp; Draf Pesan)
+                Catatan Kebutuhan, Anggaran &amp; Konteks Prospek * (Digunakan AI untuk Analisa &amp; Draf Pesan)
               </label>
               <textarea
                 required
@@ -1192,7 +1529,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
         </div>
       </div>
 
-      {/* Daftar Lead & Analisis AI */}
+      {/* Daftar Lead (Default Tertutup / List Ringkas, Buka saat Klik Detail) */}
       {loading ? (
         <div className="bg-white border border-warmborder rounded-2xl p-8 text-center text-xs text-warmmuted">
           Memuat data pipeline real dari database sales_os...
@@ -1218,95 +1555,85 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
           </button>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {filteredLeads.map((lead) => {
             const analysis = lead.latest_analysis;
             const personaInfo =
               PLAYBOOK_BUYER_PERSONAS[lead.persona_code] || PLAYBOOK_BUYER_PERSONAS.P1;
+            const personaDisplayLabel =
+              lead.persona_code === 'LAINNYA'
+                ? lead.persona_profile?.customLabel || 'Persona Lainnya'
+                : `${lead.persona_code} · ${personaInfo.archetype}`;
             const stageInfo =
               PLAYBOOK_PIPELINE_STAGES.find((s) => s.code === lead.stage) ||
               PLAYBOOK_PIPELINE_STAGES[0];
             const isUnclear =
               lead.validity_status === 'PERLU_DILENGKAPI' ||
               analysis?.clarity_status === 'PERLU_DILENGKAPI';
+            const isExpanded = Boolean(expandedLeadIds[lead.id]);
+            const isWaInboundLead =
+              lead.lead_origin === 'WA_BAILEYS' ||
+              /whatsapp inbound|baileys/i.test(lead.source || '');
             const draftMsg =
               customDrafts[lead.id] ??
               analysis?.followup_draft_message ??
-              `Halo Bapak/Ibu ${lead.full_name}, terima kasih sudah menghubungi The Park Townhouse Sukoharjo. Saya ${user.name}.`;
+              `Selamat sore ${lead.full_name}, saya ${user.name} dari The Park Townhouse Sukoharjo.`;
+
+            const initials = lead.full_name
+              .split(/\s+/)
+              .slice(0, 2)
+              .map((w) => w[0]?.toUpperCase() || '')
+              .join('');
 
             return (
               <article
                 key={lead.id}
-                className={`bg-white border rounded-2xl p-4 sm:p-5 space-y-4 ${
+                className={`bg-white border rounded-2xl p-4 sm:p-5 transition-all ${
                   isUnclear ? 'border-rose-300 ring-1 ring-rose-200' : 'border-warmborder'
                 }`}
               >
-                {/* Banner Feedback AI jika Lead Kurang Jelas */}
-                {isUnclear && (
-                  <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 space-y-2.5">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 text-rose-800 font-extrabold text-xs sm:text-sm">
-                        <AlertCircle className="size-4 shrink-0" />
-                        <span>
-                          Lead yang dimasukkan kurang jelas — mohon masukkan lead yang lebih jelas
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => openEditLead(lead)}
-                        className="min-h-[38px] px-3 py-1.5 rounded-xl bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Edit3 className="size-3.5" />
-                        <span>Lengkapi Lead Sekarang</span>
-                      </button>
-                    </div>
-                    <p className="text-xs text-rose-700">
-                      Lead ini berstatus <strong>Perlu Dilengkapi</strong> dan belum dihitung ke dalam KPI Lead Valid Harian sampai bagian berikut diperjelas:
-                    </p>
-                    <div className="space-y-2">
-                      {(analysis?.unclear_parts || []).map((u, idx) => (
-                        <div
-                          key={idx}
-                          className="p-3 rounded-xl bg-white border border-rose-200 text-xs space-y-1"
-                        >
-                          <p className="font-bold text-espresso">
-                            Bagian Kurang Jelas: <span className="text-rose-700">{u.field}</span> — {u.issue}
-                          </p>
-                          <p className="text-warmmuted">
-                            <strong className="text-olive">Contoh kalimat yang benar:</strong> "{u.example}"
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Baris Atas: Identitas Prospek, Badge Grade/BANT/Persona, & Dropdown Ubah Tahap */}
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 border-b border-warmborder pb-3">
-                  <div className="space-y-1">
+                {/* Baris Ringkas Lead (Selalu Tampil) */}
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                  <div
+                    onClick={() => toggleLeadDetail(lead.id)}
+                    className="space-y-1 cursor-pointer flex-1 min-w-0"
+                  >
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-base font-extrabold text-espresso">{lead.full_name}</h3>
                       <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-50 text-terracotta border border-amber-200">
                         BANT {lead.bant_total}/12 · Grade {lead.grade}
                       </span>
                       <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-sandstone text-espresso border border-warmborder">
-                        {lead.persona_code} · {personaInfo.archetype}
+                        {personaDisplayLabel}
+                      </span>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                          isWaInboundLead
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : 'bg-amber-50/60 text-espresso border border-warmborder'
+                        }`}
+                      >
+                        {isWaInboundLead ? 'WA Inbound AI' : 'Lead Manual (Pasca-Temu)'}
                       </span>
                       {analysis && (
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-lime-100 text-olive">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            isUnclear ? 'bg-rose-100 text-rose-700' : 'bg-lime-100 text-olive'
+                          }`}
+                        >
                           Skor AI: {analysis.skor}/100 ({analysis.label})
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-warmmuted">
+                    <p className="text-xs text-warmmuted truncate">
                       WA: <strong className="text-espresso">{lead.phone_wa}</strong> · Domisili:{' '}
                       <strong className="text-espresso">{lead.domicile || '-'}</strong> · Sumber:{' '}
-                      {lead.source} ({lead.content_code || '-'}) · Minat:{' '}
+                      {lead.source} · Minat:{' '}
                       <strong className="text-terracotta">{lead.unit_interest}</strong> ({lead.payment_scheme})
                     </p>
                   </div>
 
-                  {/* Kontrol Ubah Tahap Pipeline & Edit */}
+                  {/* Kontrol Cepat & Tombol Buka/Tutup Detail */}
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
                     <select
                       aria-label="Ubah Tahap Pipeline"
@@ -1322,6 +1649,24 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                         </option>
                       ))}
                     </select>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleLeadDetail(lead.id)}
+                      aria-expanded={isExpanded}
+                      className={`min-h-[42px] px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+                        isExpanded
+                          ? 'bg-espresso text-white'
+                          : 'bg-amber-50 hover:bg-amber-100 text-terracotta border border-amber-200'
+                      }`}
+                    >
+                      <span>{isExpanded ? 'Tutup Detail' : 'Detail'}</span>
+                      {isExpanded ? (
+                        <ChevronUp className="size-4" />
+                      ) : (
+                        <ChevronDown className="size-4" />
+                      )}
+                    </button>
 
                     <button
                       type="button"
@@ -1354,126 +1699,218 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                   </div>
                 </div>
 
-                {/* Checkbox Bukti Operasional CRM (Playbook §4.1 - Otomatis Mengisi Dashboard SE) */}
-                <div className="flex flex-wrap items-center gap-4 text-xs bg-sandstone/40 px-3.5 py-2.5 rounded-xl border border-warmborder">
-                  <span className="font-bold text-warmmuted">Bukti Tahap CRM:</span>
-                  <label className="inline-flex items-center gap-2 cursor-pointer font-semibold text-espresso">
-                    <input
-                      type="checkbox"
-                      checked={lead.written_offer_sent}
-                      onChange={(e) =>
-                        handleToggleEvidence(lead, 'writtenOfferSent', e.target.checked)
-                      }
-                      className="size-4 accent-terracotta"
-                    />
-                    <span>Penawaran Tertulis Terkirim</span>
-                  </label>
-                  <label className="inline-flex items-center gap-2 cursor-pointer font-semibold text-espresso">
-                    <input
-                      type="checkbox"
-                      checked={lead.booking_fee_paid}
-                      onChange={(e) =>
-                        handleToggleEvidence(lead, 'bookingFeePaid', e.target.checked)
-                      }
-                      className="size-4 accent-terracotta"
-                    />
-                    <span>Booking Fee Rp5 Jt Masuk</span>
-                  </label>
-                  <label className="inline-flex items-center gap-2 cursor-pointer font-semibold text-espresso">
-                    <input
-                      type="checkbox"
-                      checked={lead.dp_or_sp3k_verified}
-                      onChange={(e) =>
-                        handleToggleEvidence(lead, 'dpOrSp3kVerified', e.target.checked)
-                      }
-                      className="size-4 accent-terracotta"
-                    />
-                    <span>Net Sales (DP Lunas / SP3K)</span>
-                  </label>
-                </div>
-
-                {/* Hasil Analisis AI & Rekomendasi Follow-Up */}
-                {analysis && (
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-1">
-                    <div className="lg:col-span-7 space-y-2.5 text-xs">
-                      <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-1">
-                        <p className="font-extrabold text-terracotta flex items-center gap-1.5">
-                          <Sparkles className="size-3.5" />
-                          <span>Hasil Analisis AI ({analysis.model})</span>
+                {/* Panel Detail Lead (Hanya Muncul Saat User Klik Tombol Detail) */}
+                {isExpanded && (
+                  <div className="mt-4 pt-4 border-t border-warmborder space-y-4">
+                    {/* Banner Feedback AI jika Lead Kurang Jelas */}
+                    {isUnclear && (
+                      <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 space-y-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 text-rose-800 font-extrabold text-xs sm:text-sm">
+                            <AlertCircle className="size-4 shrink-0" />
+                            <span>
+                              Lead yang dimasukkan kurang jelas — mohon masukkan lead yang lebih jelas
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openEditLead(lead)}
+                            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Edit3 className="size-3.5" />
+                            <span>Lengkapi Lead Sekarang</span>
+                          </button>
+                        </div>
+                        <p className="text-xs text-rose-700">
+                          Lead ini berstatus <strong>Perlu Dilengkapi</strong> dan belum dihitung ke dalam KPI Lead Valid Harian sampai bagian berikut diperjelas:
                         </p>
-                        <p className="text-espresso leading-relaxed">{analysis.ringkas}</p>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        {analysis.poin_kuat?.length > 0 && (
-                          <div className="p-3 rounded-xl bg-sandstone/40 border border-warmborder">
-                            <p className="font-bold text-olive mb-1">Poin Kuat Prospek:</p>
-                            <ul className="list-disc list-inside space-y-1 text-espresso">
-                              {analysis.poin_kuat.map((p, i) => (
-                                <li key={i}>{p}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {analysis.rekomendasi?.length > 0 && (
-                          <div className="p-3 rounded-xl bg-sandstone/40 border border-warmborder">
-                            <p className="font-bold text-terracotta mb-1">Saran Taktis AI (Playbook):</p>
-                            <ul className="list-disc list-inside space-y-1 text-espresso">
-                              {analysis.rekomendasi.map((r, i) => (
-                                <li key={i}>{r}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-
-                      {analysis.perlu_dicek_ulang?.length > 0 && (
-                        <div className="p-3 rounded-xl bg-white border border-warmborder">
-                          <p className="font-bold text-espresso mb-1">
-                            Pertanyaan BANT Natural Berikutnya (Bab 5.3):
-                          </p>
-                          <ul className="list-disc list-inside space-y-1 text-warmmuted">
-                            {analysis.perlu_dicek_ulang.map((q, i) => (
-                              <li key={i}>{q}</li>
-                            ))}
-                          </ul>
+                        <div className="space-y-2">
+                          {(analysis?.unclear_parts || []).map((u, idx) => (
+                            <div
+                              key={idx}
+                              className="p-3 rounded-xl bg-white border border-rose-200 text-xs space-y-1"
+                            >
+                              <p className="font-bold text-espresso">
+                                Bagian Kurang Jelas: <span className="text-rose-700">{u.field}</span> — {u.issue}
+                              </p>
+                              <p className="text-warmmuted">
+                                <strong className="text-olive">Contoh kalimat yang benar:</strong> "{u.example}"
+                              </p>
+                            </div>
+                          ))}
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
-                    {/* Kotak Draf Pesan Balasan AI & Tombol Follow Up ke WhatsApp */}
-                    <div className="lg:col-span-5 p-4 rounded-2xl bg-sandstone/60 border border-warmborder flex flex-col justify-between space-y-3">
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-extrabold text-espresso">
-                            Pesan Follow-Up Rekomendasi AI
-                          </span>
-                          <span className="text-[11px] text-warmmuted">Siap kirim via WA</span>
-                        </div>
-                        <textarea
-                          rows={5}
-                          value={draftMsg}
+                    {/* Checkbox Bukti Operasional CRM */}
+                    <div className="flex flex-wrap items-center gap-4 text-xs bg-sandstone/40 px-3.5 py-2.5 rounded-xl border border-warmborder">
+                      <span className="font-bold text-warmmuted">Bukti Tahap CRM:</span>
+                      <label className="inline-flex items-center gap-2 cursor-pointer font-semibold text-espresso">
+                        <input
+                          type="checkbox"
+                          checked={lead.written_offer_sent}
                           onChange={(e) =>
-                            setCustomDrafts((prev) => ({
-                              ...prev,
-                              [lead.id]: e.target.value,
-                            }))
+                            handleToggleEvidence(lead, 'writtenOfferSent', e.target.checked)
                           }
-                          className="w-full p-3 rounded-xl border border-warmborder bg-white text-xs text-espresso leading-relaxed focus:border-terracotta focus:outline-none"
+                          className="size-4 accent-terracotta"
                         />
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleFollowUpWa(lead)}
-                        className="w-full min-h-[46px] px-4 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                      >
-                        <Send className="size-4" />
-                        <span>Follow Up via WhatsApp ({lead.phone_wa})</span>
-                        <ExternalLink className="size-3.5" />
-                      </button>
+                        <span>Penawaran Tertulis Terkirim</span>
+                      </label>
+                      <label className="inline-flex items-center gap-2 cursor-pointer font-semibold text-espresso">
+                        <input
+                          type="checkbox"
+                          checked={lead.booking_fee_paid}
+                          onChange={(e) =>
+                            handleToggleEvidence(lead, 'bookingFeePaid', e.target.checked)
+                          }
+                          className="size-4 accent-terracotta"
+                        />
+                        <span>Booking Fee Rp5 Jt Masuk</span>
+                      </label>
+                      <label className="inline-flex items-center gap-2 cursor-pointer font-semibold text-espresso">
+                        <input
+                          type="checkbox"
+                          checked={lead.dp_or_sp3k_verified}
+                          onChange={(e) =>
+                            handleToggleEvidence(lead, 'dpOrSp3kVerified', e.target.checked)
+                          }
+                          className="size-4 accent-terracotta"
+                        />
+                        <span>Net Sales (DP Lunas / SP3K)</span>
+                      </label>
                     </div>
+
+                    {/* Grid Kiri: Analisis AI · Grid Kanan: Preview Tampilan Chat WhatsApp */}
+                    {analysis && (
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                        <div className="lg:col-span-7 space-y-2.5 text-xs">
+                          <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-1">
+                            <p className="font-extrabold text-terracotta flex items-center gap-1.5">
+                              <Sparkles className="size-3.5" />
+                              <span>Hasil Analisis AI ({analysis.model})</span>
+                            </p>
+                            <p className="text-espresso leading-relaxed">{analysis.ringkas}</p>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {analysis.poin_kuat?.length > 0 && (
+                              <div className="p-3 rounded-xl bg-sandstone/40 border border-warmborder">
+                                <p className="font-bold text-olive mb-1">Poin Kuat Prospek:</p>
+                                <ul className="list-disc list-inside space-y-1 text-espresso">
+                                  {analysis.poin_kuat.map((p, i) => (
+                                    <li key={i}>{p}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {analysis.rekomendasi?.length > 0 && (
+                              <div className="p-3 rounded-xl bg-sandstone/40 border border-warmborder">
+                                <p className="font-bold text-terracotta mb-1">Saran Taktis AI (Playbook):</p>
+                                <ul className="list-disc list-inside space-y-1 text-espresso">
+                                  {analysis.rekomendasi.map((r, i) => (
+                                    <li key={i}>{r}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+
+                          {analysis.perlu_dicek_ulang?.length > 0 && (
+                            <div className="p-3 rounded-xl bg-white border border-warmborder">
+                              <p className="font-bold text-espresso mb-1">
+                                Pertanyaan BANT Natural Berikutnya (Bab 5.3):
+                              </p>
+                              <ul className="list-disc list-inside space-y-1 text-warmmuted">
+                                {analysis.perlu_dicek_ulang.map((q, i) => (
+                                  <li key={i}>{q}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Sisi Kanan: Preview Tampilan Pesan WhatsApp */}
+                        <div className="lg:col-span-5 rounded-2xl overflow-hidden border border-warmborder flex flex-col justify-between bg-[#ECE5DD]">
+                          {/* Top Bar WhatsApp */}
+                          <div className="px-3.5 py-2.5 bg-[#075E54] text-white flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="size-8 rounded-full bg-white/20 text-white font-extrabold text-xs grid place-items-center shrink-0">
+                                {initials || 'WA'}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold truncate leading-tight">
+                                  {lead.full_name}
+                                </p>
+                                <p className="text-[10px] text-white/80 truncate">
+                                  +{lead.phone_wa} · Pratinjau Pesan WA
+                                </p>
+                              </div>
+                            </div>
+                            <span className="px-2 py-0.5 rounded-full bg-white/15 text-[10px] font-semibold shrink-0">
+                              Draf AI
+                            </span>
+                          </div>
+
+                          {/* Area Gelembung Pesan (Incoming Customer Bubble jika ada + Outgoing Sales Bubble) */}
+                          <div className="p-3.5 flex-1 flex flex-col justify-end space-y-2.5">
+                            <div className="self-center px-2.5 py-0.5 rounded-lg bg-[#E1F3FB] text-[#54656F] text-[10px] font-semibold shadow-2xs">
+                              {isWaInboundLead
+                                ? 'Mode Balasan Chat WA · Klik gelembung hijau untuk edit'
+                                : 'Mode Follow-Up Pasca-Temu · Klik gelembung hijau untuk edit'}
+                            </div>
+
+                            {lead.last_customer_message && (
+                              <div className="mr-6 rounded-2xl rounded-tl-xs bg-white p-2.5 shadow-2xs border border-black/5 text-xs text-[#111B21]">
+                                <p className="text-[10px] font-bold text-[#075E54] mb-0.5">
+                                  Pesan Terakhir {lead.full_name}:
+                                </p>
+                                <p className="leading-snug">{lead.last_customer_message}</p>
+                              </div>
+                            )}
+
+                            <div className="relative ml-3 rounded-2xl rounded-tr-xs bg-[#DCF8C6] p-3 shadow-xs border border-[#c7eab0]">
+                              <textarea
+                                rows={7}
+                                value={draftMsg}
+                                aria-label="Edit draf pesan WhatsApp"
+                                onChange={(e) =>
+                                  setCustomDrafts((prev) => ({
+                                    ...prev,
+                                    [lead.id]: e.target.value,
+                                  }))
+                                }
+                                className="w-full bg-transparent text-xs text-[#111B21] leading-relaxed focus:outline-none resize-y"
+                              />
+                              <div className="flex items-center justify-between gap-2 mt-1 text-[10px] text-[#667781]">
+                                <span>
+                                  {analysis.prompt_tokens
+                                    ? `${(analysis.prompt_tokens || 0) + (analysis.completion_tokens || 0)} token AI`
+                                    : 'Playbook v1.2'}
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                  <span>Siap dikirim oleh {user.name.split(' ')[0]}</span>
+                                  <CheckCheck className="size-3.5 text-[#53BDEB]" />
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Bottom Composer Bar WhatsApp */}
+                          <div className="p-2.5 bg-[#F0F2F5] border-t border-black/10 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleFollowUpWa(lead)}
+                              className="w-full min-h-[44px] px-4 rounded-full bg-[#128C7E] hover:bg-[#075E54] text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-colors"
+                            >
+                              <Send className="size-4" />
+                              <span>Follow Up · Kirim via WhatsApp</span>
+                              <ExternalLink className="size-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </article>
@@ -1511,7 +1948,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                   required
                   value={waSenderName}
                   onChange={(e) => setWaSenderName(e.target.value)}
-                  placeholder="Contoh: dr. Sari (RSUD Ir. Soekarno)"
+                  placeholder="Contoh: Ibu Sari (RSUD Ir. Soekarno)"
                   className="w-full min-h-[42px] px-3 rounded-xl border border-warmborder"
                 />
               </div>

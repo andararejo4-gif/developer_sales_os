@@ -3,7 +3,7 @@
 // Sumber: Sales_Playbook_SOP_KPI_SE_The_Park_Townhousev.1.2.pdf (Hal. 1-31)
 // ============================================================================
 
-export type PersonaCode = 'P1' | 'P2' | 'P3' | 'P4' | 'P5' | 'P6';
+export type PersonaCode = 'P1' | 'P2' | 'P3' | 'P4' | 'P5' | 'P6' | 'LAINNYA';
 
 export interface BuyerPersonaProfile {
   code: PersonaCode;
@@ -233,7 +233,7 @@ export const PLAYBOOK_BUYER_PERSONAS: Record<PersonaCode, BuyerPersonaProfile> =
   },
   P6: {
     code: 'P6',
-    name: 'Bu Endang',
+    name: 'Orang Tua untuk Anak / Investor Hunian',
     archetype: 'Orang Tua untuk Anak / Investor Hunian',
     profil: 'Usia 45–60 th, mapan, membelikan rumah untuk anak yang baru menikah atau sebagai rumah kedua/disewakan ke profesional.',
     kondisiSaatIni: 'Memiliki dana likuid untuk membelikan rumah pertama bagi anak atau diversifikasi aset keluarga di pusat kota.',
@@ -244,6 +244,20 @@ export const PLAYBOOK_BUYER_PERSONAS: Record<PersonaCode, BuyerPersonaProfile> =
     keunggulanPemicu: '#10 boutique, #45 clubhouse tanpa membership, #64–69 smart living, #91 harga entry, #98 harga per periode.',
     pendekatanClosing: 'Fokus pada fungsi dan kualitas lingkungan. Dilarang menjanjikan kenaikan harga atau imbal hasil sewa.',
     openingHook: 'Hadiah rumah pertama untuk putra-putri, dekat pusat kota.',
+  },
+  LAINNYA: {
+    code: 'LAINNYA',
+    name: 'Persona Lainnya (Kustom)',
+    archetype: 'Lainnya (Isi Sendiri)',
+    profil: '',
+    kondisiSaatIni: '',
+    motivasi: '',
+    kekhawatiran: '',
+    unitDanSkema: '',
+    kanal: '',
+    keunggulanPemicu: '',
+    pendekatanClosing: '',
+    openingHook: 'Saya siapkan pilihan unit dan simulasi terbaik sesuai kebutuhan Bapak/Ibu.',
   },
 };
 

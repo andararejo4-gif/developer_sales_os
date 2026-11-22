@@ -621,7 +621,14 @@ const server = http.createServer(async (req, res) => {
         Number(body.bantT ?? 1)
       );
 
-      // Jalankan Analisis AI (9router + Playbook v1.2)
+      const leadOrigin =
+        /whatsapp inbound|baileys/i.test(source) || body.leadOrigin === 'WA_BAILEYS'
+          ? 'WA_BAILEYS'
+          : 'MANUAL';
+      const lastCustomerMessage = String(body.lastCustomerMessage || '').trim();
+      const lastSalesMessage = String(body.lastSalesMessage || '').trim();
+
+      // Jalankan Analisis AI (9router + Playbook v1.2 Dual-Track)
       const aiResult = await analyzeLeadWithAi({
         fullName,
         phoneWa,
@@ -638,6 +645,10 @@ const server = http.createServer(async (req, res) => {
         bantN: bantEval.n,
         bantT: bantEval.t,
         salesNotes,
+        leadOrigin,
+        lastCustomerMessage,
+        lastSalesMessage,
+        interactionCount: 1,
         seName: user.name,
       });
 
@@ -657,7 +668,7 @@ const server = http.createServer(async (req, res) => {
           stage, validity_status, persona_code, persona_profile,
           bant_b, bant_a, bant_n, bant_t, bant_total, grade,
           cluster_interest, unit_interest, unit_price_idr, payment_scheme,
-          sales_notes, next_action
+          sales_notes, next_action, lead_origin, last_customer_message, last_sales_message, interaction_count
         ) VALUES (
           ${user.email},
           ${user.name},
@@ -681,7 +692,11 @@ const server = http.createServer(async (req, res) => {
           ${unitPriceIdr},
           ${paymentScheme},
           ${salesNotes},
-          ${nextAction || aiResult.rekomendasi[0] || finalBant.seAction}
+          ${nextAction || aiResult.rekomendasi[0] || finalBant.seAction},
+          ${leadOrigin},
+          ${lastCustomerMessage},
+          ${lastSalesMessage},
+          ${1}
         )
         ON CONFLICT (tenant_id, owner_se_email, phone_wa) DO UPDATE SET
           full_name = EXCLUDED.full_name,
@@ -704,6 +719,7 @@ const server = http.createServer(async (req, res) => {
           payment_scheme = EXCLUDED.payment_scheme,
           sales_notes = EXCLUDED.sales_notes,
           next_action = EXCLUDED.next_action,
+          lead_origin = EXCLUDED.lead_origin,
           updated_at = NOW()
         RETURNING *
       `;
@@ -830,11 +846,17 @@ const server = http.createServer(async (req, res) => {
       let latestAnalysis = null;
 
       if (body.reanalyze || prev.validity_status === 'PERLU_DILENGKAPI' || body.salesNotes !== undefined || body.fullName !== undefined || body.domicile !== undefined) {
+        const nextSource = String(body.source ?? prev.source);
+        const resolvedOrigin =
+          prev.lead_origin === 'WA_BAILEYS' || /whatsapp inbound|baileys/i.test(nextSource)
+            ? 'WA_BAILEYS'
+            : 'MANUAL';
+
         const aiResult = await analyzeLeadWithAi({
           fullName: nextFullName,
           phoneWa: String(prev.phone_wa),
           domicile: nextDomicile,
-          source: String(body.source ?? prev.source),
+          source: nextSource,
           contentCode: String(body.contentCode ?? prev.content_code),
           stage: nextStage,
           personaCode: nextPersona,
@@ -846,6 +868,10 @@ const server = http.createServer(async (req, res) => {
           bantN: nextBant.n,
           bantT: nextBant.t,
           salesNotes: nextNotes,
+          leadOrigin: resolvedOrigin,
+          lastCustomerMessage: String(body.lastCustomerMessage ?? prev.last_customer_message ?? ''),
+          lastSalesMessage: String(body.lastSalesMessage ?? prev.last_sales_message ?? ''),
+          interactionCount: Number(prev.interaction_count || 1),
           seName: String(prev.owner_se_name || user.name),
         });
 
@@ -1000,6 +1026,7 @@ const server = http.createServer(async (req, res) => {
       const replyRes = await recordOutboundWaReplyForSe({
         seEmail: user.email,
         contactPhone: String(body.contactPhone || ''),
+        messageText: String(body.messageText || ''),
       });
       sendJson(res, 200, { ok: true, ...replyRes });
       return;

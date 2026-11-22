@@ -123,11 +123,14 @@ export async function processInboundWaMessageForSe(params: {
   `;
 
   const currentLead = existingLeads[0];
+  const latestCustomerMsg = decryptedMessages[decryptedMessages.length - 1] || params.messageText.trim();
+  const prevSalesMsg = String(currentLead?.last_sales_message || '').trim();
+  const nextInteractionCount = Number(currentLead?.interaction_count || 0) + 1;
   const combinedNotes = currentLead
     ? `${currentLead.sales_notes || ''}\n[Ringkasan Pesan Masuk WA]: ${decryptedMessages.join(' | ')}`.trim()
     : `Pesan Masuk WhatsApp: ${decryptedMessages.join(' | ')}`;
 
-  // 4. Jalankan AI Lead Analyzer berbasis Playbook v1.2
+  // 4. Jalankan AI Lead Analyzer berbasis Playbook v1.2 (Jalur B: WA_BAILEYS 2-Arah)
   const aiResult = await analyzeLeadWithAi({
     fullName: currentLead?.full_name || params.contactName || `Prospek WA ${cleanPhone.slice(-4)}`,
     phoneWa: cleanPhone,
@@ -145,6 +148,10 @@ export async function processInboundWaMessageForSe(params: {
     bantT: Number(currentLead?.bant_t ?? 1),
     salesNotes: combinedNotes,
     inboundMessages: decryptedMessages,
+    leadOrigin: 'WA_BAILEYS',
+    lastCustomerMessage: latestCustomerMsg,
+    lastSalesMessage: prevSalesMsg,
+    interactionCount: nextInteractionCount,
     seName: params.seName,
   });
 
@@ -157,7 +164,8 @@ export async function processInboundWaMessageForSe(params: {
       INSERT INTO sales_os.pipeline_leads (
         owner_se_email, owner_se_name, full_name, phone_wa, domicile, source, content_code,
         stage, validity_status, persona_code, bant_b, bant_a, bant_n, bant_t, bant_total, grade,
-        unit_interest, payment_scheme, sales_notes, next_action, first_inbound_at
+        unit_interest, payment_scheme, sales_notes, next_action,
+        lead_origin, last_customer_message, last_sales_message, interaction_count, first_inbound_at
       ) VALUES (
         ${seEmail},
         ${params.seName},
@@ -179,6 +187,10 @@ export async function processInboundWaMessageForSe(params: {
         ${'KPR'},
         ${aiResult.ringkas},
         ${aiResult.rekomendasi[0] || 'Balas <= 5 menit & kualifikasi BANT'},
+        ${'WA_BAILEYS'},
+        ${latestCustomerMsg},
+        ${''},
+        ${1},
         ${now.toISOString()}
       )
       RETURNING id
@@ -197,6 +209,9 @@ export async function processInboundWaMessageForSe(params: {
           grade = ${recBant.grade},
           validity_status = ${validityStatus},
           next_action = ${aiResult.rekomendasi[0] || currentLead.next_action},
+          lead_origin = 'WA_BAILEYS',
+          last_customer_message = ${latestCustomerMsg},
+          interaction_count = ${nextInteractionCount},
           updated_at = NOW()
       WHERE id = ${leadId}
     `;
@@ -251,6 +266,7 @@ export async function processInboundWaMessageForSe(params: {
 export async function recordOutboundWaReplyForSe(params: {
   seEmail: string;
   contactPhone: string;
+  messageText?: string;
   repliedAt?: Date;
 }): Promise<{ responseTimeSeconds: number | null; slaMet: boolean | null }> {
   const seEmail = params.seEmail.toLowerCase();
@@ -258,6 +274,19 @@ export async function recordOutboundWaReplyForSe(params: {
   if (!cleanPhone) return { responseTimeSeconds: null, slaMet: null };
 
   const repliedAt = params.repliedAt || new Date();
+  const outboundText = (params.messageText || '').trim();
+
+  if (outboundText) {
+    await sql`
+      UPDATE sales_os.pipeline_leads
+      SET last_sales_message = ${outboundText},
+          interaction_count = COALESCE(interaction_count, 1) + 1,
+          stage = CASE WHEN stage = 'NEW' THEN 'CONTACTED' ELSE stage END,
+          updated_at = NOW()
+      WHERE owner_se_email = ${seEmail} AND phone_wa = ${cleanPhone}
+    `;
+  }
+
   const rows = await sql`
     SELECT * FROM sales_os.wa_contact_metrics
     WHERE se_email = ${seEmail} AND contact_phone = ${cleanPhone}
@@ -442,6 +471,17 @@ export async function startBaileysForSe(seEmail: string, seName: string): Promis
     if (connection === 'close') {
       const code = (lastDisconnect?.error as any)?.output?.statusCode;
       const shouldReconnect = code !== DisconnectReason.loggedOut;
+
+      if (shouldReconnect) {
+        instance.status = 'CONNECTING';
+        instance.qrDataUrl = null;
+        instances.delete(normalizedEmail);
+        setTimeout(() => {
+          startBaileysForSe(normalizedEmail, seName).catch(() => {});
+        }, 1200);
+        return;
+      }
+
       instance.status = 'DISCONNECTED';
       instance.qrDataUrl = null;
 
@@ -451,13 +491,11 @@ export async function startBaileysForSe(seEmail: string, seName: string): Promis
         WHERE se_email = ${normalizedEmail}
       `;
 
-      if (!shouldReconnect) {
-        instances.delete(normalizedEmail);
-        try {
-          fs.rmSync(sessionDir, { recursive: true, force: true });
-        } catch {
-          /* ignore */
-        }
+      instances.delete(normalizedEmail);
+      try {
+        fs.rmSync(sessionDir, { recursive: true, force: true });
+      } catch {
+        /* ignore */
       }
     }
   });
@@ -472,18 +510,20 @@ export async function startBaileysForSe(seEmail: string, seName: string): Promis
       const contactPhone = normalizePhoneWa(remoteJid);
       if (!contactPhone) continue;
 
+      const text =
+        msg.message?.conversation ||
+        msg.message?.extendedTextMessage?.text ||
+        msg.message?.imageMessage?.caption ||
+        '';
+
       const isFromMe = Boolean(msg.key?.fromMe);
       if (isFromMe) {
         await recordOutboundWaReplyForSe({
           seEmail: normalizedEmail,
           contactPhone,
+          messageText: text,
         }).catch(() => {});
       } else {
-        const text =
-          msg.message?.conversation ||
-          msg.message?.extendedTextMessage?.text ||
-          msg.message?.imageMessage?.caption ||
-          '';
         if (!text.trim()) continue;
 
         await processInboundWaMessageForSe({

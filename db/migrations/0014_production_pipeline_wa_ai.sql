@@ -48,9 +48,7 @@ CREATE TABLE IF NOT EXISTS sales_os.pipeline_leads (
   validity_status TEXT NOT NULL DEFAULT 'VALID' CHECK (
     validity_status IN ('VALID', 'PERLU_DILENGKAPI', 'TIDAK_VALID')
   ),
-  persona_code TEXT NOT NULL DEFAULT 'P1' CHECK (
-    persona_code IN ('P1', 'P2', 'P3', 'P4', 'P5', 'P6')
-  ),
+  persona_code TEXT NOT NULL DEFAULT 'P1',
   persona_profile JSONB NOT NULL DEFAULT '{}'::jsonb,
   bant_b SMALLINT NOT NULL DEFAULT 0 CHECK (bant_b BETWEEN 0 AND 3),
   bant_a SMALLINT NOT NULL DEFAULT 0 CHECK (bant_a BETWEEN 0 AND 3),
@@ -61,9 +59,7 @@ CREATE TABLE IF NOT EXISTS sales_os.pipeline_leads (
   cluster_interest TEXT NOT NULL DEFAULT 'Nagoya',
   unit_interest TEXT NOT NULL DEFAULT 'Nagoya B.02 (LT 63/LB 75)',
   unit_price_idr BIGINT NOT NULL DEFAULT 650000000,
-  payment_scheme TEXT NOT NULL DEFAULT 'KPR' CHECK (
-    payment_scheme IN ('CASH_KERAS', 'CASH_TEMPO_12', 'CASH_TEMPO_24', 'KPR')
-  ),
+  payment_scheme TEXT NOT NULL DEFAULT 'KPR',
   appointment_at TIMESTAMPTZ,
   visited_at TIMESTAMPTZ,
   written_offer_sent BOOLEAN NOT NULL DEFAULT FALSE,
@@ -72,6 +68,10 @@ CREATE TABLE IF NOT EXISTS sales_os.pipeline_leads (
   next_action TEXT NOT NULL DEFAULT '',
   next_action_date DATE,
   sales_notes TEXT NOT NULL DEFAULT '',
+  lead_origin TEXT NOT NULL DEFAULT 'MANUAL',
+  last_customer_message TEXT NOT NULL DEFAULT '',
+  last_sales_message TEXT NOT NULL DEFAULT '',
+  interaction_count INTEGER NOT NULL DEFAULT 1,
   lost_reason TEXT,
   first_inbound_at TIMESTAMPTZ,
   first_reply_at TIMESTAMPTZ,
