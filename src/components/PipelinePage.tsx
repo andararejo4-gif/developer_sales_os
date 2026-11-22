@@ -652,6 +652,25 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
+            disabled={submitting}
+            onClick={() => {
+              document.getElementById('wa-integration-section')?.scrollIntoView({ behavior: 'smooth' });
+              if (waStatus?.status !== 'CONNECTED') {
+                handleConnectWa();
+              }
+            }}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-lime-100 hover:bg-lime-200 text-olive border border-lime-300 text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+          >
+            <QrCode className="size-4 shrink-0" />
+            <span>
+              {waStatus?.status === 'CONNECTED'
+                ? `WA Terhubung (${waStatus.phoneNumber})`
+                : 'Integrasi WhatsApp (QR)'}
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setShowWaIngestModal(true)}
             className="min-h-[44px] px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-espresso border border-warmborder text-xs font-bold flex items-center gap-1.5 cursor-pointer"
           >
@@ -702,7 +721,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
       </div>
 
       {/* Panel Integrasi WhatsApp Baileys (Isolasi 1 Nomor = 1 Akun SE, Tanpa Menampilkan Chat Mentah) */}
-      <section className="bg-white border border-warmborder rounded-2xl p-4 sm:p-5 space-y-4">
+      <section id="wa-integration-section" className="bg-white border border-warmborder rounded-2xl p-4 sm:p-5 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-start gap-3">
             <div className="size-10 rounded-xl bg-lime-100 text-olive flex items-center justify-center shrink-0">
