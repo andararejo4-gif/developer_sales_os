@@ -146,9 +146,9 @@ export function getBusyWindowInfo(minutesOfDay: number): BusyWindowInfo {
 }
 
 export function isSlotDueNowWib(slotOrder: number, minutesOfDay: number): boolean {
-  if (slotOrder === 1) return minutesOfDay >= 8 * 60 + 30; // 08:30 WIB
-  if (slotOrder === 2) return minutesOfDay >= 13 * 60 + 30; // 13:30 WIB
-  if (slotOrder === 3) return minutesOfDay >= 19 * 60; // 19:00 WIB
+  if (slotOrder === 1) return minutesOfDay >= 8 * 60 + 30 && minutesOfDay <= 9 * 60 + 5; // 08:30–09:05 WIB
+  if (slotOrder === 2) return minutesOfDay >= 13 * 60 + 30 && minutesOfDay <= 14 * 60 + 5; // 13:30–14:05 WIB
+  if (slotOrder === 3) return minutesOfDay >= 19 * 60 && minutesOfDay <= 19 * 60 + 35; // 19:00–19:35 WIB
   return false;
 }
 
