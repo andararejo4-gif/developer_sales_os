@@ -18,6 +18,7 @@ import {
   getHermesHealth,
   getWibClock,
   getBusyWindowInfo,
+  getQueuePositionInfo,
   isSlotDueNowWib,
   startContentMediaScheduler,
 } from './content-media-worker';
@@ -1632,7 +1633,7 @@ const server = http.createServer(async (req, res) => {
       const slotId = parsedUrl.searchParams.get('slotId') || '';
       const { minutesOfDay } = getWibClock();
       const busyWindow = getBusyWindowInfo(minutesOfDay);
-      const [rows, hermesHealth, queueCountRows] = await Promise.all([
+      const [rows, hermesHealth, queueCountRows, queueInfo] = await Promise.all([
         slotId
           ? sql`
               SELECT slot_id, status, posted_url, day_number, slot_order, scheduled_time,
@@ -1651,6 +1652,7 @@ const server = http.createServer(async (req, res) => {
           FROM sales_os.media_render_queue
           WHERE status IN ('PENDING', 'PROCESSING')
         `.catch(() => [{ cnt: 0 }]),
+        getQueuePositionInfo(user.email, slotId),
       ]);
       sendJson(res, 200, {
         ok: true,
@@ -1658,6 +1660,7 @@ const server = http.createServer(async (req, res) => {
         hermesHealth,
         busyWindow,
         globalQueuePending: Number(queueCountRows[0]?.cnt || 0),
+        queueInfo,
       });
       return;
     }
@@ -1778,6 +1781,36 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      // Guard 1: 1 SE hanya boleh menjalankan 1 kalender konten dalam satu waktu (fokus selesai dulu)
+      const queueBefore = await getQueuePositionInfo(user.email, slotId);
+      if (queueBefore.activeOtherSlotForUser) {
+        const active = queueBefore.activeOtherSlotForUser;
+        sendJson(res, 409, {
+          ok: false,
+          code: 'USER_ALREADY_GENERATING',
+          activeSlot: active,
+          queueInfo: queueBefore,
+          error: `Anda masih memiliki proses generate yang sedang berjalan pada "${active.title}"${active.scheduledTime ? ` (${active.scheduledTime})` : ''}. Fokus selesaikan generate tersebut terlebih dahulu sebelum memulai kalender konten lain.`,
+        });
+        return;
+      }
+
+      // Guard 2: Cegah klik ganda / interupsi pada slot yang sama saat masih antri/berjalan
+      const sameSlotActive = await sql`
+        SELECT COUNT(*)::int AS cnt
+        FROM sales_os.media_render_queue
+        WHERE se_email = ${user.email} AND slot_id = ${slotId} AND status IN ('PENDING', 'PROCESSING')
+      `;
+      if (Number(sameSlotActive[0]?.cnt || 0) > 0) {
+        sendJson(res, 409, {
+          ok: false,
+          code: 'SLOT_ALREADY_IN_QUEUE',
+          queueInfo: queueBefore,
+          error: 'Proses generate untuk slot ini sedang berjalan / dalam antrean FIFO. Mohon tunggu hingga selesai.',
+        });
+        return;
+      }
+
       const existing = await sql`
         SELECT * FROM sales_os.se_content_slots
         WHERE se_email = ${user.email} AND slot_id = ${slotId}
@@ -1806,6 +1839,8 @@ const server = http.createServer(async (req, res) => {
           : undefined,
       });
 
+      const queueAfter = await getQueuePositionInfo(user.email, slotId);
+
       const updated = await sql`
         INSERT INTO sales_os.se_content_slots (
           se_email, slot_id, format, title, brief, visual_prompt, duration_seconds,
@@ -1832,6 +1867,8 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, enq.ok ? 200 : 500, {
         ok: enq.ok,
         slot: updated[0],
+        queueInfo: queueAfter,
+        queuedBehindOthers: queueAfter.itemsAhead > 0,
         error: enq.error,
       });
       return;

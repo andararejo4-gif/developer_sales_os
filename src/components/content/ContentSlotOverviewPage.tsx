@@ -90,6 +90,16 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
     reason?: string;
   } | null>(null);
   const [globalQueuePending, setGlobalQueuePending] = useState<number>(0);
+  const [queueInfo, setQueueInfo] = useState<{
+    activeOtherSlotForUser: {
+      slotId: string;
+      title: string;
+      scheduledTime: string;
+    } | null;
+    itemsAhead: number;
+    estimatedWaitMinutes: number;
+    cooldownSecondsLeft: number;
+  } | null>(null);
   const [carouselIdx, setCarouselIdx] = useState(0);
   const [urlInput, setUrlInput] = useState(slot.postedUrl || '');
   const [isEnqueuing, setIsEnqueuing] = useState(false);
@@ -139,6 +149,7 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
         if (data.hermesHealth) setHermesHealth(data.hermesHealth);
         if (data.busyWindow) setBusyWindow(data.busyWindow);
         if (typeof data.globalQueuePending === 'number') setGlobalQueuePending(data.globalQueuePending);
+        if (data.queueInfo) setQueueInfo(data.queueInfo);
         if (data.slot) {
           const nextMeta: SlotMediaMeta = {
             visualPrompt: data.slot.visual_prompt || meta.visualPrompt,
@@ -201,6 +212,8 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
         }),
       });
       const data = await res.json();
+      if (data.busyWindow) setBusyWindow(data.busyWindow);
+      if (data.queueInfo) setQueueInfo(data.queueInfo);
       if (data.slot) {
         const nextMeta: SlotMediaMeta = {
           visualPrompt: data.slot.visual_prompt || meta.visualPrompt,
@@ -213,10 +226,16 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
         };
         setMeta(nextMeta);
         onMediaMetaUpdated(slot.id, nextMeta);
+      }
+      if (!res.ok) {
+        setNotice(data.error || 'Gagal mendaftarkan antrean ke Hermes.');
+      } else if (data.queuedBehindOthers && data.queueInfo?.itemsAhead > 0) {
         setNotice(
-          res.ok
-            ? 'Antrean dikirim ke Hermes VNC! Proses berjalan di background—aman meski halaman ini ditinggal.'
-            : data.error || 'Gagal mendaftarkan antrean ke Hermes.'
+          `Antrean FIFO diterima! Saat ini ada ${data.queueInfo.itemsAhead} proses milik SE lain yang masuk lebih dulu — proses Anda otomatis jalan setelahnya dengan jeda aman minimal 1 menit (estimasi tunggu ±${data.queueInfo.estimatedWaitMinutes} menit).`
+        );
+      } else {
+        setNotice(
+          'Antrean dikirim ke Hermes VNC! Proses berjalan 1-per-1 di background—aman meski halaman ini ditinggal.'
         );
       }
     } catch {
@@ -397,7 +416,12 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
 
                 <button
                   type="button"
-                  disabled={isEnqueuing || Boolean(busyWindow?.busy)}
+                  disabled={
+                    isEnqueuing ||
+                    Boolean(busyWindow?.busy) ||
+                    Boolean(queueInfo?.activeOtherSlotForUser) ||
+                    isGenerating
+                  }
                   onClick={handleStartGenerate}
                   className="min-h-[44px] px-4 py-2 rounded-xl bg-espresso hover:bg-espresso/90 disabled:opacity-60 text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 shrink-0 cursor-pointer"
                 >
@@ -411,10 +435,12 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
                   <span>
                     {busyWindow?.busy
                       ? `Terkunci s.d. ${busyWindow.unlockTime || 'Jadwal'}`
+                      : queueInfo?.activeOtherSlotForUser
+                      ? 'Selesaikan Slot Aktif Dulu'
                       : isEnqueuing
                       ? 'Mengirim Antrean...'
                       : isGenerating
-                      ? 'Generate Ulang'
+                      ? 'Sedang Diproses...'
                       : completedCount > 0
                       ? 'Generate Ulang'
                       : 'Generate Sekarang'}
@@ -428,9 +454,30 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
                 </div>
               )}
 
+              {queueInfo?.activeOtherSlotForUser && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-300 text-xs text-rose-900 font-semibold flex items-start gap-2">
+                  <AlertTriangle className="size-4 shrink-0 text-rose-600 mt-0.5" />
+                  <span>
+                    Fokus ke generate yang sedang berjalan terlebih dahulu! Anda masih punya proses aktif di{' '}
+                    <strong>{queueInfo.activeOtherSlotForUser.title}</strong>
+                    {queueInfo.activeOtherSlotForUser.scheduledTime
+                      ? ` (${queueInfo.activeOtherSlotForUser.scheduledTime})`
+                      : ''}
+                    . Tunggu selesai sebelum memulai generate di kalender konten ini.
+                  </span>
+                </div>
+              )}
+
+              {queueInfo && queueInfo.itemsAhead > 0 && (
+                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 font-semibold">
+                  🕒 Antrean FIFO Global: ada <strong>{queueInfo.itemsAhead}</strong> item dari SE lain yang masuk lebih dulu (tanpa interupsi). Giliran Anda akan diproses setelahnya dengan jeda aman minimal <strong>1 menit</strong> (estimasi tunggu ±{queueInfo.estimatedWaitMinutes} menit).
+                </div>
+              )}
+
               {globalQueuePending > 0 && (
                 <p className="text-[11px] font-semibold text-warmmuted">
-                  Antrean Global Sekuensial (1-per-1 dengan jeda aman): <strong className="text-espresso">{globalQueuePending}</strong> item menunggu giliran.
+                  Antrean Global Sekuensial (1-per-1 · jeda antar slot min. 1 menit): <strong className="text-espresso">{globalQueuePending}</strong> item aktif/menunggu
+                  {queueInfo && queueInfo.cooldownSecondsLeft > 0 ? ` · jeda aman tersisa ${queueInfo.cooldownSecondsLeft} dtk` : ''}.
                 </p>
               )}
 

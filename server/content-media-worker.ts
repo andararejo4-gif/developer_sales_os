@@ -861,6 +861,107 @@ export async function enqueueSlotMediaViaHermes(params: {
 
 let isQueueTickBusy = false;
 let nextDispatchAllowedAtMs = 0;
+let lastSlotFinishedAtMs = 0;
+let lastFinishedSlotKey = '';
+const MIN_INTER_SLOT_COOLDOWN_MS = 60_000; // Wajib jeda minimal 1 menit sebelum lanjut ke slot/user berikutnya
+
+export interface QueuePositionInfo {
+  activeOtherSlotForUser: {
+    slotId: string;
+    title: string;
+    scheduledTime: string;
+  } | null;
+  itemsAhead: number;
+  estimatedWaitMinutes: number;
+  cooldownSecondsLeft: number;
+}
+
+export async function getQueuePositionInfo(
+  seEmail: string,
+  slotId: string
+): Promise<QueuePositionInfo> {
+  const now = Date.now();
+  const cooldownSecondsLeft = Math.max(
+    0,
+    Math.ceil((Math.max(nextDispatchAllowedAtMs, lastSlotFinishedAtMs + MIN_INTER_SLOT_COOLDOWN_MS) - now) / 1000)
+  );
+
+  try {
+    // 1. Cek apakah user ini punya slot LAIN yang sedang aktif (PENDING / PROCESSING)
+    const otherRows = await sql`
+      SELECT DISTINCT q.slot_id,
+             COALESCE(s.title, q.slot_id) AS title,
+             COALESCE(s.scheduled_time, '') AS scheduled_time
+      FROM sales_os.media_render_queue q
+      LEFT JOIN sales_os.se_content_slots s
+        ON s.se_email = q.se_email AND s.slot_id = q.slot_id
+      WHERE q.se_email = ${seEmail}
+        AND q.slot_id <> ${slotId}
+        AND q.status IN ('PENDING', 'PROCESSING')
+      LIMIT 1
+    `;
+    const activeOtherSlotForUser = otherRows[0]
+      ? {
+          slotId: String(otherRows[0].slot_id),
+          title: String(otherRows[0].title || otherRows[0].slot_id),
+          scheduledTime: String(otherRows[0].scheduled_time || ''),
+        }
+      : null;
+
+    // 2. Hitung item antrean global yang masuk lebih dulu di depan slot ini (FIFO)
+    const myFirstRows = await sql`
+      SELECT id, priority, created_at
+      FROM sales_os.media_render_queue
+      WHERE se_email = ${seEmail}
+        AND slot_id = ${slotId}
+        AND status IN ('PENDING', 'PROCESSING')
+      ORDER BY id ASC
+      LIMIT 1
+    `;
+
+    let itemsAhead = 0;
+    if (myFirstRows.length > 0) {
+      const me = myFirstRows[0];
+      const aheadRows = await sql`
+        SELECT COUNT(*)::int AS cnt
+        FROM sales_os.media_render_queue
+        WHERE status IN ('PENDING', 'PROCESSING')
+          AND NOT (se_email = ${seEmail} AND slot_id = ${slotId})
+          AND (
+            status = 'PROCESSING'
+            OR priority < ${me.priority}
+            OR (priority = ${me.priority} AND id < ${me.id})
+          )
+      `;
+      itemsAhead = Number(aheadRows[0]?.cnt || 0);
+    } else {
+      const activeGlobalRows = await sql`
+        SELECT COUNT(*)::int AS cnt
+        FROM sales_os.media_render_queue
+        WHERE status IN ('PENDING', 'PROCESSING')
+          AND NOT (se_email = ${seEmail} AND slot_id = ${slotId})
+      `;
+      itemsAhead = Number(activeGlobalRows[0]?.cnt || 0);
+    }
+
+    const estimatedWaitMinutes =
+      itemsAhead > 0 ? Math.max(1, Math.ceil((itemsAhead * 45 + 60) / 60)) : 0;
+
+    return {
+      activeOtherSlotForUser,
+      itemsAhead,
+      estimatedWaitMinutes,
+      cooldownSecondsLeft,
+    };
+  } catch {
+    return {
+      activeOtherSlotForUser: null,
+      itemsAhead: 0,
+      estimatedWaitMinutes: 0,
+      cooldownSecondsLeft: 0,
+    };
+  }
+}
 
 async function syncSlotFromQueue(seEmail: string, slotId: string): Promise<void> {
   const qRows = await sql`
@@ -1033,7 +1134,20 @@ export async function pollActiveHermesJobs(): Promise<void> {
             SET status = 'DONE', local_url = ${localUrl}, finished_at = NOW()
             WHERE id = ${item.id}
           `;
-          nextDispatchAllowedAtMs = Date.now() + 12000 + Math.floor(Math.random() * 6000);
+          const remainingSameSlot = await sql`
+            SELECT COUNT(*)::int AS cnt
+            FROM sales_os.media_render_queue
+            WHERE se_email = ${seEmail} AND slot_id = ${slotId} AND status = 'PENDING'
+          `;
+          if (Number(remainingSameSlot[0]?.cnt || 0) === 0) {
+            // Slot selesai tuntas: wajib jeda minimal 1 menit sebelum lanjut ke slot/user berikutnya
+            lastSlotFinishedAtMs = Date.now();
+            lastFinishedSlotKey = `${seEmail}::${slotId}`;
+            nextDispatchAllowedAtMs = lastSlotFinishedAtMs + MIN_INTER_SLOT_COOLDOWN_MS;
+          } else {
+            // Slide berikutnya di slot yang sama: jeda aman 12-18 detik
+            nextDispatchAllowedAtMs = Date.now() + 12000 + Math.floor(Math.random() * 6000);
+          }
           await syncSlotFromQueue(seEmail, slotId);
         } else if (job.status === 'failed') {
           const errMsg = job.error || 'Render gagal di Hermes VNC';
@@ -1049,7 +1163,9 @@ export async function pollActiveHermesJobs(): Promise<void> {
               WHERE se_email = ${seEmail} AND slot_id = ${slotId} AND status = 'PENDING'
             `;
           }
-          nextDispatchAllowedAtMs = Date.now() + 15000;
+          lastSlotFinishedAtMs = Date.now();
+          lastFinishedSlotKey = `${seEmail}::${slotId}`;
+          nextDispatchAllowedAtMs = lastSlotFinishedAtMs + MIN_INTER_SLOT_COOLDOWN_MS;
           await syncSlotFromQueue(seEmail, slotId);
         }
       } catch {
@@ -1069,6 +1185,14 @@ export async function pollActiveHermesJobs(): Promise<void> {
     if (nextRows.length === 0) return;
 
     const nextItem = nextRows[0];
+    const nextSlotKey = `${String(nextItem.se_email)}::${String(nextItem.slot_id)}`;
+    if (
+      lastFinishedSlotKey &&
+      lastFinishedSlotKey !== nextSlotKey &&
+      Date.now() < lastSlotFinishedAtMs + MIN_INTER_SLOT_COOLDOWN_MS
+    ) {
+      return;
+    }
     try {
       const enqueueRes = await fetch(`${HERMES_API_URL}/v1/generate`, {
         method: 'POST',

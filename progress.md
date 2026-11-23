@@ -3,6 +3,15 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-037 | 2026-11-23 | Same-User Single-Slot Lock, Strict Cross-User FIFO & Cooldown Minimal 1 Menit Antar Slot
+- Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
+- Ubah: `server/content-media-worker.ts`, `server/index.ts`, `src/components/content/ContentSlotOverviewPage.tsx`
+- Detail Perubahan:
+  - **Same-User Active Guard (HTTP 409):** Jika 1 SE sudah klik generate di satu slot kalender konten lalu mencoba klik generate di slot lain sebelum selesai, backend menolak (`USER_ALREADY_GENERATING`) dan UI menampilkan peringatan agar fokus menunggu slot yang sedang berjalan.
+  - **Strict Cross-User FIFO Tanpa Interupsi:** Jika SE lain meminta generate saat ada proses berjalan, permintaannya tetap diterima di belakang antrean (`ORDER BY priority ASC, created_at ASC, id ASC`) tanpa menginterupsi proses yang masuk duluan, lengkap dengan info jumlah item di depan & estimasi waktu tunggu.
+  - **Jeda Minimal 1 Menit (60 detik) Antar Slot/User:** Setelah 1 slot selesai (atau gagal), dispatcher wajib menunggu minimal `60.000 ms` (`MIN_INTER_SLOT_COOLDOWN_MS`) sebelum memulai slot/user berikutnya.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), live deploy `hades` + cek endpoint `/api/se/content-slots/status`.
+
 ## P-036 | 2026-11-23 | Global Sequential Render Queue (1-per-1 + Cooldown), Busy-Window Guard & Fail-Fast Hermes
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `server/content-media-worker.ts`, `server/index.ts`, `src/components/content/ContentSlotOverviewPage.tsx`, `/opt/flow-service/flow_engine.py` (di `hades`)
