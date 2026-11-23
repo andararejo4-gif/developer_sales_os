@@ -1396,12 +1396,27 @@ const server = http.createServer(async (req, res) => {
 
     // 9. FIELD OPS (ABSEN, GPS + FOTO, LOG PANGGILAN) -> REAL POSTGRESQL sales_os
     if (pathname === '/api/se/field-logs' && req.method === 'GET') {
-      const rows = await sql`
-        SELECT * FROM sales_os.se_field_logs
-        WHERE se_email = ${user.email}
-        ORDER BY created_at DESC
-        LIMIT 100
-      `;
+      const isManagerRole = user.role !== 'SE';
+      const filterEmail = String(parsedUrl.searchParams.get('seEmail') || '').trim().toLowerCase();
+      const rows = isManagerRole
+        ? filterEmail
+          ? await sql`
+              SELECT * FROM sales_os.se_field_logs
+              WHERE se_email = ${filterEmail}
+              ORDER BY created_at DESC
+              LIMIT 400
+            `
+          : await sql`
+              SELECT * FROM sales_os.se_field_logs
+              ORDER BY created_at DESC
+              LIMIT 400
+            `
+        : await sql`
+            SELECT * FROM sales_os.se_field_logs
+            WHERE se_email = ${user.email}
+            ORDER BY created_at DESC
+            LIMIT 100
+          `;
       sendJson(res, 200, { ok: true, logs: rows });
       return;
     }

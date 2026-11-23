@@ -41,6 +41,7 @@ import type { RoleKey, UserProfile } from '../data';
 import { SE_TEAM_DATA } from '../data';
 import type { SeActivityCategory, CallOutcome, GpsActivityType } from '../lib/field-ops/types';
 import { GpsLiveRadarMap, type LiveGpsState, type RadarWaypoint } from './field/GpsLiveRadarMap';
+import { SmFieldMonitoringView } from './field/SmFieldMonitoringView';
 import { generateDailyRoutePlan } from '../lib/playbook/route-generator';
 
 type FieldOpsTab = 'absen' | 'gps' | 'call' | 'ai_guide';
@@ -541,7 +542,18 @@ export function FieldOpsModal({
         {/* Content Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
           {/* TAB 1: ABSENSI HARIAN */}
-          {activeTab === 'absen' && (
+          {activeTab === 'absen' && isManager && (
+            <SmFieldMonitoringView
+              mode="absen"
+              projectName={effectiveProjectName}
+              baseCoords={effectiveCoords}
+              dbFieldLogs={dbFieldLogs}
+              fallbackAttendance={attendanceList}
+              fallbackGpsLogs={gpsLogs}
+            />
+          )}
+
+          {activeTab === 'absen' && !isManager && (
             <div className="space-y-5">
               <div className="p-5 rounded-2xl bg-white border border-warmborder flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
@@ -759,7 +771,18 @@ export function FieldOpsModal({
           )}
 
           {/* TAB 2: TRACKING GPS SE & LIVE RADAR SM */}
-          {activeTab === 'gps' && (
+          {activeTab === 'gps' && isManager && (
+            <SmFieldMonitoringView
+              mode="gps"
+              projectName={effectiveProjectName}
+              baseCoords={effectiveCoords}
+              dbFieldLogs={dbFieldLogs}
+              fallbackAttendance={attendanceList}
+              fallbackGpsLogs={gpsLogs}
+            />
+          )}
+
+          {activeTab === 'gps' && !isManager && (
             <div className="space-y-5">
               {/* Live Radar GPS ala ShopeeFood + Nama Jalan & Landmark Terdekat */}
               <GpsLiveRadarMap
