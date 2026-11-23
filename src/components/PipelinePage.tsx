@@ -81,6 +81,7 @@ export interface PipelineLeadRecord {
   created_at: string;
   updated_at: string;
   latest_analysis?: {
+    id?: string;
     skor: number;
     label: string;
     clarity_status: 'JELAS' | 'PERLU_DILENGKAPI';
@@ -769,6 +770,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
       lostReason = chosen;
     }
 
+    setReanalyzingLeadId(lead.id);
     try {
       const res = await fetch(`/api/pipeline/leads/${lead.id}`, {
         method: 'PATCH',
@@ -777,14 +779,23 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
       });
       const data = await res.json();
       if (res.ok && data.ok) {
+        setCustomDrafts((prev) => {
+          const copy = { ...prev };
+          for (const k of Object.keys(copy)) {
+            if (k === lead.id || k.startsWith(`${lead.id}_`)) delete copy[k];
+          }
+          return copy;
+        });
         await fetchPipelineAndWa();
         if (onDataChanged) onDataChanged();
-        showToast(`Tahap ${lead.full_name} diperbarui ke ${nextStage}`);
+        showToast(`Tahap & rekomendasi AI ${lead.full_name} diperbarui ke ${nextStage}`);
       } else {
         showToast(data.error || 'Gagal mengubah tahap');
       }
     } catch {
       showToast('Gagal mengubah tahap pipeline');
+    } finally {
+      setReanalyzingLeadId(null);
     }
   };
 
@@ -821,9 +832,10 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
       });
       if (res.ok) {
         setCustomDrafts((prev) => {
-          if (!(lead.id in prev)) return prev;
           const copy = { ...prev };
-          delete copy[lead.id];
+          for (const k of Object.keys(copy)) {
+            if (k === lead.id || k.startsWith(`${lead.id}_`)) delete copy[k];
+          }
           return copy;
         });
         await fetchPipelineAndWa();
@@ -921,8 +933,9 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
   };
 
   const handleFollowUpWa = async (lead: PipelineLeadRecord) => {
+    const draftKey = `${lead.id}_${lead.latest_analysis?.id || 'init'}`;
     const draft = (
-      customDrafts[lead.id] ??
+      customDrafts[draftKey] ??
       lead.latest_analysis?.followup_draft_message ??
       `Selamat sore ${lead.full_name}, saya ${user.name} dari The Park Townhouse Sukoharjo.`
     ).trim();
@@ -1979,8 +1992,9 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
               !isAiWorking &&
               Boolean(lead.last_sales_message && lead.last_sales_message.trim()) &&
               !hasNewUnsentAiDraft;
+            const draftKey = `${lead.id}_${analysis?.id || 'init'}`;
             const draftMsg =
-              customDrafts[lead.id] ??
+              customDrafts[draftKey] ??
               analysis?.followup_draft_message ??
               `Selamat sore ${lead.full_name}, saya ${user.name} dari The Park Townhouse Sukoharjo.`;
             const isCustMsgLong =
@@ -2460,7 +2474,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                                     onChange={(e) =>
                                       setCustomDrafts((prev) => ({
                                         ...prev,
-                                        [lead.id]: e.target.value,
+                                        [draftKey]: e.target.value,
                                       }))
                                     }
                                     className="w-full bg-transparent text-xs text-[#111B21] leading-relaxed focus:outline-none resize-y"

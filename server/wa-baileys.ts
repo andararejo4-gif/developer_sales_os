@@ -83,17 +83,21 @@ function extractIntroducedNameFromText(text: string): string {
   const cleaned = (text || '').trim();
   if (!cleaned) return '';
   const patterns = [
-    /(?:perkenalkan|kenalkan|nama\s+saya)\s*(?:saya\s+|adalah\s+)?([A-ZÀ-ÖØ-Ýa-zà-öø-ÿ][A-ZÀ-ÖØ-Ýa-zà-öø-ÿ .'-]{1,42}?)(?=\s*(?:,|;|\.|\bdari\b|\bmau\b|\bingin\b|\btanya\b|\bbertanya\b|\bminat\b|\bcari\b|$))/i,
-    /(?:^|[.,!]\s+)saya\s+((?:dr\.?\s+|drg\.?\s+|prof\.?\s+|ir\.?\s+|h\.?\s+|hj\.?\s+|pak\s+|bapak\s+|ibu\s+|bu\s+|mas\s+|mbak\s+)?[A-Z][a-zA-Z .'-]{2,38}?)(?=\s*(?:,|;|\.|\bdari\b|\bmau\b|\bingin\b|\btanya\b|\bbertanya\b|\bminat\b|\bcari\b|$))/i,
+    /(?:perkenalkan|kenalkan|nama\s+saya|panggil\s+saya)\s*(?:saya\s+|adalah\s+)?([A-ZÀ-ÖØ-Ýa-zà-öø-ÿ][A-ZÀ-ÖØ-Ýa-zà-öø-ÿ .'-]{1,36}?)(?=\s*(?:,|;|\.|\bdari\b|\bmau\b|\bingin\b|\btanya\b|\bbertanya\b|\bminat\b|\bcari\b|$))/i,
+    /(?:^|[.,!]\s+)saya\s+((?:dr\.?\s+|drg\.?\s+|prof\.?\s+|ir\.?\s+|h\.?\s+|hj\.?\s+|pak\s+|bapak\s+|ibu\s+|bu\s+|mas\s+|mbak\s+)[A-ZÀ-ÖØ-Ýa-zà-öø-ÿ .'-]{2,32}?)(?=\s*(?:,|;|\.|\bdari\b|\bmau\b|\bingin\b|\btanya\b|\bbertanya\b|\bminat\b|\bcari\b|$))/i,
   ];
+  const forbiddenWordRegex =
+    /\b(rasa|pikir|kira|kurang|belum|sudah|masih|baru|juga|cuma|hanya|akan|bisa|boleh|mau|ingin|tanya|bertanya|cari|lihat|tertarik|minat|setuju|cocok|pilih|ambil|ikut|datang|survei|survey|booking|transfer|bayar|setelah|sebelum|kalau|jika|untuk|dengan|dari|ke|di|ini|itu|saja|aja|dong|deh|kok|kan|ya|senang|suka)\b/i;
+
   for (const regex of patterns) {
     const m = cleaned.match(regex);
     if (m && m[1]) {
       const candidate = m[1].trim().replace(/[.,;]+$/, '').trim();
-      const lower = candidate.toLowerCase();
+      const words = candidate.split(/\s+/).filter(Boolean);
       if (
         candidate.length >= 3 &&
-        !/^(mau|ingin|tanya|bertanya|cari|lihat|tertarik|minat|bisa|boleh)\b/.test(lower)
+        words.length <= 4 &&
+        !forbiddenWordRegex.test(candidate)
       ) {
         return candidate;
       }
@@ -111,16 +115,24 @@ function resolveBestWaContactName(params: {
   const introduced = extractIntroducedNameFromText(params.messageText || '');
   const profileName = (params.waProfileName || '').trim();
   const existing = (params.existingName || '').trim();
-  const isGeneric = (n: string) => !n || /^prospek\s+wa/i.test(n) || /^\d+$/.test(n);
+  const isGenericOrCorrupted = (n: string) =>
+    !n ||
+    /^prospek\s+wa/i.test(n) ||
+    /^\d+$/.test(n) ||
+    /\b(rasa|setelah|survey|survei|mau|booking|tanya|info)\b/i.test(n);
 
-  // 1. Jika pengirim menyebutkan nama secara eksplisit di dalam chat, gunakan nama tersebut
+  // 1. Jika pengirim menyebutkan nama secara eksplisit ("nama saya ...", "perkenalkan ..."), gunakan
   if (introduced) return introduced;
-  // 2. Jika sudah ada nama asli di database (bukan "Prospek WA ..."), pertahankan
-  if (existing && !isGeneric(existing)) return existing;
+  // 2. Jika sudah ada nama asli yang valid di database, pertahankan
+  if (existing && !isGenericOrCorrupted(existing)) return existing;
   // 3. Jika pengirim TIDAK menyebutkan nama di chat, ambil dari nama profil nomor WhatsApp-nya (pushName)
-  if (profileName && !isGeneric(profileName)) return profileName;
+  if (profileName && !isGenericOrCorrupted(profileName)) return profileName;
   // 4. Fallback terakhir jika profil WA juga kosong
-  return existing || profileName || `Prospek WA ${params.cleanPhone.slice(-4)}`;
+  return (
+    (!isGenericOrCorrupted(existing) ? existing : '') ||
+    (!isGenericOrCorrupted(profileName) ? profileName : '') ||
+    `Prospek WA ${params.cleanPhone.slice(-4)}`
+  );
 }
 
 function detectLeadAttributesFromMessage(
@@ -293,19 +305,38 @@ export async function processInboundWaMessageForSe(params: {
   const prevCustomerMsg = String(currentLead?.last_customer_message || '').trim();
   const nextInteractionCount = Number(currentLead?.interaction_count || 0) + 1;
 
-  // Gabungkan riwayat obrolan sebelumnya dengan pesan baru agar AI memiliki konteks kumulatif
+  // Gabungkan riwayat obrolan sebelumnya dengan pesan baru agar AI memiliki konteks kumulatif (prioritas ekor terbaru)
   const historyLines: string[] = [];
   if (currentLead?.sales_notes) {
-    historyLines.push(String(currentLead.sales_notes).slice(0, 350));
+    historyLines.push(String(currentLead.sales_notes).slice(-450));
   }
   if (prevCustomerMsg && prevCustomerMsg !== latestCustomerMsg) {
-    historyLines.push(`[Pesan Customer Sebelumnya]: ${prevCustomerMsg}`);
+    historyLines.push(`[Pesan Customer Sebelumnya]: ${prevCustomerMsg.slice(-240)}`);
   }
   if (prevSalesMsg) {
-    historyLines.push(`[Balasan Sales Sebelumnya]: ${prevSalesMsg}`);
+    historyLines.push(`[Balasan Sales Sebelumnya]: ${prevSalesMsg.slice(-280)}`);
   }
   historyLines.push(`[Pesan Masuk Terbaru (${new Date().toLocaleTimeString('id-ID')})]: ${decryptedMessages.join(' | ')}`);
   const combinedNotes = historyLines.join('\n').slice(-1200);
+
+  const prevAnalysisRows = currentLead?.id
+    ? await sql`
+        SELECT ringkas, rekomendasi, followup_draft_message
+        FROM sales_os.lead_ai_analyses
+        WHERE lead_id = ${currentLead.id}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `
+    : [];
+  const prevAnalysis = prevAnalysisRows[0]
+    ? {
+        ringkas: String(prevAnalysisRows[0].ringkas || ''),
+        rekomendasi: Array.isArray(prevAnalysisRows[0].rekomendasi)
+          ? (prevAnalysisRows[0].rekomendasi as string[])
+          : [],
+        followup_draft_message: String(prevAnalysisRows[0].followup_draft_message || ''),
+      }
+    : undefined;
 
   // 3b. Segera simpan pesan masuk terbaru ke pipeline_leads SEBELUM menunggu LLM selesai,
   //     agar pesan baru customer langsung muncul real-time di preview chat WA bersama animasi skeleton AI!
@@ -395,6 +426,7 @@ export async function processInboundWaMessageForSe(params: {
       lastSalesMessage: prevSalesMsg,
       interactionCount: nextInteractionCount,
       seName: params.seName,
+      previousAnalysis: prevAnalysis,
     });
 
     const recBant = aiResult.recommended_bant;
@@ -1005,6 +1037,47 @@ export async function resumeActiveWaSessionsOnStartup(): Promise<void> {
         startBaileysForSe(seEmail, seName).catch((err) => {
           console.error(`[WA Baileys] Failed to resume session for ${seEmail}:`, err);
         });
+      }
+    }
+
+    // Pulihkan pesan masuk di wa_inbound_temp_buffer yang analisis AI-nya sempat terputus saat restart server
+    const pendingBuffers = await sql`
+      SELECT DISTINCT ON (b.se_email, b.contact_phone)
+        b.se_email,
+        b.contact_phone,
+        b.contact_name,
+        b.encrypted_text,
+        COALESCE(s.se_name, l.owner_se_name, 'Sales Executive') AS se_name
+      FROM sales_os.wa_inbound_temp_buffer b
+      LEFT JOIN sales_os.se_wa_sessions s ON s.se_email = b.se_email
+      LEFT JOIN sales_os.pipeline_leads l ON l.owner_se_email = b.se_email AND l.phone_wa = b.contact_phone
+      WHERE b.expires_at > NOW()
+      ORDER BY b.se_email, b.contact_phone, b.received_at DESC
+    `;
+
+    for (const item of pendingBuffers) {
+      try {
+        const msgText = decryptText(String(item.encrypted_text || ''));
+        if (!msgText) continue;
+        // Hapus baris duplikat sebelum memproses ulang lewat jalur standar
+        await sql`
+          DELETE FROM sales_os.wa_inbound_temp_buffer
+          WHERE se_email = ${item.se_email} AND contact_phone = ${item.contact_phone}
+        `;
+        console.log(
+          `[WA Baileys] Recovering interrupted inbound AI analysis for ${item.contact_name} (${item.contact_phone})...`
+        );
+        processInboundWaMessageForSe({
+          seEmail: String(item.se_email),
+          seName: String(item.se_name || 'Sales Executive'),
+          contactPhone: String(item.contact_phone),
+          contactName: String(item.contact_name || ''),
+          messageText: msgText,
+        }).catch((err) => {
+          console.error('[WA Baileys] Startup recovery AI error:', err);
+        });
+      } catch {
+        /* ignore single recovery failure */
       }
     }
   } catch (err) {

@@ -1183,16 +1183,50 @@ const server = http.createServer(async (req, res) => {
           ? new Date().toISOString()
           : prev.visited_at;
 
-      // Jika data dilengkapi atau diminta reanalyze, jalankan AI lagi
+      // Jika data dilengkapi, tahap/unit/skema/BANT berubah, atau diminta reanalyze, jalankan AI lagi
       let validityStatus = String(prev.validity_status);
       let latestAnalysis = null;
 
-      if (body.reanalyze || prev.validity_status === 'PERLU_DILENGKAPI' || body.salesNotes !== undefined || body.fullName !== undefined || body.domicile !== undefined) {
+      const stageChanged = body.stage !== undefined && nextStage !== String(prev.stage);
+      const unitOrSchemeChanged =
+        (body.unitInterest !== undefined && nextUnitInterest !== String(prev.unit_interest)) ||
+        (body.paymentScheme !== undefined && nextPaymentScheme !== String(prev.payment_scheme));
+      const personaOrBantChanged =
+        (body.personaCode !== undefined && nextPersona !== String(prev.persona_code)) ||
+        nextBant.total !== Number(prev.bant_total);
+
+      if (
+        body.reanalyze ||
+        prev.validity_status === 'PERLU_DILENGKAPI' ||
+        stageChanged ||
+        unitOrSchemeChanged ||
+        personaOrBantChanged ||
+        body.salesNotes !== undefined ||
+        body.fullName !== undefined ||
+        body.domicile !== undefined
+      ) {
         const nextSource = String(body.source ?? prev.source);
         const resolvedOrigin =
           prev.lead_origin === 'WA_BAILEYS' || /whatsapp inbound|baileys/i.test(nextSource)
             ? 'WA_BAILEYS'
             : 'MANUAL';
+
+        const prevAnalysisRows = await sql`
+          SELECT ringkas, rekomendasi, followup_draft_message
+          FROM sales_os.lead_ai_analyses
+          WHERE lead_id = ${leadId}
+          ORDER BY created_at DESC
+          LIMIT 1
+        `;
+        const prevAnalysis = prevAnalysisRows[0]
+          ? {
+              ringkas: String(prevAnalysisRows[0].ringkas || ''),
+              rekomendasi: Array.isArray(prevAnalysisRows[0].rekomendasi)
+                ? (prevAnalysisRows[0].rekomendasi as string[])
+                : [],
+              followup_draft_message: String(prevAnalysisRows[0].followup_draft_message || ''),
+            }
+          : undefined;
 
         const aiResult = await analyzeLeadWithAi({
           fullName: nextFullName,
@@ -1215,6 +1249,8 @@ const server = http.createServer(async (req, res) => {
           lastSalesMessage: String(body.lastSalesMessage ?? prev.last_sales_message ?? ''),
           interactionCount: Number(prev.interaction_count || 1),
           seName: String(prev.owner_se_name || user.name),
+          isReanalyze: Boolean(body.reanalyze),
+          previousAnalysis: prevAnalysis,
         });
 
         validityStatus =

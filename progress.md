@@ -3,6 +3,15 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-048 | 2026-11-23 | Fix AI Pipeline Analysis & Rekomendasi Follow-Up Berulang (Tail-Context, Anti-Repetition & Auto-Recovery)
+- Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
+- Ubah: `server/ai-engine.ts`, `server/wa-baileys.ts`, `server/index.ts`, `src/components/PipelinePage.tsx`
+- Detail Perubahan:
+  - **Root Cause & Fix Truncation `sales_notes` (`.slice(-650)` vs `.slice(0, 350)`):** Memperbaiki `server/ai-engine.ts` dan `server/wa-baileys.ts` yang sebelumnya memotong bagian *awal* `sales_notes` (`.slice(0, 350)`) sehingga giliran chat terbaru di bagian *akhir* terpotong dan AI terus membaca konteks obrolan lama (candaan kopi/survei lama). Kini AI selalu membaca ekor percakapan terbaru (`.slice(-650)`).
+  - **Anti-Repetition Context (`previousAnalysis`) & Stage-Aware Guidance:** Menyertakan ringkasan analisis, saran taktis, dan draf pesan sebelumnya ke prompt AI dengan instruksi eksplisit melarang pengulangan, menyesuaikan suhu model (`0.65` saat Analisis Ulang), serta mengaktifkan re-analisis otomatis saat `stage`, `unitInterest`, `paymentScheme`, `personaCode`, atau `BANT` berubah di `PATCH /api/pipeline/leads/:id`.
+  - **Fix Regex Ekstraksi Nama WA (`extractIntroducedNameFromText`) & Startup Recovery:** Mencegah frasa `"saya rasa setelah survey saya mau..."` menimpa nama prospek (`Alexander III`), memperbaiki cache draf `customDrafts` di `PipelinePage.tsx` agar terkunci per `analysis.id` (`${lead.id}_${analysis.id}`), dan menambahkan auto-recovery `wa_inbound_temp_buffer` saat server restart.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` & verifikasi row `lead_ai_analyses` terbaru untuk `Alexander III`.
+
 ## P-047 | 2026-11-23 | Kartu Notifikasi Berwarna Sesuai Urgensi, Kalender Tanggal Asli WIB & Fix FlowClient.ev
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/components/se/SeNotificationCenter.tsx`, `src/App.tsx`, `src/lib/content-calendar/calendar-generator.ts`, `src/components/ContentCalendarViewer.tsx`, `server/content-media-worker.ts`, `server/index.ts`, `/opt/flow-service/flow_engine.py` (di `hades`)

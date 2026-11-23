@@ -75,6 +75,12 @@ export interface LeadAnalysisInput {
   lastSalesMessage?: string;
   interactionCount?: number;
   seName: string;
+  isReanalyze?: boolean;
+  previousAnalysis?: {
+    ringkas?: string;
+    rekomendasi?: string[];
+    followup_draft_message?: string;
+  };
 }
 
 const FORBIDDEN_CLAIMS = [
@@ -236,24 +242,45 @@ export function buildFollowupContextGuidance(input: LeadAnalysisInput): {
     ''
   ).trim();
   const lastSales = (input.lastSalesMessage || '').trim();
+  const stage = (input.stage || 'NEW').toUpperCase();
+  const recentNotesTail = (input.salesNotes || '').slice(-550);
+
+  let stageSpecificDirective = '';
+  if (stage === 'APPOINTMENT') {
+    stageSpecificDirective =
+      'Prospek berada di Tahap 4 (JANJI KUNJUNGAN / APPOINTMENT). Fokuskan analisis & pesan pada penguncian kepastian hadir survei lokasi di Jombor, persiapan unit & simulasi pembayaran yang akan ditunjukkan saat survei, serta kesiapan Booking Fee Rp5 juta bila cocok di lokasi.';
+  } else if (stage === 'VISITED') {
+    stageSpecificDirective =
+      'Prospek berada di Tahap 5 (SUDAH SURVEI LOKASI / VISITED). Fokuskan analisis & pesan pada tindak lanjut impresi pasca-survei, pengiriman penawaran tertulis resmi, dan dorongan mengunci unit sebelum diambil pembeli lain.';
+  } else if (stage === 'HOT_NEGOTIATION') {
+    stageSpecificDirective =
+      'Prospek berada di Tahap 6 (NEGOSIASI AKTIF / HOT NEGOTIATION). Fokuskan analisis & pesan pada penyelesaian negosiasi skema bayar, urgensi keterbatasan unit (hanya 35 unit & kenaikan bertahap Rp50 juta/bulan sesuai Playbook §2.5), dan penutupan Booking Fee Rp5 juta ke rekening resmi PT Andara Rejo Makmur.';
+  } else if (stage === 'BOOKING' || stage === 'DP_KPR_PROCESS' || stage === 'PPJB_AKAD') {
+    stageSpecificDirective =
+      `Prospek berada di Tahap ${stage}. Fokuskan analisis & pesan pada pengawalan kelengkapan dokumen, jadwal pembayaran DP / proses SP3K KPR / jadwal PPJB & Akad secara rapi dan meyakinkan.`;
+  } else if (stage === 'QUALIFIED') {
+    stageSpecificDirective =
+      'Prospek berada di Tahap 3 (QUALIFIED / BANT >= 7). Fokuskan analisis & pesan untuk mengonversi minat menjadi jadwal survei lokasi (Appointment) pada hari & jam yang spesifik.';
+  }
 
   if (isWaOrigin) {
-    if ((input.interactionCount || 1) > 1) {
+    if ((input.interactionCount || 1) > 1 || stage !== 'NEW') {
       return {
         trackType: 'WA_ONGOING_CONVERSATION',
-        trackLabel: 'Balasan Lanjutan Percakapan WA (Turn-Aware + Update Analisis & Rekomendasi)',
+        trackLabel: `Balasan Lanjutan Percakapan WA · Tahap ${stage}`,
         guidanceText: [
           'JALUR B2 - PERCAKAPAN WHATSAPP LANJUTAN / PESAN BARU DARI PROSPEK YANG SAMA:',
-          `- Riwayat konteks sebelumnya: "${(input.salesNotes || '').slice(0, 350)}"`,
+          `- Tahap Pipeline Saat Ini: ${stage}. ${stageSpecificDirective}`,
+          `- Riwayat konteks terbaru (ekor percakapan): "${recentNotesTail}"`,
           lastSales
-            ? `- Pesan terakhir dari Sales (${input.seName}): "${lastSales}"`
-            : '- Status: Prospek mengirim pesan tambahan/lanjutan sebelum atau sesudah pesan pertama.',
-          `- Pesan TERBARU dari Customer: "${lastCust || input.salesNotes}"`,
+            ? `- Pesan terakhir dari Sales (${input.seName}): "${lastSales.slice(-300)}"`
+            : '- Status: Prospek mengirim pesan tambahan/lanjutan.',
+          `- Pesan TERBARU dari Customer yang WAJIB DITANGGAPI SEKARANG: "${lastCust || recentNotesTail}"`,
           '- ATURAN WAJIB:',
-          '  1. Analisis ulang profil BANT, Persona, Poin Kuat, Poin Lemah, dan Rekomendasi Taktis berdasarkan informasi terbaru di pesan customer ini.',
-          '  2. DILARANG mengulang salam perkenalan kaku jika sudah pernah menyapa sebelumnya. Langsung tanggapi isi pesan terbaru customer secara hangat dan natural.',
-          '  3. Jawab langsung pertanyaan, perubahan minat unit/skema bayar, atau keberatan di pesan terbaru customer (gunakan formula Playbook Bab 10: Empati -> Klarifikasi -> Data Fakta -> Alternatif Unit/Skema -> Pertanyaan Pengunci).',
-          '  4. Tutup dengan 1 pertanyaan BANT yang belum terjawab atau ajakan spesifik (jadwal survei lokasi / kirim simulasi PDF / video-call tour).',
+          '  1. Analisis ulang profil BANT, Persona, Poin Kuat, Poin Lemah, dan Rekomendasi Taktis berdasarkan kalimat TERBARU customer ini dan tahap pipeline saat ini.',
+          '  2. DILARANG mengulang salam perkenalan kaku atau mengulang bahasan lama yang sudah selesai (seperti mengulang candaan kopi/jadwal lama jika customer sudah membahas topik baru seperti niat booking pasca-survei).',
+          '  3. Tangkap sinyal buying intent di pesan terbaru customer: jika customer menyatakan niat booking/ambil unit setelah survei, apresiasi antusiasmenya, pastikan unit prioritasnya disiapkan untuk dicek saat survei, dan informasikan prosedur Booking Fee resmi Rp5 juta (rekening PT Andara Rejo Makmur) agar saat survei bisa langsung dikunci.',
+          '  4. Tutup dengan 1 kalimat pengunci langkah konkret berikutnya sesuai tahap pipeline.',
         ].join('\n'),
       };
     }
@@ -263,7 +290,7 @@ export function buildFollowupContextGuidance(input: LeadAnalysisInput): {
       trackLabel: 'Respon Pertama WhatsApp Inbound (Speed-to-Lead Playbook §7.2)',
       guidanceText: [
         'JALUR B1 - PESAN MASUK WHATSAPP PERTAMA DARI CALON PEMBELI (SPEED-TO-LEAD §7.2):',
-        `- Isi pesan masuk dari Customer: "${lastCust || input.salesNotes}"`,
+        `- Isi pesan masuk dari Customer: "${lastCust || recentNotesTail}"`,
         '- ATURAN WAJIB:',
         '  1. Sapa customer dengan hangat dan sebut nama SE + The Park Townhouse Sukoharjo.',
         '  2. Jawab LANGSUNG inti pertanyaan customer (jika tanya harga, sebut rentang resmi mulai Rp650 juta / unit yang relevan, jangan menyembunyikan informasi).',
@@ -286,11 +313,13 @@ export function buildFollowupContextGuidance(input: LeadAnalysisInput): {
     meetingContext = 'referensi dan rekomendasi hangat dari rekan/kerabat mengenai kebutuhan hunian di Sukoharjo';
   }
 
-  const stage = (input.stage || 'NEW').toUpperCase();
   let cadenceRule =
     'Cadence Hari 0/1 Pasca-Pertemuan (Playbook §7.7): Ucapkan terima kasih atas waktu pertemuan/obrolan, rangkum kebutuhan spesifik mereka dari catatan sales, rekomendasikan unit & keunggulan pemicu sesuai Persona, dan ajak kunjungan kembali (bersama pasangan/keluarga bila Authority < 2).';
 
-  if (stage === 'VISITED') {
+  if (stage === 'APPOINTMENT') {
+    cadenceRule =
+      'Cadence Penguncian Janji Survei Lokasi (Tahap 4 Appointment - Playbook §7.4): Konfirmasi hari & jam kunjungan ke Jombor, pastikan pengambil keputusan (pasangan/keluarga) ikut hadir, dan sampaikan bahwa simulasi resmi serta unit prioritas sudah disiapkan untuk ditinjau langsung.';
+  } else if (stage === 'VISITED') {
     cadenceRule =
       'Cadence Pasca-Survei Lokasi (Playbook §7.5 & §7.7): Ucapkan terima kasih sudah melihat langsung lokasi & unit di Jombor, rangkum impresi unit yang disukai, tawarkan pengiriman simulasi tertulis resmi, dan dorong langkah penguncian unit.';
   } else if (stage === 'HOT_NEGOTIATION') {
@@ -299,6 +328,9 @@ export function buildFollowupContextGuidance(input: LeadAnalysisInput): {
   } else if (stage === 'BOOKING' || stage === 'DP_KPR_PROCESS' || stage === 'PPJB_AKAD') {
     cadenceRule =
       'Cadence Pasca-Booking / Proses Pemberkasan: Ucapkan apresiasi atas kepercayaan memilih unit di The Park Townhouse, pandu kelengkapan berkas KPR / jadwal pembayaran DP / jadwal PPJB dengan ramah dan rapi.';
+  } else if (stage === 'NURTURE') {
+    cadenceRule =
+      'Cadence Pembinaan / Nurture (Playbook §7.7): Kirim update progres pembangunan kawasan / clubhouse atau penawaran skema pembayaran terbaru tanpa terkesan mendesak, dan tanyakan perkembangan rencana hunian mereka.';
   }
 
   return {
@@ -331,8 +363,31 @@ export function buildContextualFallbackFollowup(input: LeadAnalysisInput): strin
     : 'mulai Rp650 juta';
 
   const guidance = buildFollowupContextGuidance(input);
+  const stage = (input.stage || 'NEW').toUpperCase();
+  const lastCust = (input.lastCustomerMessage || '').trim();
+  const prevDraft = (input.previousAnalysis?.followup_draft_message || '').trim();
 
   if (guidance.trackType === 'WA_ONGOING_CONVERSATION') {
+    if (/\b(booking|ambil| jadi|cocok|lanjut)\b/i.test(lastCust)) {
+      return [
+        `Alhamdulillah, senang sekali mendengarnya ${salutation} 🙏 Terima kasih banyak atas kepercayaannya pada The Park Townhouse Sukoharjo.`,
+        '',
+        `Untuk kunjungan survei lokasi nanti, saya sudah blokirkan waktu khusus dan menyiapkan unit prioritas ${input.unitInterest} (${priceText}, skema ${humanScheme}) beserta dokumen simulasi resminya agar ${shortCall} bisa mengecek fisik bangunan 2 lantai Japandi Modern, garasi dalam, dan fasilitas clubhouse secara langsung.`,
+        '',
+        `Jika setelah melihat unit di lokasi ${shortCall} sudah mantap, penguncian unit (Booking Fee resmi Rp5 juta) nantinya dilakukan langsung ke rekening resmi PT Andara Rejo Makmur agar unit tersebut otomatis terkunci atas nama ${shortCall}. Sampai bertemu di lokasi Jombor ya, ${shortCall}!`,
+      ].join('\n');
+    }
+
+    if (stage === 'APPOINTMENT' && !prevDraft.includes('agenda kunjungan')) {
+      return [
+        `Siap ${salutation}, agenda kunjungan survei ke The Park Townhouse Sukoharjo (Jombor, Bendosari) sudah saya kunci untuk ${shortCall} 🙏`,
+        '',
+        `Nanti di lokasi kita akan langsung meninjau fisik ${input.unitInterest} (${priceText}, skema ${humanScheme}), mengecek kualitas bangunan 2 lantai Japandi Modern, sistem keamanan one-gate RFID + CCTV 4K 24 jam, serta area clubhouse (kolam renang, gym, mini golf) tanpa biaya membership.`,
+        '',
+        `Apakah nanti ${shortCall} hadir bersama pasangan/keluarga supaya sekalian saya siapkan simulasi angka dan opsi unit pembandingnya di meja diskusi?`,
+      ].join('\n');
+    }
+
     return [
       `Baik ${salutation}, menyambung pesan sebelumnya mengenai ${input.unitInterest} dengan skema ${humanScheme} (${priceText}).`,
       '',
@@ -532,6 +587,28 @@ export async function analyzeLeadWithAi(input: LeadAnalysisInput): Promise<LeadA
     'ATURAN EFISIENSI: Jangan bertele-tele di internal reasoning; langsung hasilkan objek JSON final yang ringkas, akurat, dan pesan `followup_draft_message` Bahasa Indonesia yang sangat hangat, manusiawi, persuasif, dan TIDAK KAKU SEPERTI BOT.',
   ].join('\n');
 
+  const prevRingkas = (input.previousAnalysis?.ringkas || '').trim();
+  const prevRekomendasi = (input.previousAnalysis?.rekomendasi || []).slice(0, 3);
+  const prevDraft = (input.previousAnalysis?.followup_draft_message || '').trim();
+
+  const antiRepetitionBlock =
+    prevRingkas || prevDraft
+      ? [
+          '',
+          'KONTEKS ANALISIS & DRAF SEBELUMNYA (WAJIB DIPERBARUI & DILARANG DIULANG):',
+          prevRingkas ? `- Ringkasan Analisis Sebelumnya: "${prevRingkas.slice(0, 260)}"` : '',
+          prevRekomendasi.length > 0
+            ? `- Rekomendasi Taktis Sebelumnya: ${JSON.stringify(prevRekomendasi)}`
+            : '',
+          prevDraft ? `- Draf Pesan WA Sebelumnya: "${prevDraft.slice(0, 320)}"` : '',
+          input.isReanalyze
+            ? '- INSTRUKSI ANALISIS ULANG (RE-ANALYZE): User meminta ANALISIS BARU & REKOMENDASI FOLLOW-UP BARU yang berbeda dari sebelumnya. Gunakan sudut pandang taktis yang segar (mis. kombinasi simulasi finansial, nilai investasi & eksklusivitas 35 unit, fasilitas clubhouse bebas iuran, atau trial close penguncian unit), ubah susunan poin_kuat / rekomendasi / perlu_dicek_ulang, dan tulis `followup_draft_message` dengan pembuka serta angle persuasi yang SAMA SEKALI BERBEDA dari Draf Pesan WA Sebelumnya!'
+            : '- INSTRUKSI PROGRES PERCAKAPAN / TAHAP BARU: Jangan mengulang ringkasan analisis atau kalimat draf sebelumnya. Fokuskan 100% analisis (`ringkas`, `poin_kuat`, `rekomendasi`, `perlu_dicek_ulang`) dan `followup_draft_message` pada pesan terbaru customer / perubahan tahap pipeline saat ini!',
+        ]
+          .filter(Boolean)
+          .join('\n')
+      : '';
+
   const userPrompt = [
     'Data Lead Properti:',
     JSON.stringify({
@@ -550,19 +627,21 @@ export async function analyzeLeadWithAi(input: LeadAnalysisInput): Promise<LeadA
         : 'Mulai Rp650 jt - Rp1,15 M',
       skema_bayar: humanScheme,
       bant_0_3: { b: input.bantB, a: input.bantA, n: input.bantN, t: input.bantT },
-      catatan_sales: (input.salesNotes || '').slice(0, 500),
+      catatan_sales_terbaru: (input.salesNotes || '').slice(-650),
       chat_wa: {
         pesan_terakhir_customer: (
           input.lastCustomerMessage ||
           (input.inboundMessages || []).slice(-1)[0] ||
           ''
-        ).slice(0, 350),
-        pesan_terakhir_sales: (input.lastSalesMessage || '').slice(0, 300),
+        ).slice(-400),
+        pesan_terakhir_sales: (input.lastSalesMessage || '').slice(-320),
         interaksi_ke: input.interactionCount || 1,
       },
       nama_se: input.seName,
+      mode_analisis_ulang: Boolean(input.isReanalyze),
       isu_validasi: deterministicIssues,
     }),
+    antiRepetitionBlock,
     '',
     'INSTRUKSI PESAN WHATSAPP (`followup_draft_message`):',
     followupGuidance.guidanceText,
@@ -597,7 +676,7 @@ export async function analyzeLeadWithAi(input: LeadAnalysisInput): Promise<LeadA
               { role: 'user', content: userPrompt },
             ],
             max_tokens: 8192,
-            temperature: 0.3,
+            temperature: input.isReanalyze ? 0.65 : 0.35,
           }),
           signal: controller.signal,
         });
