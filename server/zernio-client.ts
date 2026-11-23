@@ -256,10 +256,10 @@ export async function publishSlotViaZernio(params: {
   let postUrl = extractPlatformPostUrl(postObj, params.platform);
   let status = String(postObj?.status || 'published');
 
-  // Brief poll up to 3x if Zernio is still finalizing the published URL
-  if (postId && !postUrl) {
-    for (let i = 0; i < 3; i++) {
-      await new Promise((r) => setTimeout(r, 1500));
+  // Poll up to 8x (~16s) if Zernio is still finalizing the published post URL
+  if (postId && !postUrl && status !== 'failed') {
+    for (let i = 0; i < 8; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
       try {
         const fetched = await zernioFetch<any>(params.keyIndex, `/posts/${postId}`, {
           method: 'GET',
@@ -267,7 +267,7 @@ export async function publishSlotViaZernio(params: {
         const p = fetched?.post || fetched?.data || fetched;
         status = String(p?.status || status);
         postUrl = extractPlatformPostUrl(p, params.platform);
-        if (postUrl) break;
+        if (postUrl || status === 'failed') break;
       } catch {
         break;
       }
@@ -277,15 +277,68 @@ export async function publishSlotViaZernio(params: {
   return { postId, postUrl, status };
 }
 
+export async function fetchZernioPostUrl(
+  keyIndex: number,
+  postId: string,
+  platform: ZernioPlatform
+): Promise<string> {
+  if (!postId) return '';
+  try {
+    const fetched = await zernioFetch<any>(keyIndex, `/posts/${postId}`, {
+      method: 'GET',
+    });
+    const p = fetched?.post || fetched?.data || fetched;
+    return extractPlatformPostUrl(p, platform);
+  } catch {
+    return '';
+  }
+}
+
+function isSpecificPostUrl(url: string): boolean {
+  const trimmed = (url || '').trim();
+  if (!/^https?:\/\//i.test(trimmed)) return false;
+  // Reject bare profile URLs like https://instagram.com/username or https://tiktok.com/@username
+  try {
+    const u = new URL(trimmed);
+    const parts = u.pathname.split('/').filter(Boolean);
+    if (parts.length <= 1 && !u.search) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function pickUrlFromObj(obj: any): string {
+  if (!obj || typeof obj !== 'object') return '';
+  const candidates = [
+    obj.platformPostUrl,
+    obj.permalink,
+    obj.postUrl,
+    obj.shareUrl,
+    obj.publishedUrl,
+    obj.url,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && isSpecificPostUrl(c)) return c.trim();
+  }
+  return '';
+}
+
 function extractPlatformPostUrl(postObj: any, platform: ZernioPlatform): string {
   if (!postObj) return '';
-  if (typeof postObj.platformPostUrl === 'string' && postObj.platformPostUrl) {
-    return postObj.platformPostUrl;
+  const rootUrl = pickUrlFromObj(postObj);
+  if (rootUrl) return rootUrl;
+
+  const lists = [
+    Array.isArray(postObj.platforms) ? postObj.platforms : [],
+    Array.isArray(postObj.platformPosts) ? postObj.platformPosts : [],
+    Array.isArray(postObj.results) ? postObj.results : [],
+  ];
+  for (const list of lists) {
+    const hit =
+      list.find((p: any) => String(p?.platform || '').toLowerCase() === platform) || list[0];
+    const found = pickUrlFromObj(hit);
+    if (found) return found;
   }
-  if (typeof postObj.url === 'string' && postObj.url) {
-    return postObj.url;
-  }
-  const plats = Array.isArray(postObj.platforms) ? postObj.platforms : [];
-  const hit = plats.find((p: any) => p.platform === platform) || plats[0];
-  return String(hit?.platformPostUrl || hit?.postUrl || hit?.url || '');
+  return '';
 }

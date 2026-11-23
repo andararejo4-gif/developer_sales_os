@@ -3,6 +3,16 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-039 | 2026-11-23 | Link Postingan Spesifik Zernio, Filter Desktop-Only & Reflow Mobile Pipeline
+- Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
+- Ubah: `server/zernio-client.ts`, `server/index.ts`, `src/components/content/ContentSlotOverviewPage.tsx`, `src/components/ContentCalendarViewer.tsx`, `src/components/PipelinePage.tsx`
+- Detail Perubahan:
+  - **URL Postingan Spesifik Zernio:** Memperluas `extractPlatformPostUrl` (`platformPostUrl`, `permalink`, `postUrl`, `shareUrl` + validasi non-profil), memperpanjang polling `/posts/${postId}` hingga ±16 detik, menghapus fallback ke link profil akun, dan menyinkronkan otomatis di `GET /api/se/content-slots/status` bila permalink baru selesai diproses.
+  - **Header Detail Konten:** Menghapus tombol `Tandai Sudah Upload` (submit link otomatis menandai `SUDAH_POSTING`).
+  - **Filter Kalender Desktop-Only:** Bar filter pada tampilan Mingguan/Bulanan memakai `hidden md:flex` sehingga tersembunyi total di mobile.
+  - **Mobile-First Pipeline (`PipelinePage.tsx`):** Merapikan header (`grid-cols-3` 1 baris kompak di mobile, teks isolasi disembunyikan di mobile), menyembunyikan teks panjang/banner WA terdiskonek di mobile, memberi `w-full` pada dropdown Tahap agar tidak overflow kartu, serta menyusun 4 tombol aksi (`Detail`, `Edit`, `AI`, `Hapus`) dalam 1 baris `grid-cols-4` berukuran `>=44px`.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200` + PM2 `online`).
+
 ## P-038 | 2026-11-23 | Auto-Fill Link Hasil Posting + Tombol Akses Link & Polish Mobile-First SE
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/components/content/ContentSlotOverviewPage.tsx`, `src/components/ContentCalendarViewer.tsx`, `src/components/mobile/MobileMoreSheet.tsx`

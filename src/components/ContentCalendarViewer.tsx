@@ -887,9 +887,9 @@ export function ContentCalendarViewer({
           </div>
         </div>
 
-        {/* Filters Bar — Disembunyikan di tampilan Harian (list per hari) agar header bersih & mobile-friendly */}
+        {/* Filters Bar — Hanya tampil di Desktop untuk mode Mingguan & Bulanan; Mobile selalu bersih */}
         {viewMode !== 'day' && (
-        <div className="px-4 sm:px-6 py-2.5 bg-sandstone/30 border-b border-warmborder flex flex-wrap items-center gap-3 text-xs shrink-0">
+        <div className="hidden md:flex px-6 py-2.5 bg-sandstone/30 border-b border-warmborder flex-wrap items-center gap-3 text-xs shrink-0">
           <span className="text-warmmuted font-bold flex items-center gap-1">
             <Filter className="size-3.5 text-terracotta" />
             Filter:

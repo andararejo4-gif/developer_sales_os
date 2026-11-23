@@ -26,6 +26,7 @@ import {
   ACCOUNTS_PER_KEY_LIMIT,
   ZERNIO_PLATFORMS,
   fetchZernioAccountsForProfile,
+  fetchZernioPostUrl,
   getOrCreateZernioProfile,
   getZernioConnectUrl,
   getZernioKeys,
@@ -1654,9 +1655,52 @@ const server = http.createServer(async (req, res) => {
         `.catch(() => [{ cnt: 0 }]),
         getQueuePositionInfo(user.email, slotId),
       ]);
+
+      // Jika sudah auto-publish via Zernio tapi posted_url masih kosong/link profil, sinkronkan permalink spesifik
+      const slotRow = rows[0] || null;
+      if (slotRow && slotRow.status === 'SUDAH_POSTING') {
+        const curUrl = String(slotRow.posted_url || '').trim();
+        let needsPostUrlSync = !curUrl;
+        if (curUrl) {
+          try {
+            const parsed = new URL(curUrl);
+            needsPostUrlSync = parsed.pathname.split('/').filter(Boolean).length <= 1 && !parsed.search;
+          } catch {
+            needsPostUrlSync = true;
+          }
+        }
+        if (needsPostUrlSync) {
+          const logRows = await sql`
+            SELECT payload FROM sales_os.se_field_logs
+            WHERE se_email = ${user.email}
+              AND log_type = 'CONTENT_POSTING'
+              AND payload->>'slotId' = ${slotId}
+              AND payload->>'postId' IS NOT NULL
+            ORDER BY id DESC
+            LIMIT 1
+          `.catch(() => []);
+          const p = logRows[0]?.payload as any;
+          if (p?.postId && p?.platform) {
+            const resolvedUrl = await fetchZernioPostUrl(
+              Number(p.keyIndex || 0),
+              String(p.postId),
+              mapCalendarPlatformToZernio(String(p.platform))
+            );
+            if (resolvedUrl) {
+              slotRow.posted_url = resolvedUrl;
+              await sql`
+                UPDATE sales_os.se_content_slots
+                SET posted_url = ${resolvedUrl}, updated_at = NOW()
+                WHERE se_email = ${user.email} AND slot_id = ${slotId}
+              `.catch(() => {});
+            }
+          }
+        }
+      }
+
       sendJson(res, 200, {
         ok: true,
-        slot: rows[0] || null,
+        slot: slotRow,
         hermesHealth,
         busyWindow,
         globalQueuePending: Number(queueCountRows[0]?.cnt || 0),
@@ -2183,9 +2227,7 @@ const server = http.createServer(async (req, res) => {
         requestOrigin: `${proto}://${hostHeader}`,
       });
 
-      const finalPostUrl =
-        pubResult.postUrl ||
-        `https://${targetPlatform}.com/${acc.account_username || ''}`;
+      const finalPostUrl = pubResult.postUrl || '';
 
       await sql`
         UPDATE sales_os.se_content_slots
@@ -2203,9 +2245,9 @@ const server = http.createServer(async (req, res) => {
         ) VALUES (
           ${user.email}, ${user.name}, 'CONTENT_POSTING',
           ${`Auto-Publish ${targetPlatform.toUpperCase()} (${slotId})`},
-          ${finalPostUrl},
+          ${finalPostUrl || `post:${pubResult.postId}`},
           ${`Diposting via Zernio ke @${acc.account_username || targetPlatform}`},
-          ${sql.json({ slotId, platform: targetPlatform, postId: pubResult.postId, postUrl: finalPostUrl, postingCat, reportDate: todayStr })}
+          ${sql.json({ slotId, platform: targetPlatform, postId: pubResult.postId, keyIndex: Number(acc.zernio_key_index || 0), postUrl: finalPostUrl, postingCat, reportDate: todayStr })}
         )
       `.catch(() => {});
 

@@ -1032,29 +1032,29 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
   );
 
   return (
-    <div className="space-y-5">
-      {/* Header Halaman Pipeline */}
-      <div className="bg-white border border-warmborder rounded-2xl p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-start sm:items-center gap-3 min-w-0">
-          <div className="size-11 rounded-2xl bg-terracotta text-white flex items-center justify-center shrink-0">
-            <Users className="size-6" />
+    <div className="space-y-4 sm:space-y-5 pb-24 md:pb-6 overflow-x-hidden">
+      {/* Header Halaman Pipeline (Mobile-First Compact Hierarchy) */}
+      <div className="bg-white border border-warmborder rounded-2xl p-3.5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="size-10 sm:size-11 rounded-xl sm:rounded-2xl bg-terracotta text-white flex items-center justify-center shrink-0">
+            <Users className="size-5 sm:size-6" />
           </div>
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg sm:text-xl font-extrabold text-espresso">
-                Pipeline &amp; AI Lead Analyzer
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <h2 className="text-base sm:text-xl font-extrabold text-espresso truncate">
+                Pipeline &amp; AI Lead
               </h2>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-terracotta border border-amber-200">
-                Playbook v1.2 · BANT 0–12
+              <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-amber-50 text-terracotta border border-amber-200 whitespace-nowrap">
+                BANT 0–12
               </span>
             </div>
-            <p className="text-xs text-warmmuted mt-0.5">
+            <p className="hidden sm:block text-xs text-warmmuted mt-0.5">
               Akun SE: <strong className="text-espresso">{user.name}</strong> ({user.email}) · Data &amp; WhatsApp terisolasi per akun
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto">
           <button
             type="button"
             disabled={submitting}
@@ -1064,7 +1064,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                 handleConnectWa(false);
               }
             }}
-            className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer border transition-colors ${
+            className={`min-h-[44px] px-2 sm:px-3.5 py-2 rounded-xl text-[11px] sm:text-xs font-extrabold inline-flex items-center justify-center gap-1 sm:gap-2 cursor-pointer border transition-colors whitespace-nowrap ${
               waStatus?.status === 'CONNECTED'
                 ? 'bg-lime-100 hover:bg-lime-200 text-olive border-lime-300'
                 : waStatus?.status === 'QR_READY' || waStatus?.status === 'CONNECTING'
@@ -1072,17 +1072,15 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                 : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
             }`}
           >
-            <span
-              className={`size-2.5 rounded-full shrink-0 ${
-                waStatus?.status === 'CONNECTED'
-                  ? 'bg-olive animate-pulse'
-                  : waStatus?.status === 'QR_READY' || waStatus?.status === 'CONNECTING'
-                  ? 'bg-terracotta animate-ping'
-                  : 'bg-rose-600 animate-pulse'
-              }`}
-            />
-            <QrCode className="size-4 shrink-0" />
-            <span>
+            <QrCode className="size-3.5 sm:size-4 shrink-0" />
+            <span className="sm:hidden truncate">
+              {waStatus?.status === 'CONNECTED'
+                ? 'WA Aktif'
+                : waStatus?.status === 'QR_READY'
+                ? 'Scan QR'
+                : 'Hubungkan'}
+            </span>
+            <span className="hidden sm:inline">
               {waStatus?.status === 'CONNECTED'
                 ? `WA Terhubung (${waStatus.phoneNumber})`
                 : waStatus?.status === 'QR_READY'
@@ -1098,7 +1096,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
               type="button"
               disabled={submitting}
               onClick={handleDisconnectWa}
-              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="hidden sm:flex min-h-[44px] px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
             >
               <X className="size-4 shrink-0" />
               <span>Diskonek WA</span>
@@ -1108,10 +1106,11 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
           <button
             type="button"
             onClick={() => setShowWaIngestModal(true)}
-            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-espresso border border-warmborder text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            className="min-h-[44px] px-2 sm:px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-espresso border border-warmborder text-[11px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap"
           >
-            <Smartphone className="size-4 text-olive shrink-0" />
-            <span>Proses Pesan WA Masuk</span>
+            <Smartphone className="size-3.5 sm:size-4 text-olive shrink-0" />
+            <span className="sm:hidden">Pesan WA</span>
+            <span className="hidden sm:inline">Proses Pesan WA Masuk</span>
           </button>
 
           <button
@@ -1120,10 +1119,11 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
               resetForm();
               setIsLeadFormOpen(true);
             }}
-            className="min-h-[44px] px-4 py-2 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+            className="min-h-[44px] px-2 sm:px-4 py-2 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-[11px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
           >
-            <Plus className="size-4 shrink-0" />
-            <span>Input Lead Baru</span>
+            <Plus className="size-3.5 sm:size-4 shrink-0" />
+            <span className="sm:hidden">Lead Baru</span>
+            <span className="hidden sm:inline">Input Lead Baru</span>
           </button>
         </div>
       </div>
@@ -1214,7 +1214,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                   </span>
                 </span>
               </div>
-              <p className="text-xs text-warmmuted mt-0.5">
+              <p className="hidden sm:block text-xs text-warmmuted mt-0.5">
                 Privasi terjaga: Sistem tidak menampilkan isi obrolan pribadi Anda, hanya menghitung pesan masuk, kecepatan balas (SLA ≤ 5 menit), dan mengolah prospek baru dengan AI.
               </p>
             </div>
@@ -1275,9 +1275,9 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
           </div>
         </div>
 
-        {/* Indikator Peringatan jika WhatsApp sedang Terdiskonek */}
+        {/* Indikator Peringatan jika WhatsApp sedang Terdiskonek (Desktop saja agar mobile ringkas) */}
         {(!waStatus || waStatus.status === 'DISCONNECTED') && (
-          <div className="p-3.5 rounded-2xl bg-rose-50/80 border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="hidden sm:flex p-3.5 rounded-2xl bg-rose-50/80 border border-rose-200 flex-row items-center justify-between gap-3 text-xs">
             <div className="flex items-start gap-2.5">
               <AlertCircle className="size-5 text-rose-600 shrink-0 mt-0.5" />
               <div>
@@ -2006,7 +2006,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
             return (
               <article
                 key={lead.id}
-                className={`border rounded-2xl p-4 sm:p-5 transition-all ${
+                className={`border rounded-2xl p-3.5 sm:p-5 transition-all overflow-hidden ${
                   needsHandling
                     ? 'bg-rose-50/45 border-rose-500 ring-1 ring-rose-300 shadow-sm'
                     : isUnclear
@@ -2015,60 +2015,63 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                 }`}
               >
                 {/* Baris Ringkas Lead (Selalu Tampil) */}
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 min-w-0">
                   <div
                     onClick={() => toggleLeadDetail(lead.id)}
-                    className="space-y-1 cursor-pointer flex-1 min-w-0"
+                    className="space-y-1.5 cursor-pointer flex-1 min-w-0"
                   >
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                       {needsHandling && (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-rose-600 text-white animate-pulse">
-                          Perlu Ditangani · Belum Dibalas
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-rose-600 text-white animate-pulse">
+                          Perlu Ditangani
                         </span>
                       )}
-                      <h3 className="text-base font-extrabold text-espresso">{lead.full_name}</h3>
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-50 text-terracotta border border-amber-200">
-                        BANT {lead.bant_total}/12 · Grade {lead.grade}
+                      <h3 className="text-sm sm:text-base font-extrabold text-espresso truncate max-w-full">
+                        {lead.full_name}
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full text-[11px] sm:text-xs font-extrabold bg-amber-50 text-terracotta border border-amber-200 whitespace-nowrap">
+                        BANT {lead.bant_total}/12 · {lead.grade}
                       </span>
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-sandstone text-espresso border border-warmborder">
+                      <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-sandstone text-espresso border border-warmborder">
                         {personaDisplayLabel}
                       </span>
                       <span
-                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                        className={`px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold whitespace-nowrap ${
                           isWaInboundLead
                             ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                             : 'bg-amber-50/60 text-espresso border border-warmborder'
                         }`}
                       >
-                        {isWaInboundLead ? 'WA Inbound AI' : 'Lead Manual (Pasca-Temu)'}
+                        {isWaInboundLead ? 'WA Inbound' : 'Manual'}
                       </span>
                       {analysis && (
                         <span
-                          className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                          className={`px-2 py-0.5 rounded-full text-[11px] sm:text-xs font-bold whitespace-nowrap ${
                             isUnclear ? 'bg-rose-100 text-rose-700' : 'bg-lime-100 text-olive'
                           }`}
                         >
-                          Skor AI: {analysis.skor}/100 ({analysis.label})
+                          AI {analysis.skor}/100
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-warmmuted truncate">
-                      WA: <strong className="text-espresso">{lead.phone_wa}</strong> · Domisili:{' '}
-                      <strong className="text-espresso">{lead.domicile || '-'}</strong> · Sumber:{' '}
-                      {lead.source} · Minat:{' '}
-                      <strong className="text-terracotta">{lead.unit_interest}</strong> ({lead.payment_scheme})
+                    <p className="text-[11px] sm:text-xs text-warmmuted truncate">
+                      WA: <strong className="text-espresso">{lead.phone_wa}</strong> ·{' '}
+                      <strong className="text-terracotta">{lead.unit_interest}</strong>
+                      <span className="hidden sm:inline">
+                        {' '}· Domisili: <strong className="text-espresso">{lead.domicile || '-'}</strong> · Sumber: {lead.source} ({lead.payment_scheme})
+                      </span>
                     </p>
                   </div>
 
-                  {/* Kontrol Cepat & Tombol Buka/Tutup Detail */}
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {/* Kontrol Cepat & Tombol Buka/Tutup Detail (100% Terkandung & 1 Baris di Mobile) */}
+                  <div className="flex flex-col lg:flex-row lg:items-center gap-2 shrink-0 w-full lg:w-auto min-w-0">
                     <select
                       aria-label="Ubah Tahap Pipeline"
                       value={lead.stage}
                       onChange={(e) =>
                         handleQuickStageChange(lead, e.target.value as PipelineStageCode)
                       }
-                      className={`min-h-[42px] px-3 rounded-xl border text-xs font-bold cursor-pointer ${stageInfo.colorClass}`}
+                      className={`w-full lg:w-auto min-w-0 max-w-full min-h-[44px] px-3 rounded-xl border text-xs font-bold cursor-pointer truncate ${stageInfo.colorClass}`}
                     >
                       {PLAYBOOK_PIPELINE_STAGES.map((st) => (
                         <option key={st.code} value={st.code}>
@@ -2077,52 +2080,54 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                       ))}
                     </select>
 
-                    <button
-                      type="button"
-                      onClick={() => toggleLeadDetail(lead.id)}
-                      aria-expanded={isExpanded}
-                      className={`min-h-[42px] px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
-                        isExpanded
-                          ? 'bg-espresso text-white'
-                          : 'bg-amber-50 hover:bg-amber-100 text-terracotta border border-amber-200'
-                      }`}
-                    >
-                      <span>{isExpanded ? 'Tutup Detail' : 'Detail'}</span>
-                      {isExpanded ? (
-                        <ChevronUp className="size-4" />
-                      ) : (
-                        <ChevronDown className="size-4" />
-                      )}
-                    </button>
+                    <div className="grid grid-cols-4 lg:flex items-center gap-1.5 w-full lg:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => toggleLeadDetail(lead.id)}
+                        aria-expanded={isExpanded}
+                        className={`min-h-[44px] px-2 sm:px-3.5 rounded-xl text-[11px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer transition-colors whitespace-nowrap ${
+                          isExpanded
+                            ? 'bg-espresso text-white'
+                            : 'bg-amber-50 hover:bg-amber-100 text-terracotta border border-amber-200'
+                        }`}
+                      >
+                        <span>{isExpanded ? 'Tutup' : 'Detail'}</span>
+                        {isExpanded ? (
+                          <ChevronUp className="size-3.5 shrink-0" />
+                        ) : (
+                          <ChevronDown className="size-3.5 shrink-0" />
+                        )}
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => openEditLead(lead)}
-                      className="min-h-[42px] px-3 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Edit3 className="size-3.5" />
-                      <span>Edit</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => openEditLead(lead)}
+                        className="min-h-[44px] px-2 sm:px-3 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-[11px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap"
+                      >
+                        <Edit3 className="size-3.5 shrink-0" />
+                        <span>Edit</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      disabled={submitting}
-                      onClick={() => handleReanalyzeLead(lead)}
-                      className="min-h-[42px] px-3 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                      title="Analisis Ulang dengan AI"
-                    >
-                      <RefreshCw className={`size-3.5 ${submitting ? 'animate-spin' : ''}`} />
-                      <span>AI</span>
-                    </button>
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() => handleReanalyzeLead(lead)}
+                        className="min-h-[44px] px-2 sm:px-3 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-[11px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap"
+                        title="Analisis Ulang dengan AI"
+                      >
+                        <RefreshCw className={`size-3.5 shrink-0 ${submitting ? 'animate-spin' : ''}`} />
+                        <span>AI</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteLead(lead.id)}
-                      className="min-h-[42px] px-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold flex items-center justify-center cursor-pointer"
-                      title="Hapus Lead"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteLead(lead.id)}
+                        className="min-h-[44px] px-2 sm:px-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold inline-flex items-center justify-center cursor-pointer"
+                        title="Hapus Lead"
+                      >
+                        <Trash2 className="size-4 shrink-0" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
