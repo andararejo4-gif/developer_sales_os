@@ -1560,39 +1560,6 @@ export default function App() {
                 <span>Panel Multi-Tenant Core</span>
               </button>
             )}
-            {role === 'SE' && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => openView('pipeline')}
-                  className={`h-10 px-3.5 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors ${
-                    seRealData?.metrics?.waConnectionStatus === 'CONNECTED'
-                      ? 'bg-lime-100 text-olive border-lime-300'
-                      : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
-                  }`}
-                >
-                  <span
-                    className={`size-2 rounded-full ${
-                      seRealData?.metrics?.waConnectionStatus === 'CONNECTED'
-                        ? 'bg-olive animate-pulse'
-                        : 'bg-rose-600 animate-pulse'
-                    }`}
-                  />
-                  <span>
-                    {seRealData?.metrics?.waConnectionStatus === 'CONNECTED'
-                      ? `WA Terhubung (${seRealData?.metrics?.waConnectedPhone || 'Aktif'})`
-                      : 'WA Terdiskonek'}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsExportReportModalOpen(true)}
-                  className="h-10 px-4 rounded-xl bg-terracotta text-white text-xs font-semibold flex items-center gap-2 hover:bg-terracotta/90 cursor-pointer shadow-sm"
-                >
-                  <Download className="size-3.5" /> Export Laporan
-                </button>
-              </>
-            )}
             <div className="flex items-center gap-2 bg-sandstone px-3 py-1.5 rounded-xl border border-warmborder text-xs">
               <span className="size-2 rounded-full bg-olive animate-pulse"></span>
               <span className="font-semibold text-espresso">Online</span>

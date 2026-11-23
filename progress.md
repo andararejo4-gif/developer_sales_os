@@ -3,6 +3,16 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-041 | 2026-11-23 | Header Desktop Ringkas & Mobile-First Knowledge Base (2 Tab Horizontal + Expandable Facts)
+- Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
+- Ubah: `src/App.tsx`, `src/components/KnowledgeBaseViewer.tsx`
+- Detail Perubahan:
+  - **Header Desktop Ringkas (`App.tsx`):** Menghapus tombol `WA Terdiskonek / Terhubung` dan `Export Laporan` dari header desktop SE (karena sudah ada di halaman Dashboard SE & Pipeline).
+  - **Knowledge Base 2 Tab Horizontal (`KnowledgeBaseViewer.tsx`):** Menghapus tab `Tanya Produk (AI)` & `Kuis SE (10 Soal)`, menyisakan 2 tab horizontal sejajar (`Fakta Produk` & `Siteplan & KPR`) dengan `grid-cols-2` di mobile (`min-h-[44px]`).
+  - **Fakta Produk Tanpa Scroll Horizontal:** Menampilkan list identitas (`Fact ID`, kunci terbaca, kategori) yang saat diklik membuka detail Nilai Faktual, Sumber Kutipan, & Status.
+  - **Simulator KPR Mobile-First:** Merapikan input (`grid-cols-2` untuk DP & Tenor di mobile) serta menonjolkan `Estimasi Angsuran / Bulan` di kartu hasil KPR.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
+
 ## P-040 | 2026-11-23 | Hapus Badge Sudah Upload, Custom Stage Picker Pipeline & Mobile-First Absen/GPS
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/components/content/ContentSlotOverviewPage.tsx`, `src/components/PipelinePage.tsx`, `src/components/FieldOpsModal.tsx`
