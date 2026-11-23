@@ -3602,85 +3602,109 @@ export default function App() {
         </div>
       )}
 
-      {/* Developer Assistant Welcome & Notification Onboarding (Muncul Setiap Login Baru) */}
+      {/* Developer Assistant Welcome & Notification Onboarding (Clean Light Surface, Tanpa Warna Coklat) */}
       {showAssistantGreeting && authSession && (
         <div
-          className="fixed inset-0 z-[88] bg-espresso/65 backdrop-blur-[2px] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[88] bg-slate-900/45 backdrop-blur-[3px] flex items-center justify-center p-4"
           onClick={() => {
             sessionStorage.setItem(`devos_assistant_greeted_${authSession.loggedInAt}`, '1');
             setShowAssistantGreeting(false);
           }}
         >
           <div
-            className="w-full max-w-md bg-white rounded-3xl border border-warmborder shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-150"
+            className="w-full max-w-md bg-white rounded-3xl border border-slate-200/90 shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-150"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-5 bg-espresso text-white flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="size-11 rounded-2xl bg-terracotta text-white grid place-items-center shrink-0 shadow-sm">
-                  <Sparkles className="size-5" />
-                </div>
-                <div className="min-w-0">
-                  <span className="inline-block px-2 py-0.5 rounded-full bg-white/15 text-amber-300 text-[10px] font-extrabold uppercase tracking-wider">
-                    Developer Assistant AI
-                  </span>
-                  <h3 className="text-base font-extrabold mt-0.5 truncate">
-                    {(() => {
-                      const h = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
-                      const sapa = h < 11 ? 'Selamat Pagi' : h < 15 ? 'Selamat Siang' : h < 18 ? 'Selamat Sore' : 'Selamat Malam';
-                      return `${sapa}, ${user.name.split(' ')[0]}!`;
-                    })()}
-                  </h3>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  sessionStorage.setItem(`devos_assistant_greeted_${authSession.loggedInAt}`, '1');
-                  setShowAssistantGreeting(false);
-                }}
-                className="size-9 rounded-xl bg-white/10 hover:bg-white/20 text-white grid place-items-center shrink-0 cursor-pointer"
-                aria-label="Tutup sapaan asisten"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
+            {/* Top Accent Line */}
+            <div className="h-1.5 w-full bg-emerald-500" />
 
-            <div className="p-5 space-y-4">
-              <p className="text-xs sm:text-sm font-medium text-espresso leading-relaxed">
-                Halo, nama saya <strong>Developer Assistant</strong>. Saya sudah merangkum seluruh agenda, persiapan lapangan, dan tugas prioritas yang perlu Anda selesaikan hari ini di menu <strong>Notifikasi</strong>.
+            <div className="p-5 sm:p-6 space-y-5">
+              {/* Clean Light Header */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="size-12 rounded-2xl bg-emerald-50 border border-emerald-200/80 text-emerald-600 grid place-items-center shrink-0">
+                    <Sparkles className="size-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-700 text-[10px] font-extrabold uppercase tracking-wider">
+                      <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Developer Assistant AI
+                    </div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-slate-900 mt-1 truncate">
+                      {(() => {
+                        const h = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
+                        const sapa = h < 11 ? 'Selamat Pagi' : h < 15 ? 'Selamat Siang' : h < 18 ? 'Selamat Sore' : 'Selamat Malam';
+                        return `${sapa}, ${user.name.split(' ')[0]}!`;
+                      })()}
+                    </h3>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sessionStorage.setItem(`devos_assistant_greeted_${authSession.loggedInAt}`, '1');
+                    setShowAssistantGreeting(false);
+                  }}
+                  className="size-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 grid place-items-center shrink-0 cursor-pointer transition-colors"
+                  aria-label="Tutup sapaan asisten"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              <p className="text-xs sm:text-sm font-medium text-slate-600 leading-relaxed">
+                Halo, saya <strong className="text-slate-900">Developer Assistant</strong> Anda. Seluruh persiapan lapangan, jadwal konten, dan prospek prioritas hari ini sudah saya susun di menu <strong className="text-slate-900">Notifikasi</strong>.
               </p>
 
-              <div className="p-3.5 rounded-2xl bg-[#FBF9F5] border border-warmborder flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-terracotta">
-                    Checklist Hari Ini
-                  </p>
-                  <p className="text-xs font-extrabold text-espresso mt-0.5">
+              {/* 3-Column Clean Metric Preview */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
+                  <span className="text-[10px] font-bold text-slate-500 block">Agenda Aktif</span>
+                  <strong className="text-base font-extrabold text-slate-900 tabular-nums mt-0.5 block">
                     {buildSeRealtimeNotifications(seRealData?.quickStatus, Date.now(), {
                       leadsTodayValidCount: seRealData?.metrics?.leadsTodayValidCount,
                       needsCompletionLeadsCount: seRealData?.metrics?.needsCompletionLeadsCount,
                       waConnectionStatus: seRealData?.metrics?.waConnectionStatus,
-                    }).length || 4}{' '}
-                    Agenda &amp; Persiapan Siap Dicek
-                  </p>
+                    }).length || 4}
+                  </strong>
                 </div>
-                <span className="px-2.5 py-1 rounded-xl bg-amber-100 text-terracotta text-[11px] font-extrabold shrink-0">
-                  Real-Time
-                </span>
+                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
+                  <span className="text-[10px] font-bold text-slate-500 block">Konten Hari Ini</span>
+                  <strong className="text-base font-extrabold text-emerald-600 tabular-nums mt-0.5 block">
+                    {seRealData?.quickStatus?.slotsUploadedToday ?? 0}/{seRealData?.quickStatus?.slotsTotalToday ?? 3}
+                  </strong>
+                </div>
+                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
+                  <span className="text-[10px] font-bold text-slate-500 block">Target Lead</span>
+                  <strong className="text-base font-extrabold text-slate-900 tabular-nums mt-0.5 block">
+                    {seRealData?.metrics?.leadsTodayValidCount ?? 0}/8
+                  </strong>
+                </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  sessionStorage.setItem(`devos_assistant_greeted_${authSession.loggedInAt}`, '1');
-                  setShowAssistantGreeting(false);
-                  setIsNotifPanelOpen(true);
-                }}
-                className="w-full min-h-[46px] px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-              >
-                <span>Buka Menu Notifikasi Sekarang</span>
-              </button>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    sessionStorage.setItem(`devos_assistant_greeted_${authSession.loggedInAt}`, '1');
+                    setShowAssistantGreeting(false);
+                    setIsNotifPanelOpen(true);
+                  }}
+                  className="flex-1 min-h-[46px] px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-colors"
+                >
+                  <span>Cek Notifikasi Sekarang</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sessionStorage.setItem(`devos_assistant_greeted_${authSession.loggedInAt}`, '1');
+                    setShowAssistantGreeting(false);
+                  }}
+                  className="min-h-[46px] px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer transition-colors"
+                >
+                  Nanti
+                </button>
+              </div>
             </div>
           </div>
         </div>

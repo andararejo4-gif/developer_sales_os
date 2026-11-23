@@ -389,10 +389,22 @@ export const SeNotificationBell: React.FC<SeNotificationBellProps> = ({
   const totalCount = notifications.length;
 
   const badgeTone = (tone: SeNotificationItem['tone']) => {
-    if (tone === 'rose') return 'bg-rose-100 text-rose-700 border-rose-200';
-    if (tone === 'amber') return 'bg-amber-100 text-terracotta border-amber-200';
-    if (tone === 'emerald') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-    return 'bg-sandstone text-espresso border-warmborder';
+    if (tone === 'rose') return 'bg-rose-50 text-rose-700 border-rose-200';
+    if (tone === 'amber') return 'bg-amber-50 text-amber-700 border-amber-200';
+    if (tone === 'emerald') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    return 'bg-slate-100 text-slate-700 border-slate-200';
+  };
+
+  const accentBarTone = (tone: SeNotificationItem['tone']) => {
+    if (tone === 'rose') return 'bg-rose-500';
+    if (tone === 'amber') return 'bg-amber-500';
+    return 'bg-emerald-500';
+  };
+
+  const primaryBtnTone = (tone: SeNotificationItem['tone']) => {
+    if (tone === 'rose') return 'bg-rose-600 hover:bg-rose-700 text-white';
+    if (tone === 'amber') return 'bg-amber-600 hover:bg-amber-700 text-white';
+    return 'bg-emerald-600 hover:bg-emerald-700 text-white';
   };
 
   const iconForItem = (item: SeNotificationItem) => {
@@ -410,36 +422,43 @@ export const SeNotificationBell: React.FC<SeNotificationBellProps> = ({
       ? createPortal(
           <div className="fixed inset-0 z-[80] flex items-end md:items-start md:justify-end md:pt-16 md:pr-6">
             <div
-              className="fixed inset-0 bg-espresso/55 backdrop-blur-[1px] md:bg-espresso/20"
+              className="fixed inset-0 bg-slate-900/45 backdrop-blur-[2px] md:bg-slate-900/20"
               onClick={() => setIsOpen(false)}
             />
-            <div className="relative z-10 w-full md:w-[400px] bg-white rounded-t-3xl md:rounded-2xl border border-warmborder shadow-2xl overflow-hidden animate-in slide-in-from-bottom md:fade-in duration-150">
+            <div className="relative z-10 w-full md:w-[400px] bg-white rounded-t-3xl md:rounded-2xl border border-slate-200 shadow-2xl overflow-hidden animate-in slide-in-from-bottom md:fade-in duration-150">
               <div className="md:hidden pt-2.5 pb-1">
-                <div className="w-10 h-1 rounded-full bg-warmborder mx-auto" />
+                <div className="w-10 h-1 rounded-full bg-slate-200 mx-auto" />
               </div>
-              <div className="px-4 py-3 border-b border-warmborder bg-sandstone/40 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Bell className="size-4 text-terracotta" />
-                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-espresso">
-                    Tugas &amp; Pengingat ({totalCount})
-                  </h3>
+              <div className="px-4 py-3.5 border-b border-slate-100 bg-white flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="size-8 rounded-xl bg-emerald-50 border border-emerald-200/80 text-emerald-600 grid place-items-center">
+                    <Bell className="size-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
+                      Tugas &amp; Pengingat ({totalCount})
+                    </h3>
+                    <p className="text-[10px] font-medium text-slate-500">
+                      Ketuk item untuk melihat detail &amp; rekomendasi
+                    </p>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="size-9 rounded-xl bg-white border border-warmborder text-espresso grid place-items-center cursor-pointer"
+                  className="size-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 grid place-items-center cursor-pointer transition-colors"
                   aria-label="Tutup Notifikasi"
                 >
                   <X className="size-4" />
                 </button>
               </div>
 
-              <div className="max-h-[68dvh] md:max-h-[440px] overflow-y-auto divide-y divide-warmborder pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-1">
+              <div className="max-h-[68dvh] md:max-h-[440px] overflow-y-auto divide-y divide-slate-100 pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-1">
                 {notifications.length === 0 ? (
                   <div className="p-6 text-center space-y-2">
                     <CheckCircle2 className="size-8 text-emerald-600 mx-auto" />
-                    <p className="text-xs font-extrabold text-espresso">Semua Tugas Wajib Beres ✓</p>
-                    <p className="text-[11px] text-warmmuted">Tidak ada pengingat tertunda saat ini.</p>
+                    <p className="text-xs font-extrabold text-slate-900">Semua Tugas Wajib Beres ✓</p>
+                    <p className="text-[11px] text-slate-500">Tidak ada pengingat tertunda saat ini.</p>
                   </div>
                 ) : (
                   notifications.map((item) => {
@@ -452,7 +471,7 @@ export const SeNotificationBell: React.FC<SeNotificationBellProps> = ({
                           setIsOpen(false);
                           setSelectedNotif(item);
                         }}
-                        className="w-full min-h-[54px] px-4 py-3 text-left hover:bg-sandstone/40 active:bg-sandstone flex items-center justify-between gap-3 cursor-pointer transition-colors"
+                        className="w-full min-h-[56px] px-4 py-3 text-left hover:bg-slate-50 active:bg-slate-100 flex items-center justify-between gap-3 cursor-pointer transition-colors"
                       >
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div
@@ -463,7 +482,7 @@ export const SeNotificationBell: React.FC<SeNotificationBellProps> = ({
                             <Icon className="size-4" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-extrabold text-espresso truncate">
+                            <p className="text-xs font-extrabold text-slate-900 truncate">
                               {item.title}
                             </p>
                             <span
@@ -475,7 +494,7 @@ export const SeNotificationBell: React.FC<SeNotificationBellProps> = ({
                             </span>
                           </div>
                         </div>
-                        <ChevronRight className="size-4 text-warmmuted shrink-0" />
+                        <ChevronRight className="size-4 text-slate-400 shrink-0" />
                       </button>
                     );
                   })
@@ -491,44 +510,76 @@ export const SeNotificationBell: React.FC<SeNotificationBellProps> = ({
     selectedNotif && typeof document !== 'undefined'
       ? createPortal(
           <div
-            className="fixed inset-0 z-[90] bg-espresso/65 backdrop-blur-[2px] flex items-center justify-center p-4"
+            className="fixed inset-0 z-[90] bg-slate-900/45 backdrop-blur-[3px] flex items-center justify-center p-4"
             onClick={() => setSelectedNotif(null)}
           >
             <div
-              className="w-full max-w-md bg-white rounded-3xl border border-warmborder shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-150"
+              className="w-full max-w-md bg-white rounded-3xl border border-slate-200/90 shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-150"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="px-5 py-4 bg-espresso text-white flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/15 text-amber-300 text-[10px] font-extrabold uppercase tracking-wider">
-                    <Clock className="size-3" />
-                    {selectedNotif.badge}
-                  </span>
-                  <h3 className="text-sm font-extrabold mt-1 leading-snug">{selectedNotif.title}</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedNotif(null)}
-                  className="size-9 rounded-xl bg-white/10 hover:bg-white/20 text-white grid place-items-center shrink-0 cursor-pointer"
-                  aria-label="Tutup Detail Notifikasi"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
+              {/* Clean Accent Bar */}
+              <div className={`h-1.5 w-full ${accentBarTone(selectedNotif.tone)}`} />
 
-              <div className="p-5 space-y-4 max-h-[75dvh] overflow-y-auto">
-                <p className="text-xs font-semibold text-espresso leading-relaxed">
+              <div className="p-5 sm:p-6 space-y-4 max-h-[80dvh] overflow-y-auto">
+                {/* Clean Light Header (Zero Brown) */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    {(() => {
+                      const DetailIcon = iconForItem(selectedNotif);
+                      return (
+                        <div
+                          className={`size-11 rounded-2xl border grid place-items-center shrink-0 ${badgeTone(
+                            selectedNotif.tone
+                          )}`}
+                        >
+                          <DetailIcon className="size-5" />
+                        </div>
+                      );
+                    })()}
+                    <div className="min-w-0">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${badgeTone(
+                          selectedNotif.tone
+                        )}`}
+                      >
+                        <Clock className="size-3" />
+                        {selectedNotif.badge}
+                      </span>
+                      <h3 className="text-sm sm:text-base font-extrabold text-slate-900 mt-1 leading-snug">
+                        {selectedNotif.title}
+                      </h3>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNotif(null)}
+                    className="size-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 grid place-items-center shrink-0 cursor-pointer transition-colors"
+                    aria-label="Tutup Detail Notifikasi"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+
+                <p className="text-xs sm:text-sm font-medium text-slate-600 leading-relaxed">
                   {selectedNotif.summary}
                 </p>
 
+                {/* Clean Stat Tiles Grid */}
                 {selectedNotif.details.length > 0 && (
-                  <div className="rounded-2xl bg-sandstone/50 border border-warmborder divide-y divide-warmborder/70 text-xs">
+                  <div
+                    className={`grid gap-2 ${
+                      selectedNotif.details.length === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2'
+                    }`}
+                  >
                     {selectedNotif.details.map((d, idx) => (
-                      <div key={idx} className="px-3.5 py-2.5 flex items-start justify-between gap-3">
-                        <span className="text-[11px] font-bold text-warmmuted shrink-0">
+                      <div
+                        key={idx}
+                        className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-col justify-between gap-1"
+                      >
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                           {d.label}
                         </span>
-                        <span className="text-[11px] font-extrabold text-espresso text-right">
+                        <span className="text-xs font-extrabold text-slate-900 leading-snug">
                           {d.value}
                         </span>
                       </div>
@@ -536,33 +587,47 @@ export const SeNotificationBell: React.FC<SeNotificationBellProps> = ({
                   </div>
                 )}
 
-                <div className="p-3.5 rounded-2xl bg-[#FBF9F5] border border-warmborder space-y-2">
-                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-terracotta flex items-center gap-1.5">
+                {/* Numbered Actionable Recommendations */}
+                <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200/70 space-y-2.5">
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
                     <Sparkles className="size-3.5" />
-                    Rekomendasi Aksi
+                    Langkah Rekomendasi
                   </p>
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {selectedNotif.recommendations.map((rec, i) => (
-                      <div key={i} className="flex items-start gap-2 text-xs text-espresso">
-                        <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                        <span>{rec}</span>
+                      <div key={i} className="flex items-start gap-2.5 text-xs text-slate-800">
+                        <span className="size-5 rounded-full bg-white border border-emerald-200 text-emerald-700 text-[10px] font-black grid place-items-center shrink-0 mt-0.5">
+                          {i + 1}
+                        </span>
+                        <span className="font-medium leading-relaxed">{rec}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    const target = selectedNotif.target;
-                    setSelectedNotif(null);
-                    onNavigateTarget(target);
-                  }}
-                  className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                >
-                  <span>{selectedNotif.ctaLabel}</span>
-                  <ArrowRight className="size-4" />
-                </button>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = selectedNotif.target;
+                      setSelectedNotif(null);
+                      onNavigateTarget(target);
+                    }}
+                    className={`flex-1 min-h-[46px] px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-colors ${primaryBtnTone(
+                      selectedNotif.tone
+                    )}`}
+                  >
+                    <span>{selectedNotif.ctaLabel}</span>
+                    <ArrowRight className="size-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNotif(null)}
+                    className="min-h-[46px] px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer transition-colors"
+                  >
+                    Tutup
+                  </button>
+                </div>
               </div>
             </div>
           </div>,
