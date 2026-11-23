@@ -547,18 +547,69 @@ function toStringList(v: unknown): string[] {
 }
 
 /**
- * Rantai model prioritas di dalam combo `andararejomakmurjosjis`:
- * 1. `oc/deepseek-v4.1-flash-free`: Copywriting Bahasa Indonesia paling tajam, empatik, & natural.
- * 2. `oc/longcat-2.5-free`: Non-reasoning 200K context, cepat & bebas risiko reasoning token truncation.
- * 3. `oc/beam-free`: Sangat cepat (~1.2s-4.5s) untuk fallback instan.
- * 4. `andararejomakmurjosjis`: Router combo utama.
+ * Rantai model prioritas di 9router:
+ * 1. `andararejomakmurjosjis`: Router combo utama yang otomatis failover ke provider aktif.
+ * 2. `nous/upstage/solar-mini4:free`: Cepat, mendukung non-streaming JSON bersih.
+ * 3. `openrouter/google/gemma-4-31b-it:free`: Fallback kualitas Bahasa Indonesia baik.
+ * 4. `cf/@cf/meta/llama-3.3-70b-instruct-fp8-fast`: Fallback cepat Cloudflare Workers AI.
  */
 const PREFERRED_ANDARA_MODELS = [
-  'oc/deepseek-v4.1-flash-free',
-  'oc/longcat-2.5-free',
-  'oc/beam-free',
   'andararejomakmurjosjis',
+  'nous/upstage/solar-mini4:free',
+  'openrouter/google/gemma-4-31b-it:free',
+  'cf/@cf/meta/llama-3.3-70b-instruct-fp8-fast',
 ];
+
+function parseRouterCompletionBody(rawBody: string, fallbackModel: string): {
+  msgContent: string;
+  reasoning: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+} {
+  const trimmed = rawBody.trim();
+  if (!trimmed.startsWith('data:')) {
+    const payload = JSON.parse(trimmed) as Record<string, any>;
+    return {
+      msgContent: String(payload?.choices?.[0]?.message?.content ?? ''),
+      reasoning: String(payload?.choices?.[0]?.message?.reasoning_content ?? ''),
+      model: String(payload?.model ?? fallbackModel),
+      promptTokens: Number(payload?.usage?.prompt_tokens ?? 0),
+      completionTokens: Number(payload?.usage?.completion_tokens ?? 0),
+    };
+  }
+
+  let msgContent = '';
+  let reasoning = '';
+  let model = fallbackModel;
+  let promptTokens = 0;
+  let completionTokens = 0;
+
+  for (const line of trimmed.split(/\r?\n/)) {
+    const cleanLine = line.trim();
+    if (!cleanLine.startsWith('data:')) continue;
+    const jsonPart = cleanLine.slice(5).trim();
+    if (!jsonPart || jsonPart === '[DONE]') continue;
+    try {
+      const chunk = JSON.parse(jsonPart) as Record<string, any>;
+      if (chunk.model) model = String(chunk.model);
+      if (chunk.usage) {
+        promptTokens = Number(chunk.usage.prompt_tokens ?? promptTokens);
+        completionTokens = Number(chunk.usage.completion_tokens ?? completionTokens);
+      }
+      const delta = chunk?.choices?.[0]?.delta;
+      if (delta?.content) msgContent += String(delta.content);
+      if (delta?.reasoning_content) reasoning += String(delta.reasoning_content);
+      const msg = chunk?.choices?.[0]?.message;
+      if (msg?.content) msgContent = String(msg.content);
+      if (msg?.reasoning_content) reasoning = String(msg.reasoning_content);
+    } catch {
+      /* abaikan chunk parsial */
+    }
+  }
+
+  return { msgContent, reasoning, model, promptTokens, completionTokens };
+}
 
 export async function analyzeLeadWithAi(input: LeadAnalysisInput): Promise<LeadAiEvaluation> {
   const routerUrl = (process.env.AI_ROUTER_URL || 'https://9router.giivepro.com/v1').replace(/\/+$/, '');
@@ -653,10 +704,9 @@ export async function analyzeLeadWithAi(input: LeadAnalysisInput): Promise<LeadA
     'Balas HANYA objek JSON valid dengan key: skor (0-100), label (SANGAT_PROSPECTIF|PROSPECTIF|PERLU_PEMBINAAN|PERLU_DILENGKAPI), clarity_status (JELAS|PERLU_DILENGKAPI), unclear_parts ([{field,issue,example}]), ringkas (1-2 kalimat), poin_kuat ([2-3 string]), poin_lemah ([1-2 string]), perlu_dicek_ulang ([2-3 pertanyaan BANT natural]), rekomendasi ([2-3 saran taktis]), recommended_persona (P1..P6), recommended_bant ({b,a,n,t}), extracted_domicile (string opsional), extracted_unit_interest (string opsional), extracted_payment_scheme (string opsional), followup_draft_message (string pesan WA lengkap).',
   ].join('\n');
 
-  const modelChain =
-    configuredModel && !PREFERRED_ANDARA_MODELS.includes(configuredModel)
-      ? [configuredModel, ...PREFERRED_ANDARA_MODELS]
-      : PREFERRED_ANDARA_MODELS;
+  const modelChain = Array.from(
+    new Set([configuredModel, ...PREFERRED_ANDARA_MODELS].filter(Boolean))
+  );
 
   if (apiKey) {
     for (const candidateModel of modelChain) {
@@ -671,21 +721,30 @@ export async function analyzeLeadWithAi(input: LeadAnalysisInput): Promise<LeadA
           },
           body: JSON.stringify({
             model: candidateModel,
+            stream: false,
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt },
             ],
-            max_tokens: 8192,
+            max_tokens: 4096,
             temperature: input.isReanalyze ? 0.65 : 0.35,
           }),
           signal: controller.signal,
         });
 
-        if (!res.ok) continue;
+        if (!res.ok) {
+          console.warn(`[AI Engine] Model ${candidateModel} returned HTTP ${res.status}`);
+          continue;
+        }
 
-        const payload = (await res.json()) as Record<string, any>;
-        const msgContent = String(payload?.choices?.[0]?.message?.content ?? '');
-        const reasoning = String(payload?.choices?.[0]?.message?.reasoning_content ?? '');
+        const rawBody = await res.text();
+        const {
+          msgContent,
+          reasoning,
+          model: resolvedModel,
+          promptTokens,
+          completionTokens,
+        } = parseRouterCompletionBody(rawBody, candidateModel);
         const rawText = msgContent.includes('{') ? msgContent : msgContent.trim() || reasoning;
         const parsed = extractJsonObject(rawText);
 
@@ -782,12 +841,15 @@ export async function analyzeLeadWithAi(input: LeadAnalysisInput): Promise<LeadA
             String(parsed.followup_draft_message || ''),
             input
           ),
-          model: String(payload?.model ?? candidateModel),
-          prompt_tokens: Number(payload?.usage?.prompt_tokens ?? 0),
-          completion_tokens: Number(payload?.usage?.completion_tokens ?? 0),
+          model: resolvedModel,
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
         };
-      } catch {
-        /* lanjut coba model berikutnya di dalam rantai andararejomakmurjosjis */
+      } catch (err) {
+        console.warn(
+          `[AI Engine] Model ${candidateModel} failed:`,
+          err instanceof Error ? err.message : String(err)
+        );
       } finally {
         clearTimeout(timer);
       }
