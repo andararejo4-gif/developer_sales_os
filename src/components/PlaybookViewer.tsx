@@ -10,6 +10,9 @@ import {
   X,
   AlertCircle,
   Clock,
+  Copy,
+  ShieldAlert,
+  MessageSquare,
 } from 'lucide-react';
 import { getPlaybook } from '../lib/playbook/playbook-generator';
 import { generatePlaybookDocx } from '../lib/exporters/playbook-docx';
@@ -21,8 +24,8 @@ import {
 } from '../lib/navigation/router';
 import type { PlaybookPlan, PlaybookRole } from '../lib/playbook/types';
 
-type PlaybookTab = 'sop' | 'bant' | 'kpi' | 'funnel';
-const VALID_PLAYBOOK_TABS: PlaybookTab[] = ['sop', 'bant', 'kpi', 'funnel'];
+type PlaybookTab = 'sop' | 'scripts' | 'bant' | 'kpi' | 'funnel';
+const VALID_PLAYBOOK_TABS: PlaybookTab[] = ['sop', 'scripts', 'bant', 'kpi', 'funnel'];
 
 interface PlaybookViewerProps {
   projectId?: string;
@@ -204,10 +207,11 @@ export function PlaybookViewer({
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex gap-1">
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar max-w-full">
             {(
               [
                 { key: 'sop', label: 'SOP Harian' },
+                { key: 'scripts', label: 'Skrip, Keberatan & Eskalasi' },
                 { key: 'bant', label: 'Kualifikasi BANT' },
                 { key: 'kpi', label: 'Matriks KPI' },
                 { key: 'funnel', label: 'Reverse Funnel' },
@@ -216,7 +220,7 @@ export function PlaybookViewer({
               <button
                 key={t.key}
                 onClick={() => setActiveTab(t.key)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`min-h-[44px] md:min-h-0 px-3.5 py-2 md:py-1.5 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-all cursor-pointer ${
                   activeTab === t.key
                     ? 'bg-terracotta text-white shadow-sm'
                     : 'bg-sandstone text-warmmuted hover:text-espresso'
@@ -229,7 +233,112 @@ export function PlaybookViewer({
         </div>
 
         {/* Body Content */}
-        <div className="p-6 overflow-y-auto flex-1 bg-[#FBF9F5] space-y-6">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-[#FBF9F5] space-y-6">
+          {/* TAB 1B: SKRIP FOLLOW-UP, OBJECTION HANDLING & ESKALASI */}
+          {activeTab === 'scripts' && (
+            <div className="space-y-6">
+              {/* Bagian 1: Skrip Follow-Up WA & Telepon */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-extrabold text-espresso flex items-center gap-2">
+                  <MessageSquare className="size-4 text-terracotta" />
+                  <span>Skrip Follow-Up Prospek (WhatsApp &amp; Telepon)</span>
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    {
+                      title: '1. Respon Cepat Lead Baru (SLA ≤ 5 Menit)',
+                      text: 'Halo Bapak/Ibu [Nama], salam kenal. Saya [Nama SE] dari The Park Townhouse Sukoharjo. Untuk unit 2 lantai Japandi Modern mulai Rp650 Jt (sudah garasi dalam & clubhouse tanpa biaya membership). Rencana untuk hunian keluarga atau investasi, Bapak/Ibu?',
+                    },
+                    {
+                      title: '2. Skrip Telepon Undangan Survei Akhir Pekan',
+                      text: 'Selamat siang Bapak/Ibu [Nama], izin follow-up info The Park Townhouse Jombor. Sabtu/Minggu ini kami ada sesi private preview show unit. Lebih nyaman mampir pagi jam 10.00 atau sore jam 15.00 bersama pasangan?',
+                    },
+                    {
+                      title: '3. Follow-Up H+1 Pasca-Kunjungan Lokasi',
+                      text: 'Terima kasih sudah meluangkan waktu melihat unit [Cluster] kemarin, Bapak/Ibu [Nama]. Saya lampirkan rincian simulasi cicilan KPR & Cash Bertahap 24 bulan sesuai unit yang paling cocok tadi. Ada bagian yang ingin kita sesuaikan?',
+                    },
+                    {
+                      title: '4. Pengunci Booking Fee Rp5 Juta (Unit Terbatas)',
+                      text: 'Info update Bapak/Ibu [Nama]: unit [Nomor Unit] saat ini tersedia, total proyek hanya 35 unit boutique. Untuk mengunci harga promo bulan ini dan mengamankan kavling, cukup tanda jadi Rp5 juta ke rekening resmi PT Andara Rejo Makmur.',
+                    },
+                  ].map((scr) => (
+                    <div key={scr.title} className="p-4 rounded-2xl bg-white border border-warmborder space-y-2.5 flex flex-col justify-between">
+                      <div>
+                        <p className="text-xs font-extrabold text-terracotta">{scr.title}</p>
+                        <p className="text-xs text-espresso leading-relaxed mt-1.5">{scr.text}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(scr.text);
+                          setToastMessage(`Skrip "${scr.title}" disalin!`);
+                        }}
+                        className="min-h-[44px] w-full sm:w-auto self-start px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Copy className="size-3.5 text-terracotta" />
+                        <span>Salin Skrip</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bagian 2: Panduan Penanganan Keberatan (Objection Handling) */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-extrabold text-espresso flex items-center gap-2">
+                  <AlertCircle className="size-4 text-olive" />
+                  <span>Panduan Penanganan Keberatan Konsumen (Bab 10)</span>
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    {
+                      keberatan: '"Harganya terasa lebih tinggi dibanding sekitar"',
+                      respon: 'Empati → Jelaskan harga sudah termasuk bangunan 2 lantai (3 KT), garasi dalam tertutup, one-gate RFID + CCTV 24 jam, serta akses seumur hidup Clubhouse (kolam renang, gym, mini golf) tanpa iuran bulanan membership.',
+                    },
+                    {
+                      keberatan: '"Lokasinya di Jombor agak masuk ke selatan"',
+                      respon: 'Tunjukkan jarak riil: hanya ±7 menit ke RS Indriati & pusat bisnis Solo Baru, akses jalan cor/aspal lebar, lingkungan lebih tenang & privat (bukan jalur bising) untuk tumbuh kembang anak.',
+                    },
+                    {
+                      keberatan: '"Takut pengajuan KPR ditolak / ribet berkas"',
+                      respon: 'Developer bekerja sama dengan bank rekanan (BSI, BTN, Mandiri, BCA). Tim Admin siap bantu pra-cek kelayakan SLIK & simulasi angsuran, atau alternatif Cash Bertahap 12/24 bulan langsung ke developer.',
+                    },
+                    {
+                      keberatan: '"Harus diskusi dulu dengan pasangan / orang tua"',
+                      respon: 'Validasi keputusan keluarga → Jangan memaksa via chat, langsung ajak datang bersama pasangan/orang tua pada akhir pekan agar mereka melihat langsung kualitas bangunan & clubhouse.',
+                    },
+                  ].map((obj) => (
+                    <div key={obj.keberatan} className="p-4 rounded-2xl bg-white border border-warmborder space-y-1.5">
+                      <p className="text-xs font-extrabold text-espresso">{obj.keberatan}</p>
+                      <p className="text-xs text-warmmuted leading-relaxed">{obj.respon}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bagian 3: Alur Eskalasi ke TL / SM */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-espresso text-white space-y-3">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="size-4 text-amber-400 shrink-0" />
+                  <h3 className="text-sm font-extrabold">Alur Eskalasi Prospek ke Team Leader (TL) &amp; Sales Manager (SM)</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-white/10 space-y-1">
+                    <p className="font-extrabold text-amber-300">1. Eskalasi ke TL (Coaching &amp; Pool)</p>
+                    <p className="text-white/80">Prospek keberatan teknis / belum direspons &gt; 5 menit / butuh pendampingan negosiasi lapangan saat survei lokasi.</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/10 space-y-1">
+                    <p className="font-extrabold text-amber-300">2. Eskalasi ke SM (Diskon &amp; Skema Khusus)</p>
+                    <p className="text-white/80">Permintaan diskon khusus di luar pricelist standar, custom termin Cash Bertahap, atau penguncian unit prioritas (Hold).</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/10 space-y-1">
+                    <p className="font-extrabold text-amber-300">3. Eskalasi ke Admin (KPR &amp; Booking)</p>
+                    <p className="text-white/80">Verifikasi bukti transfer Booking Fee Rp5 Jt (wajib ke rekening PT Andara Rejo Makmur) &amp; pemberkasan multi-bank KPR.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           {/* TAB 1: SOP HARIAN */}
           {activeTab === 'sop' && (
             <div className="space-y-3">

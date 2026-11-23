@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { BookOpen, Send, Sparkles, Printer, Search } from 'lucide-react';
+import { BookOpen, Send, Sparkles, Printer, Search, Calculator, Home } from 'lucide-react';
 import { THE_PARK_KB_FACTS } from '../lib/kb/the-park-facts';
 import { askProductKnowledge } from '../lib/kb/qa-engine';
 import { PRODUCT_QUIZ_QUESTIONS, gradeQuiz } from '../lib/kb/quiz-engine';
 import { generateProductCardHtml } from '../lib/kb/product-card';
+import { PLAYBOOK_UNIT_CATALOG } from '../lib/kb/playbook-v1-2-knowledge';
 import {
   getQueryParam,
   setQueryParam,
@@ -11,8 +12,8 @@ import {
   savePersistedState,
 } from '../lib/navigation/router';
 
-type KbTab = 'facts' | 'tanya' | 'kuis';
-const VALID_KB_TABS: KbTab[] = ['facts', 'tanya', 'kuis'];
+type KbTab = 'facts' | 'unit_sim' | 'tanya' | 'kuis';
+const VALID_KB_TABS: KbTab[] = ['facts', 'unit_sim', 'tanya', 'kuis'];
 
 export const KnowledgeBaseViewer: React.FC<{ syncUrlTab?: boolean }> = ({ syncUrlTab = true }) => {
   const [activeTab, setActiveTab] = useState<KbTab>(() => {
@@ -49,6 +50,28 @@ export const KnowledgeBaseViewer: React.FC<{ syncUrlTab?: boolean }> = ({ syncUr
   const [quizResult, setQuizResult] = useState<ReturnType<typeof gradeQuiz> | null>(() =>
     loadPersistedState<ReturnType<typeof gradeQuiz> | null>('devos_kb_quiz_result', null)
   );
+
+  // Simulasi KPR & Siteplan State
+  const [simUnitIdx, setSimUnitIdx] = useState(0);
+  const [simDpPercent, setSimDpPercent] = useState(10);
+  const [simTenorYears, setSimTenorYears] = useState(15);
+  const [simInterestRate, setSimInterestRate] = useState(6.5);
+
+  const selectedSimUnit = PLAYBOOK_UNIT_CATALOG[simUnitIdx] || PLAYBOOK_UNIT_CATALOG[0];
+  const simPrice = selectedSimUnit.priceKprIdr;
+  const simDpAmount = Math.round((simPrice * simDpPercent) / 100);
+  const simPlafon = Math.max(0, simPrice - simDpAmount);
+  const monthlyRate = simInterestRate / 100 / 12;
+  const totalMonths = simTenorYears * 12;
+  const simMonthlyInstallment =
+    monthlyRate > 0
+      ? Math.round(
+          (simPlafon * (monthlyRate * Math.pow(1 + monthlyRate, totalMonths))) /
+            (Math.pow(1 + monthlyRate, totalMonths) - 1)
+        )
+      : Math.round(simPlafon / Math.max(1, totalMonths));
+  const formatIdr = (n: number) =>
+    new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
 
   useEffect(() => {
     savePersistedState('devos_kb_tab', activeTab);
@@ -145,18 +168,26 @@ export const KnowledgeBaseViewer: React.FC<{ syncUrlTab?: boolean }> = ({ syncUr
             <span>Kartu Produk (PDF)</span>
           </button>
 
-          <div className="inline-flex p-1 bg-sandstone rounded-xl border border-warmborder text-xs font-bold">
+          <div className="flex flex-wrap gap-1 p-1 bg-sandstone rounded-xl border border-warmborder text-xs font-bold">
             <button
               onClick={() => setActiveTab('facts')}
-              className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+              className={`min-h-[44px] md:min-h-0 px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                 activeTab === 'facts' ? 'bg-espresso text-white' : 'text-warmmuted hover:text-espresso'
               }`}
             >
               Fakta Produk
             </button>
             <button
+              onClick={() => setActiveTab('unit_sim')}
+              className={`min-h-[44px] md:min-h-0 px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                activeTab === 'unit_sim' ? 'bg-espresso text-white' : 'text-warmmuted hover:text-espresso'
+              }`}
+            >
+              Siteplan &amp; Simulasi KPR
+            </button>
+            <button
               onClick={() => setActiveTab('tanya')}
-              className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+              className={`min-h-[44px] md:min-h-0 px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                 activeTab === 'tanya' ? 'bg-espresso text-white' : 'text-warmmuted hover:text-espresso'
               }`}
             >
@@ -164,7 +195,7 @@ export const KnowledgeBaseViewer: React.FC<{ syncUrlTab?: boolean }> = ({ syncUr
             </button>
             <button
               onClick={() => setActiveTab('kuis')}
-              className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+              className={`min-h-[44px] md:min-h-0 px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                 activeTab === 'kuis' ? 'bg-espresso text-white' : 'text-warmmuted hover:text-espresso'
               }`}
             >
@@ -173,6 +204,128 @@ export const KnowledgeBaseViewer: React.FC<{ syncUrlTab?: boolean }> = ({ syncUr
           </div>
         </div>
       </div>
+
+      {/* TAB 1B: SITEPLAN, DENAH & SIMULASI CICILAN KPR */}
+      {activeTab === 'unit_sim' && (
+        <div className="p-4 sm:p-6 space-y-6">
+          {/* Siteplan & Denah 3 Klaster */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-extrabold text-espresso flex items-center gap-2">
+              <Home className="size-4 text-terracotta" />
+              <span>Siteplan &amp; Denah Tipe Unit The Park Townhouse (35 Unit Boutique)</span>
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              {[
+                {
+                  cluster: 'Cluster Nagoya (Jl. Tentara Pelajar)',
+                  badge: 'Gold 3KT · Mulai Rp650 Jt',
+                  specs: 'LT 63 m² / LB 75 m² · 2 Lantai Japandi Modern · 3 Kamar Tidur · 2 Kamar Mandi · Garasi Dalam · Lokasi Clubhouse (Kolam Renang, Gym, Mini Golf).',
+                },
+                {
+                  cluster: 'Cluster Osaka (Koridor Jl. Jend. Sudirman)',
+                  badge: 'Titanium 3KT · Mulai Rp775 Jt',
+                  specs: 'LT 66 m² / LB 80 m² · 2 Lantai · 3 Kamar Tidur · 2 Kamar Mandi · Garasi Dalam + Carport · One-Gate RFID & Smart Door Lock.',
+                },
+                {
+                  cluster: 'Cluster Tokyo (Koridor Jl. Jend. Sudirman)',
+                  badge: 'Signature 3KT · Mulai Rp950 Jt',
+                  specs: 'LT 72 m² / LB 90 m² · 2 Lantai Premium · 3 Kamar Tidur · 3 Kamar Mandi · Ruang Keluarga Luas + Taman Belakang Privat.',
+                },
+              ].map((c) => (
+                <div key={c.cluster} className="p-4 rounded-2xl bg-sandstone/40 border border-warmborder space-y-2">
+                  <span className="inline-block px-2 py-0.5 rounded-md bg-amber-100 text-terracotta text-[11px] font-extrabold">
+                    {c.badge}
+                  </span>
+                  <p className="font-extrabold text-espresso">{c.cluster}</p>
+                  <p className="text-warmmuted leading-relaxed">{c.specs}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Simulasi Cicilan KPR Interaktif */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-sandstone/50 border border-warmborder space-y-4">
+            <div className="flex items-center gap-2">
+              <Calculator className="size-4 text-terracotta" />
+              <h4 className="text-sm font-extrabold text-espresso">Simulator Angsuran KPR (Presentasi ke Klien)</h4>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              <div>
+                <label className="block font-bold text-espresso mb-1">Pilih Tipe Unit</label>
+                <select
+                  value={simUnitIdx}
+                  onChange={(e) => setSimUnitIdx(Number(e.target.value))}
+                  className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder bg-white font-semibold"
+                >
+                  {PLAYBOOK_UNIT_CATALOG.map((u, idx) => (
+                    <option key={u.label} value={idx}>
+                      {u.label} ({formatIdr(u.priceKprIdr)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-espresso mb-1">Uang Muka / DP ({simDpPercent}%)</label>
+                <select
+                  value={simDpPercent}
+                  onChange={(e) => setSimDpPercent(Number(e.target.value))}
+                  className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder bg-white font-semibold"
+                >
+                  {[10, 15, 20, 30].map((d) => (
+                    <option key={d} value={d}>{d}% ({formatIdr(Math.round((simPrice * d) / 100))})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-espresso mb-1">Tenor Cicilan</label>
+                <select
+                  value={simTenorYears}
+                  onChange={(e) => setSimTenorYears(Number(e.target.value))}
+                  className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder bg-white font-semibold"
+                >
+                  {[5, 10, 15, 20].map((t) => (
+                    <option key={t} value={t}>{t} Tahun ({t * 12} Bulan)</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-espresso mb-1">Estimasi Bunga (% / th)</label>
+                <input
+                  type="number"
+                  step="0.25"
+                  min={0}
+                  max={15}
+                  value={simInterestRate}
+                  onChange={(e) => setSimInterestRate(Number(e.target.value))}
+                  className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder bg-white font-semibold"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-2xl bg-espresso text-white">
+              <div>
+                <span className="text-[11px] text-white/70 block">Plafon Pinjaman KPR</span>
+                <strong className="text-base font-extrabold tabular-nums">{formatIdr(simPlafon)}</strong>
+              </div>
+              <div>
+                <span className="text-[11px] text-white/70 block">Estimasi DP ({simDpPercent}%)</span>
+                <strong className="text-base font-extrabold tabular-nums">{formatIdr(simDpAmount)}</strong>
+              </div>
+              <div>
+                <span className="text-[11px] text-amber-300 block">Estimasi Angsuran / Bulan</span>
+                <strong className="text-xl font-extrabold text-amber-300 tabular-nums">
+                  {formatIdr(simMonthlyInstallment)}
+                </strong>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-warmmuted leading-relaxed">
+              <strong>Disclaimer:</strong> Hasil simulasi merupakan estimasi indikatif dan bukan komitmen kredit final. Keputusan suku bunga dan persetujuan plafon pembiayaan sepenuhnya merupakan wewenang bank rekanan penyedia KPR.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* TAB 1: DAFTAR FAKTA PRODUK */}
       {activeTab === 'facts' && (

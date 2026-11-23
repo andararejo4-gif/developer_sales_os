@@ -5,18 +5,28 @@ import {
   Compass,
   Users,
   LayoutGrid,
+  MapPin,
+  PhoneCall,
 } from 'lucide-react';
 
-export type MobileNavTab = 'dashboard' | 'jalur' | 'riset' | 'pipeline' | 'lainnya';
+export type MobileNavTab =
+  | 'dashboard'
+  | 'jalur'
+  | 'riset'
+  | 'pipeline'
+  | 'rute'
+  | 'lapangan'
+  | 'lainnya';
 
 interface MobileBottomNavProps {
   activeTab: MobileNavTab;
   isMoreOpen: boolean;
   isOtherViewActive?: boolean;
+  role?: string;
   onSelectTab: (tab: MobileNavTab) => void;
 }
 
-const NAV_ITEMS: {
+const DEFAULT_NAV_ITEMS: {
   id: MobileNavTab;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -28,19 +38,33 @@ const NAV_ITEMS: {
   { id: 'lainnya', label: 'Lainnya', icon: LayoutGrid },
 ];
 
+const SE_NAV_ITEMS: {
+  id: MobileNavTab;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'pipeline', label: 'Pipeline', icon: Users },
+  { id: 'rute', label: 'Rute', icon: MapPin },
+  { id: 'lapangan', label: 'Absen & Call', icon: PhoneCall },
+  { id: 'lainnya', label: 'Lainnya', icon: LayoutGrid },
+];
+
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   activeTab,
   isMoreOpen,
   isOtherViewActive = false,
+  role,
   onSelectTab,
 }) => {
+  const navItems = role === 'SE' ? SE_NAV_ITEMS : DEFAULT_NAV_ITEMS;
   return (
     <nav
       aria-label="Navigasi Bawah Mobile"
       className="fixed inset-x-0 bottom-0 z-40 md:hidden bg-white border-t border-warmborder pb-[env(safe-area-inset-bottom)]"
     >
       <div className="grid grid-cols-5 h-16 max-w-lg mx-auto px-1">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const Icon = item.icon;
           const isActive =
             item.id === 'lainnya'

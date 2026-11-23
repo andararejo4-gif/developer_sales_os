@@ -200,21 +200,38 @@ const BOFU_BLUEPRINTS: SlotBlueprint[] = [
   },
 ];
 
+function hashSeed(str: string): number {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
+
 /**
  * Generates 90 slots for 30 days (Day 1..30, Slots 1..3 per day) for the selected track.
+ * Optional seedKey (e.g., userEmail) rotates blueprints deterministically per SE account
+ * so each Sales Executive receives a unique content schedule.
  */
-export function generateContentCalendarSlots(track: ContentTrack = 'OFFICIAL'): ContentSlot[] {
+export function generateContentCalendarSlots(
+  track: ContentTrack = 'OFFICIAL',
+  seedKey?: string
+): ContentSlot[] {
   const slots: ContentSlot[] = [];
+  const seed = seedKey ? hashSeed(seedKey.toLowerCase().trim()) : 0;
+  const isCustomSe = Boolean(seedKey && track === 'SALES_IN_HOUSE');
 
   for (let day = 1; day <= 30; day++) {
     // Slot 1: TOFU (Pagi - 09:00 WIB)
-    const tofuIndex = (day - 1) % TOFU_BLUEPRINTS.length;
+    const tofuOffset = isCustomSe ? seed % TOFU_BLUEPRINTS.length : 0;
+    const tofuIndex = (((day - 1 + tofuOffset) % TOFU_BLUEPRINTS.length) + TOFU_BLUEPRINTS.length) % TOFU_BLUEPRINTS.length;
     const tofu = TOFU_BLUEPRINTS[tofuIndex];
+    const s1Done = !isCustomSe && day <= 3;
     slots.push({
       id: `slot-d${day}-s1-${track.toLowerCase()}`,
       dayNumber: day,
       slotOrder: 1,
-      scheduledTime: '09:00 WIB',
+      scheduledTime: isCustomSe && seed % 2 === 1 ? '08:30 WIB' : '09:00 WIB',
       funnelStage: 'TOFU',
       track,
       platform: tofu.platform,
@@ -228,19 +245,21 @@ export function generateContentCalendarSlots(track: ContentTrack = 'OFFICIAL'): 
       cta: tofu.cta,
       sourceFactId: tofu.sourceFactId,
       sourceLoveLetterPoint: tofu.sourceLoveLetterPoint,
-      status: day <= 3 ? 'SUDAH_POSTING' : 'SIAP',
-      postedUrl: day <= 3 ? `https://instagram.com/p/thepark_d${day}_s1` : undefined,
-      postedAt: day <= 3 ? new Date(Date.now() - (4 - day) * 86400000).toISOString() : undefined,
+      status: s1Done ? 'SUDAH_POSTING' : 'SIAP',
+      postedUrl: s1Done ? `https://instagram.com/p/thepark_d${day}_s1` : undefined,
+      postedAt: s1Done ? new Date(Date.now() - (4 - day) * 86400000).toISOString() : undefined,
     });
 
     // Slot 2: MOFU (Siang/Sore - 14:00 WIB)
-    const mofuIndex = (day - 1) % MOFU_BLUEPRINTS.length;
+    const mofuOffset = isCustomSe ? (seed >>> 2) % MOFU_BLUEPRINTS.length : 0;
+    const mofuIndex = (((day - 1 + mofuOffset) % MOFU_BLUEPRINTS.length) + MOFU_BLUEPRINTS.length) % MOFU_BLUEPRINTS.length;
     const mofu = MOFU_BLUEPRINTS[mofuIndex];
+    const s2Done = !isCustomSe && day <= 2;
     slots.push({
       id: `slot-d${day}-s2-${track.toLowerCase()}`,
       dayNumber: day,
       slotOrder: 2,
-      scheduledTime: '14:00 WIB',
+      scheduledTime: isCustomSe && seed % 2 === 1 ? '13:30 WIB' : '14:00 WIB',
       funnelStage: 'MOFU',
       track,
       platform: mofu.platform,
@@ -254,19 +273,21 @@ export function generateContentCalendarSlots(track: ContentTrack = 'OFFICIAL'): 
       cta: mofu.cta,
       sourceFactId: mofu.sourceFactId,
       sourceLoveLetterPoint: mofu.sourceLoveLetterPoint,
-      status: day <= 2 ? 'SUDAH_POSTING' : 'SIAP',
-      postedUrl: day <= 2 ? `https://tiktok.com/@theparksukoharjo/video/d${day}_s2` : undefined,
-      postedAt: day <= 2 ? new Date(Date.now() - (4 - day) * 86400000).toISOString() : undefined,
+      status: s2Done ? 'SUDAH_POSTING' : 'SIAP',
+      postedUrl: s2Done ? `https://tiktok.com/@theparksukoharjo/video/d${day}_s2` : undefined,
+      postedAt: s2Done ? new Date(Date.now() - (4 - day) * 86400000).toISOString() : undefined,
     });
 
     // Slot 3: BOFU (Malam - 19:30 WIB)
-    const bofuIndex = (day - 1) % BOFU_BLUEPRINTS.length;
+    const bofuOffset = isCustomSe ? (seed >>> 4) % BOFU_BLUEPRINTS.length : 0;
+    const bofuIndex = (((day - 1 + bofuOffset) % BOFU_BLUEPRINTS.length) + BOFU_BLUEPRINTS.length) % BOFU_BLUEPRINTS.length;
     const bofu = BOFU_BLUEPRINTS[bofuIndex];
+    const s3Done = !isCustomSe && day === 1;
     slots.push({
       id: `slot-d${day}-s3-${track.toLowerCase()}`,
       dayNumber: day,
       slotOrder: 3,
-      scheduledTime: '19:30 WIB',
+      scheduledTime: isCustomSe && seed % 2 === 1 ? '19:00 WIB' : '19:30 WIB',
       funnelStage: 'BOFU',
       track,
       platform: bofu.platform,
@@ -280,9 +301,9 @@ export function generateContentCalendarSlots(track: ContentTrack = 'OFFICIAL'): 
       cta: bofu.cta,
       sourceFactId: bofu.sourceFactId,
       sourceLoveLetterPoint: bofu.sourceLoveLetterPoint,
-      status: day === 1 ? 'SUDAH_POSTING' : 'SIAP',
-      postedUrl: day === 1 ? `https://instagram.com/p/thepark_d1_s3` : undefined,
-      postedAt: day === 1 ? new Date(Date.now() - 3 * 86400000).toISOString() : undefined,
+      status: s3Done ? 'SUDAH_POSTING' : 'SIAP',
+      postedUrl: s3Done ? `https://instagram.com/p/thepark_d1_s3` : undefined,
+      postedAt: s3Done ? new Date(Date.now() - 3 * 86400000).toISOString() : undefined,
     });
   }
 

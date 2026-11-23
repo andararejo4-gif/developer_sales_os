@@ -4,9 +4,22 @@
 // ============================================================================
 
 import http from 'node:http';
+import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
+import path from 'node:path';
 import { URL } from 'node:url';
 import { sql } from './db';
 import { analyzeLeadWithAi } from './ai-engine';
+import {
+  MEDIA_OUTPUT_DIR,
+  generateUniqueDaySlotsWithAi,
+  generateWeekSlotsForSe,
+  enqueueSlotMediaViaHermes,
+  getHermesHealth,
+  getWibClock,
+  isSlotDueNowWib,
+  startContentMediaScheduler,
+} from './content-media-worker';
 import {
   startBaileysForSe,
   disconnectBaileysForSe,
@@ -540,6 +553,47 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
     },
   ];
 
+  // Hitung Skor KPI Harian & Mingguan secara terpisah agar switch Harian / Minggu / Bulan akurat
+  const dailyTrackableItems = dailyReportItems.filter((item) => item.targetNum !== null && item.targetNum > 0);
+  const dailyProgressSum = dailyTrackableItems.reduce((sum, item) => {
+    const val = Number(item.realisasi) || 0;
+    const tgt = Number(item.targetNum) || 1;
+    return sum + Math.min(1, val / tgt);
+  }, 0);
+  const dailyKpiScore =
+    dailyTrackableItems.length > 0
+      ? Number(((dailyProgressSum / dailyTrackableItems.length) * 100).toFixed(1))
+      : 0;
+  const dailyTier =
+    dailyKpiScore >= 85
+      ? 'Target Harian Tercapai'
+      : dailyKpiScore >= 50
+      ? 'Progres Harian Baik'
+      : dailyKpiScore > 0
+      ? 'Perlu Akselerasi Hari Ini'
+      : 'Belum Ada Aktivitas Hari Ini';
+
+  const weeklyLeadRatio = Math.min(1, leadsWeekValid.length / 48);
+  const weeklyQualRatio = Math.min(1, qualifiedWeek.length / 12);
+  const weeklyVisitRatio = Math.min(1, visits.length / 4);
+  const weeklyBookingRatio = Math.min(1, bookings.length / 1);
+  const weeklyKpiScore = Number(
+    (
+      weeklyLeadRatio * 35 +
+      weeklyQualRatio * 25 +
+      weeklyVisitRatio * 20 +
+      weeklyBookingRatio * 20
+    ).toFixed(1)
+  );
+  const weeklyTier =
+    weeklyKpiScore >= 85
+      ? 'Target Mingguan Tercapai'
+      : weeklyKpiScore >= 50
+      ? 'Progres Mingguan Baik'
+      : weeklyKpiScore > 0
+      ? 'Tahap Awal Minggu Ini'
+      : 'Belum Ada Aktivitas Minggu Ini';
+
   // Ringkasan per Periode (Harian, Minggu, Bulan) agar tombol switch di Kartu KPI berfungsi real
   const periods = {
     harian: {
@@ -554,9 +608,9 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       hotCount: hotProspects.length,
       warmCount: warmProspects.length,
       bookingsCount: bookings.length,
-      score: totalScorecardPoints,
+      score: dailyKpiScore,
       maxScore: 100,
-      tier: scorecardCategory,
+      tier: dailyTier,
       meta: `${leadsTodayValid.length} Baru Hari Ini (${validLeads.length} Aktif) · ${qualifiedProspects.length} Prospek BANT ≥ 7 · ${bookings.length} Booking`,
     },
     minggu: {
@@ -569,9 +623,9 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       hotCount: hotProspects.length,
       warmCount: warmProspects.length,
       bookingsCount: bookings.length,
-      score: totalScorecardPoints,
+      score: weeklyKpiScore,
       maxScore: 100,
-      tier: scorecardCategory,
+      tier: weeklyTier,
       meta: `${leadsWeekValid.length} Lead Minggu Ini · ${qualifiedWeek.length} Prospek BANT ≥ 7 · ${bookings.length} Booking`,
     },
     bulan: {
@@ -1267,6 +1321,434 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // 9. FIELD OPS (ABSEN, GPS + FOTO, LOG PANGGILAN) -> REAL POSTGRESQL sales_os
+    if (pathname === '/api/se/field-logs' && req.method === 'GET') {
+      const rows = await sql`
+        SELECT * FROM sales_os.se_field_logs
+        WHERE se_email = ${user.email}
+        ORDER BY created_at DESC
+        LIMIT 100
+      `;
+      sendJson(res, 200, { ok: true, logs: rows });
+      return;
+    }
+
+    if (pathname === '/api/se/field-logs' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const logType = String(body.logType || 'GPS').toUpperCase();
+      const payload = (body.payload || {}) as Record<string, any>;
+      const todayStr = toWibDateStr(new Date());
+
+      const inserted = await sql`
+        INSERT INTO sales_os.se_field_logs (
+          se_email, se_name, log_type, title, location_label,
+          lat, lng, photo_data_url, duration_seconds, outcome, notes, payload
+        ) VALUES (
+          ${user.email},
+          ${user.name},
+          ${logType},
+          ${String(body.title || logType)},
+          ${String(body.locationLabel || '')},
+          ${body.lat !== undefined ? Number(body.lat) : null},
+          ${body.lng !== undefined ? Number(body.lng) : null},
+          ${body.photoDataUrl ? String(body.photoDataUrl) : null},
+          ${body.durationSeconds !== undefined ? Number(body.durationSeconds) : null},
+          ${body.outcome ? String(body.outcome) : null},
+          ${String(body.notes || '')},
+          ${sql.json(payload)}
+        )
+        RETURNING *
+      `;
+
+      // Sinkronkan otomatis ke counter Laporan Harian SE (Item 2 Telepon / Item 4 Canvassing)
+      if (logType === 'CALL' || logType === 'GPS') {
+        const existing = await sql`
+          SELECT * FROM sales_os.se_daily_notes
+          WHERE se_email = ${user.email} AND report_date = ${todayStr}::date
+          LIMIT 1
+        `;
+        const prev = existing[0] || {};
+        const isConnectedCall =
+          logType === 'CALL' &&
+          !['TIDAK_ANGKAT', 'NOMOR_TIDAK_AKTIF'].includes(String(body.outcome || ''));
+
+        const nextDial = Number(prev.dial_count || 0) + (logType === 'CALL' ? 1 : 0);
+        const nextConnected =
+          Number(prev.connected_call_count || 0) + (isConnectedCall ? 1 : 0);
+        const nextCanvassing =
+          Number(prev.canvassing_contacts || 0) + (logType === 'GPS' ? 1 : 0);
+
+        await sql`
+          INSERT INTO sales_os.se_daily_notes (
+            se_email, report_date, dial_count, connected_call_count,
+            canvassing_contacts, updated_at
+          ) VALUES (
+            ${user.email},
+            ${todayStr}::date,
+            ${nextDial},
+            ${nextConnected},
+            ${nextCanvassing},
+            NOW()
+          )
+          ON CONFLICT (se_email, report_date) DO UPDATE SET
+            dial_count = EXCLUDED.dial_count,
+            connected_call_count = EXCLUDED.connected_call_count,
+            canvassing_contacts = EXCLUDED.canvassing_contacts,
+            updated_at = NOW()
+        `;
+      }
+
+      sendJson(res, 201, { ok: true, log: inserted[0] });
+      return;
+    }
+
+    // 10. RUTE HARIAN CANVASSING KUSTOM SE -> REAL POSTGRESQL sales_os
+    if (pathname === '/api/se/routes' && req.method === 'GET') {
+      const dayName = parsedUrl.searchParams.get('day') || 'Senin';
+      const rows = await sql`
+        SELECT waypoints, updated_at FROM sales_os.se_custom_routes
+        WHERE se_email = ${user.email} AND day_name = ${dayName}
+        LIMIT 1
+      `;
+      sendJson(res, 200, {
+        ok: true,
+        dayName,
+        waypoints: rows[0]?.waypoints ?? null,
+      });
+      return;
+    }
+
+    if (pathname === '/api/se/routes' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const dayName = String(body.dayName || 'Senin');
+      const waypoints = Array.isArray(body.waypoints) ? body.waypoints : [];
+      await sql`
+        INSERT INTO sales_os.se_custom_routes (se_email, day_name, waypoints, updated_at)
+        VALUES (${user.email}, ${dayName}, ${sql.json(waypoints)}, NOW())
+        ON CONFLICT (se_email, day_name) DO UPDATE SET
+          waypoints = EXCLUDED.waypoints,
+          updated_at = NOW()
+      `;
+      sendJson(res, 200, { ok: true, dayName, waypoints });
+      return;
+    }
+
+    // 11. KALENDER KONTEN POSTING SYNC -> REAL POSTGRESQL sales_os
+    if (pathname === '/api/se/content-posting' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const platform = String(body.platform || '').toLowerCase();
+      const todayStr = toWibDateStr(new Date());
+
+      const existing = await sql`
+        SELECT * FROM sales_os.se_daily_notes
+        WHERE se_email = ${user.email} AND report_date = ${todayStr}::date
+        LIMIT 1
+      `;
+      const prev = existing[0] || {};
+      const addReel = platform.includes('tiktok') || platform.includes('reels') ? 1 : 0;
+      const addWa = platform.includes('whatsapp') || platform.includes('wa') ? 1 : 0;
+      const addStory = !addReel && !addWa ? 1 : 0;
+
+      await sql`
+        INSERT INTO sales_os.se_daily_notes (
+          se_email, report_date, posted_reels, posted_wa_status, posted_stories, updated_at
+        ) VALUES (
+          ${user.email},
+          ${todayStr}::date,
+          ${Number(prev.posted_reels || 0) + addReel},
+          ${Number(prev.posted_wa_status || 0) + addWa},
+          ${Number(prev.posted_stories || 0) + addStory},
+          NOW()
+        )
+        ON CONFLICT (se_email, report_date) DO UPDATE SET
+          posted_reels = EXCLUDED.posted_reels,
+          posted_wa_status = EXCLUDED.posted_wa_status,
+          posted_stories = EXCLUDED.posted_stories,
+          updated_at = NOW()
+      `;
+
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // 12. KALENDER KONTEN UNIK PER SE + HERMES MEDIA WORKER -> REAL POSTGRESQL sales_os
+    if (pathname.startsWith('/api/se/media/') && req.method === 'GET') {
+      const fileName = path.basename(pathname.replace('/api/se/media/', ''));
+      const filePath = path.join(MEDIA_OUTPUT_DIR, fileName);
+      if (!fsSync.existsSync(filePath)) {
+        sendJson(res, 404, { ok: false, error: 'File media tidak ditemukan.' });
+        return;
+      }
+      const stat = await fs.stat(filePath);
+      const ext = path.extname(fileName).toLowerCase();
+      const contentType =
+        ext === '.mp4' ? 'video/mp4' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png';
+      const range = req.headers.range;
+      if (range && ext === '.mp4') {
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+        const chunksize = end - start + 1;
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunksize,
+          'Content-Type': contentType,
+        });
+        fsSync.createReadStream(filePath, { start, end }).pipe(res);
+      } else {
+        res.writeHead(200, {
+          'Content-Length': stat.size,
+          'Content-Type': contentType,
+          'Accept-Ranges': 'bytes',
+        });
+        fsSync.createReadStream(filePath).pipe(res);
+      }
+      return;
+    }
+
+    if (pathname === '/api/se/content-slots' && req.method === 'GET') {
+      const rows = await sql`
+        SELECT slot_id, status, posted_url, day_number, slot_order, scheduled_time,
+               funnel_stage, platform, format, title, brief, visual_prompt, caption,
+               hashtags, cta, duration_seconds, persona_code, slide_deck,
+               media_status, media_urls, media_error,
+               target_media_count, hermes_job_ids, generated_at, updated_at
+        FROM sales_os.se_content_slots
+        WHERE se_email = ${user.email}
+      `;
+      sendJson(res, 200, { ok: true, slots: rows });
+      return;
+    }
+
+    if (pathname === '/api/se/content-slots/generate-week' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const weekNumber = Math.max(1, Math.min(5, Number(body.weekNumber || 1)));
+      const savedCount = await generateWeekSlotsForSe(user.email, user.name, weekNumber);
+      const rows = await sql`
+        SELECT slot_id, status, posted_url, day_number, slot_order, scheduled_time,
+               funnel_stage, platform, format, title, brief, visual_prompt, caption,
+               hashtags, cta, duration_seconds, persona_code, slide_deck,
+               media_status, media_urls, media_error,
+               target_media_count, hermes_job_ids, generated_at, updated_at
+        FROM sales_os.se_content_slots
+        WHERE se_email = ${user.email}
+        ORDER BY day_number ASC, slot_order ASC
+      `;
+      sendJson(res, 200, { ok: true, weekNumber, savedCount, slots: rows });
+      return;
+    }
+
+    if (pathname === '/api/se/content-slots/status' && req.method === 'GET') {
+      const slotId = parsedUrl.searchParams.get('slotId') || '';
+      const [rows, hermesHealth] = await Promise.all([
+        slotId
+          ? sql`
+              SELECT slot_id, status, posted_url, day_number, slot_order, scheduled_time,
+                     funnel_stage, platform, format, title, brief, visual_prompt, caption,
+                     hashtags, cta, duration_seconds, persona_code, slide_deck,
+                     media_status, media_urls, media_error,
+                     target_media_count, hermes_job_ids, generated_at, updated_at
+              FROM sales_os.se_content_slots
+              WHERE se_email = ${user.email} AND slot_id = ${slotId}
+              LIMIT 1
+            `
+          : Promise.resolve([]),
+        getHermesHealth(),
+      ]);
+      sendJson(res, 200, {
+        ok: true,
+        slot: rows[0] || null,
+        hermesHealth,
+      });
+      return;
+    }
+
+    if (pathname === '/api/se/content-slots/init-day' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const dayNumber = Math.max(1, Math.min(30, Number(body.dayNumber || 1)));
+      const { dateStr, minutesOfDay } = getWibClock();
+
+      const existing = await sql`
+        SELECT * FROM sales_os.se_content_slots
+        WHERE se_email = ${user.email} AND day_number = ${dayNumber}
+        ORDER BY slot_order ASC
+      `;
+
+      if (existing.length >= 3 && existing[0]?.visual_prompt) {
+        sendJson(res, 200, { ok: true, slots: existing, source: 'cache' });
+        return;
+      }
+
+      const aiSlots = await generateUniqueDaySlotsWithAi(user.email, user.name, dayNumber);
+      for (const s of aiSlots) {
+        const slotId = `slot-d${dayNumber}-s${s.slotOrder}-sales_in_house`;
+        await sql`
+          INSERT INTO sales_os.se_content_slots (
+            se_email, slot_id, status, posted_url, day_number, slot_order,
+            scheduled_time, funnel_stage, platform, format, title, brief,
+            visual_prompt, caption, hashtags, cta, duration_seconds,
+            persona_code, slide_deck, media_status, report_date, updated_at
+          ) VALUES (
+            ${user.email}, ${slotId}, 'SIAP', '', ${dayNumber}, ${s.slotOrder},
+            ${s.scheduledTime}, ${s.funnelStage}, ${s.platform}, ${s.format},
+            ${s.title}, ${s.brief}, ${s.visualPrompt}, ${s.caption},
+            ${sql.json(s.hashtags)}, ${s.cta}, ${s.durationSeconds},
+            ${s.personaCode || 'P1'}, ${sql.json(s.slideDeck || [])}, 'SCHEDULED', ${dateStr}::date, NOW()
+          )
+          ON CONFLICT (se_email, slot_id) DO UPDATE SET
+            day_number = EXCLUDED.day_number,
+            slot_order = EXCLUDED.slot_order,
+            scheduled_time = EXCLUDED.scheduled_time,
+            funnel_stage = EXCLUDED.funnel_stage,
+            platform = EXCLUDED.platform,
+            format = EXCLUDED.format,
+            title = EXCLUDED.title,
+            brief = EXCLUDED.brief,
+            visual_prompt = EXCLUDED.visual_prompt,
+            caption = EXCLUDED.caption,
+            hashtags = EXCLUDED.hashtags,
+            cta = EXCLUDED.cta,
+            duration_seconds = EXCLUDED.duration_seconds,
+            persona_code = EXCLUDED.persona_code,
+            slide_deck = EXCLUDED.slide_deck,
+            report_date = EXCLUDED.report_date,
+            updated_at = NOW()
+        `;
+      }
+
+      // Trigger hanya slot yang jamnya sudah jatuh tempo hari ini (jika dayNumber === 1 / hari aktif)
+      const savedRows = await sql`
+        SELECT * FROM sales_os.se_content_slots
+        WHERE se_email = ${user.email} AND day_number = ${dayNumber}
+        ORDER BY slot_order ASC
+      `;
+
+      // Non-blocking: jika ada 1 slot yang due sekarang, enqueue ke Hermes tanpa memblokir UI
+      const dueSlot = savedRows.find(
+        (r) => r.media_status === 'SCHEDULED' && isSlotDueNowWib(Number(r.slot_order), minutesOfDay)
+      );
+      if (dueSlot && dayNumber === 1) {
+        void (async () => {
+          try {
+            const enq = await enqueueSlotMediaViaHermes({
+              seEmail: user.email,
+              slotId: String(dueSlot.slot_id),
+              format: String(dueSlot.format),
+              funnelStage: String(dueSlot.funnel_stage || 'TOFU'),
+              title: String(dueSlot.title),
+              brief: String(dueSlot.brief),
+              visualPrompt: String(dueSlot.visual_prompt),
+              durationSeconds: Number(dueSlot.duration_seconds || 15),
+              slideDeck: Array.isArray(dueSlot.slide_deck) ? dueSlot.slide_deck : undefined,
+            });
+            await sql`
+              UPDATE sales_os.se_content_slots
+              SET media_status = ${enq.ok ? 'GENERATING' : 'FAILED'},
+                  target_media_count = ${enq.targetCount},
+                  hermes_job_ids = ${sql.json(enq.jobs)},
+                  media_error = ${enq.error || null},
+                  updated_at = NOW()
+              WHERE se_email = ${user.email} AND slot_id = ${dueSlot.slot_id}
+            `;
+          } catch {
+            /* ignore */
+          }
+        })();
+      }
+
+      sendJson(res, 200, { ok: true, slots: savedRows, source: 'ai' });
+      return;
+    }
+
+    if (pathname === '/api/se/content-slots/generate-media' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const slotId = String(body.slotId || '');
+      if (!slotId) {
+        sendJson(res, 400, { ok: false, error: 'slotId wajib diisi.' });
+        return;
+      }
+
+      const existing = await sql`
+        SELECT * FROM sales_os.se_content_slots
+        WHERE se_email = ${user.email} AND slot_id = ${slotId}
+        LIMIT 1
+      `;
+      const row = existing[0];
+      const format = String(body.format || row?.format || 'Carousel Edukasi');
+      const title = String(body.title || row?.title || 'Konten The Park Townhouse');
+      const brief = String(body.brief || row?.brief || '');
+      const visualPrompt = String(body.visualPrompt || row?.visual_prompt || brief);
+      const durationSeconds = Number(body.durationSeconds ?? row?.duration_seconds ?? 15);
+
+      const enq = await enqueueSlotMediaViaHermes({
+        seEmail: user.email,
+        slotId,
+        format,
+        funnelStage: String(body.funnelStage || row?.funnel_stage || 'TOFU'),
+        title,
+        brief,
+        visualPrompt,
+        durationSeconds,
+        slideDeck: Array.isArray(body.slideDeck)
+          ? body.slideDeck
+          : Array.isArray(row?.slide_deck)
+          ? row.slide_deck
+          : undefined,
+      });
+
+      const updated = await sql`
+        INSERT INTO sales_os.se_content_slots (
+          se_email, slot_id, format, title, brief, visual_prompt, duration_seconds,
+          media_status, target_media_count, hermes_job_ids, media_urls, media_error, updated_at
+        ) VALUES (
+          ${user.email}, ${slotId}, ${format}, ${title}, ${brief}, ${visualPrompt}, ${durationSeconds},
+          ${enq.ok ? 'GENERATING' : 'FAILED'}, ${enq.targetCount}, ${sql.json(enq.jobs)}, '[]'::jsonb, ${enq.error || null}, NOW()
+        )
+        ON CONFLICT (se_email, slot_id) DO UPDATE SET
+          format = EXCLUDED.format,
+          title = EXCLUDED.title,
+          brief = EXCLUDED.brief,
+          visual_prompt = EXCLUDED.visual_prompt,
+          duration_seconds = EXCLUDED.duration_seconds,
+          media_status = EXCLUDED.media_status,
+          target_media_count = EXCLUDED.target_media_count,
+          hermes_job_ids = EXCLUDED.hermes_job_ids,
+          media_urls = '[]'::jsonb,
+          media_error = EXCLUDED.media_error,
+          updated_at = NOW()
+        RETURNING *
+      `;
+
+      sendJson(res, enq.ok ? 200 : 500, {
+        ok: enq.ok,
+        slot: updated[0],
+        error: enq.error,
+      });
+      return;
+    }
+
+    if (pathname === '/api/se/content-slots' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const slotId = String(body.slotId || '');
+      const status = String(body.status || 'SUDAH_POSTING');
+      const postedUrl = String(body.postedUrl || '');
+      if (!slotId) {
+        sendJson(res, 400, { ok: false, error: 'slotId wajib diisi.' });
+        return;
+      }
+      await sql`
+        INSERT INTO sales_os.se_content_slots (se_email, slot_id, status, posted_url, updated_at)
+        VALUES (${user.email}, ${slotId}, ${status}, ${postedUrl}, NOW())
+        ON CONFLICT (se_email, slot_id) DO UPDATE SET
+          status = EXCLUDED.status,
+          posted_url = EXCLUDED.posted_url,
+          updated_at = NOW()
+      `;
+      sendJson(res, 200, { ok: true, slotId, status, postedUrl });
+      return;
+    }
+
     sendJson(res, 404, { ok: false, error: `Endpoint tidak ditemukan: ${pathname}` });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Terjadi kesalahan internal server.';
@@ -1274,7 +1756,79 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+async function ensureSeOpsTables(): Promise<void> {
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.se_field_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      se_email TEXT NOT NULL,
+      se_name TEXT NOT NULL,
+      log_type TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      location_label TEXT NOT NULL DEFAULT '',
+      lat DOUBLE PRECISION,
+      lng DOUBLE PRECISION,
+      photo_data_url TEXT,
+      duration_seconds INTEGER,
+      outcome TEXT,
+      notes TEXT NOT NULL DEFAULT '',
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.se_custom_routes (
+      se_email TEXT NOT NULL,
+      day_name TEXT NOT NULL,
+      waypoints JSONB NOT NULL DEFAULT '[]'::jsonb,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (se_email, day_name)
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.se_content_slots (
+      se_email TEXT NOT NULL,
+      slot_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'SIAP_POSTING',
+      posted_url TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (se_email, slot_id)
+    )
+  `;
+  await sql`
+    ALTER TABLE sales_os.se_content_slots
+      ADD COLUMN IF NOT EXISTS day_number INTEGER,
+      ADD COLUMN IF NOT EXISTS slot_order INTEGER,
+      ADD COLUMN IF NOT EXISTS scheduled_time TEXT,
+      ADD COLUMN IF NOT EXISTS funnel_stage TEXT,
+      ADD COLUMN IF NOT EXISTS platform TEXT,
+      ADD COLUMN IF NOT EXISTS format TEXT,
+      ADD COLUMN IF NOT EXISTS title TEXT,
+      ADD COLUMN IF NOT EXISTS brief TEXT,
+      ADD COLUMN IF NOT EXISTS visual_prompt TEXT,
+      ADD COLUMN IF NOT EXISTS caption TEXT,
+      ADD COLUMN IF NOT EXISTS hashtags JSONB DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS cta TEXT,
+      ADD COLUMN IF NOT EXISTS duration_seconds INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS media_status TEXT DEFAULT 'SCHEDULED',
+      ADD COLUMN IF NOT EXISTS media_urls JSONB DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS media_error TEXT,
+      ADD COLUMN IF NOT EXISTS target_media_count INTEGER DEFAULT 5,
+      ADD COLUMN IF NOT EXISTS hermes_job_ids JSONB DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS persona_code TEXT,
+      ADD COLUMN IF NOT EXISTS slide_deck JSONB DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS report_date DATE,
+      ADD COLUMN IF NOT EXISTS generated_at TIMESTAMPTZ
+  `;
+}
+
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`[Developer Sales OS API] Berjalan di http://127.0.0.1:${PORT}`);
+  ensureSeOpsTables()
+    .then(() => {
+      startContentMediaScheduler();
+    })
+    .catch((err) => {
+      console.error('[DB] Gagal memastikan tabel SE Ops:', err);
+    });
   resumeActiveWaSessionsOnStartup().catch(() => {});
 });

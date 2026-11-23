@@ -552,6 +552,8 @@ export default function App() {
     else if (tab === 'jalur') openView('jalur');
     else if (tab === 'riset') openView('riset');
     else if (tab === 'pipeline') openView('pipeline');
+    else if (tab === 'rute') openView('rute');
+    else if (tab === 'lapangan') openView('lapangan');
   };
 
   if (viewMode === 'homepage' || !authSession) {
@@ -601,7 +603,7 @@ export default function App() {
           }`}
         >
           <Users className="size-4 shrink-0" />
-          <span>Pipeline &amp; WA AI</span>
+          <span>{role === 'SE' ? 'Pipeline' : 'Pipeline & WA AI'}</span>
         </button>
 
         {role === 'SE' && (
@@ -767,41 +769,45 @@ export default function App() {
           </>
         )}
 
-        {/* Project Workflow & Market Intelligence (Fase 1, 1A, 2) */}
+        {/* Project Workflow & Market Intelligence (Disesuaikan per Role) */}
         <div className="pt-4 mt-3 border-t border-warmborder">
           <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-warmmuted mb-1.5">
-            Pemasaran Proyek
+            {role === 'SE' ? 'Alat Kerja Sales' : 'Pemasaran Proyek'}
           </p>
 
-          <button
-            onClick={() => handleItemClick(() => openView('jalur'))}
-            className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-              activeView === 'jalur' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-            }`}
-          >
-            <Layers className="size-4 text-terracotta shrink-0" />
-            <span>Jalur Proyek (8 Tahap)</span>
-          </button>
+          {role !== 'SE' && (
+            <>
+              <button
+                onClick={() => handleItemClick(() => openView('jalur'))}
+                className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
+                  activeView === 'jalur' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
+                }`}
+              >
+                <Layers className="size-4 text-terracotta shrink-0" />
+                <span>Jalur Proyek (8 Tahap)</span>
+              </button>
 
-          <button
-            onClick={() => handleItemClick(() => openView('riset'))}
-            className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-              activeView === 'riset' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-            }`}
-          >
-            <Compass className="size-4 text-terracotta shrink-0" />
-            <span>Riset Pasar (Radius 25km)</span>
-          </button>
+              <button
+                onClick={() => handleItemClick(() => openView('riset'))}
+                className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
+                  activeView === 'riset' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
+                }`}
+              >
+                <Compass className="size-4 text-terracotta shrink-0" />
+                <span>Riset Pasar (Radius 25km)</span>
+              </button>
 
-          <button
-            onClick={() => handleItemClick(() => openView('target'))}
-            className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-              activeView === 'target' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-            }`}
-          >
-            <TrendingUp className="size-4 text-terracotta shrink-0" />
-            <span>Target Penjualan 100%</span>
-          </button>
+              <button
+                onClick={() => handleItemClick(() => openView('target'))}
+                className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
+                  activeView === 'target' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
+                }`}
+              >
+                <TrendingUp className="size-4 text-terracotta shrink-0" />
+                <span>Target Penjualan 100%</span>
+              </button>
+            </>
+          )}
 
           <button
             onClick={() => handleItemClick(() => openView('kalender'))}
@@ -810,7 +816,7 @@ export default function App() {
             }`}
           >
             <Calendar className="size-4 text-terracotta shrink-0" />
-            <span>Kalender Konten (30 Hari)</span>
+            <span>{role === 'SE' ? 'Kalender Konten' : 'Kalender Konten (30 Hari)'}</span>
           </button>
 
           <button
@@ -820,7 +826,7 @@ export default function App() {
             }`}
           >
             <BookOpen className="size-4 text-terracotta shrink-0" />
-            <span>Playbook Sales (SE/TL/SM)</span>
+            <span>{role === 'SE' ? 'Playbook' : 'Playbook Sales (SE/TL/SM)'}</span>
           </button>
 
           <button
@@ -830,7 +836,7 @@ export default function App() {
             }`}
           >
             <MapPin className="size-4 text-terracotta shrink-0" />
-            <span>Rute Harian Kanvasing</span>
+            <span>{role === 'SE' ? 'Rute Harian Canvassing' : 'Rute Harian Kanvasing'}</span>
           </button>
 
           <button
@@ -840,38 +846,42 @@ export default function App() {
             }`}
           >
             <PhoneCall className="size-4 text-olive shrink-0" />
-            <span>Absen, GPS, Call &amp; AI Guide</span>
+            <span>{role === 'SE' ? 'Absen, GPS, Call' : 'Absen, GPS, Call & AI Guide'}</span>
           </button>
 
-          <button
-            onClick={() => handleItemClick(() => openView('website'))}
-            className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-              activeView === 'website' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-            }`}
-          >
-            <Globe className="size-4 text-terracotta shrink-0" />
-            <span>Website Landing Page</span>
-          </button>
+          {role !== 'SE' && (
+            <>
+              <button
+                onClick={() => handleItemClick(() => openView('website'))}
+                className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
+                  activeView === 'website' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
+                }`}
+              >
+                <Globe className="size-4 text-terracotta shrink-0" />
+                <span>Website Landing Page</span>
+              </button>
 
-          <button
-            onClick={() => handleItemClick(() => openView('crm'))}
-            className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-              activeView === 'crm' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-            }`}
-          >
-            <Users className="size-4 text-terracotta shrink-0" />
-            <span>CRM &amp; Pipeline (7 Stage)</span>
-          </button>
+              <button
+                onClick={() => handleItemClick(() => openView('crm'))}
+                className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
+                  activeView === 'crm' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
+                }`}
+              >
+                <Users className="size-4 text-terracotta shrink-0" />
+                <span>CRM &amp; Pipeline (7 Stage)</span>
+              </button>
 
-          <button
-            onClick={() => handleItemClick(() => openView('komisi'))}
-            className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-              activeView === 'komisi' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-            }`}
-          >
-            <Percent className="size-4 text-olive shrink-0" />
-            <span>Aturan Komisi Penjualan</span>
-          </button>
+              <button
+                onClick={() => handleItemClick(() => openView('komisi'))}
+                className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
+                  activeView === 'komisi' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
+                }`}
+              >
+                <Percent className="size-4 text-olive shrink-0" />
+                <span>Aturan Komisi Penjualan</span>
+              </button>
+            </>
+          )}
 
           <button
             onClick={() => handleItemClick(() => openView('kb'))}
@@ -942,7 +952,7 @@ export default function App() {
               className="mt-3 w-full h-9 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center justify-center gap-2 hover:bg-espresso/90 cursor-pointer shadow-sm"
             >
               <Plus className="size-3.5 text-amber-400" />
-              <span>Input Lead &amp; Pipeline WA</span>
+              <span>Input Lead &amp; Pipeline</span>
             </button>
           )}
 
@@ -1146,6 +1156,9 @@ export default function App() {
             <ContentCalendarViewer
               variant="page"
               projectName="The Park Townhouse Sukoharjo"
+              userEmail={user.email}
+              userRole={role}
+              onDataChanged={fetchSeRealDashboard}
             />
           )}
 
@@ -1160,6 +1173,8 @@ export default function App() {
             <DailyRouteViewer
               variant="page"
               projectName="The Park Townhouse Sukoharjo"
+              userEmail={user.email}
+              userRole={role}
             />
           )}
 
@@ -1168,7 +1183,11 @@ export default function App() {
               variant="page"
               projectName="The Park Townhouse Sukoharjo"
               currentSeName={role === 'SE' ? user.name : 'SE 001 Budi Santoso'}
+              userEmail={user.email}
+              userRole={role}
+              hideAiGuide={role === 'SE'}
               planCode="platinum"
+              onDataChanged={fetchSeRealDashboard}
               onUpgradeRequest={() => {
                 setViewMode('homepage');
                 setToast('Beralih ke halaman paket untuk konsultasi upgrade Platinum / Diamond');
@@ -2779,20 +2798,33 @@ export default function App() {
 
       {/* Mobile Bottom Navigation & Popup Sheet "Lainnya" */}
       <MobileBottomNav
+        role={role}
         activeTab={
-          activeView === 'dashboard' ||
-          activeView === 'jalur' ||
-          activeView === 'riset' ||
-          activeView === 'pipeline'
+          role === 'SE'
+            ? activeView === 'dashboard' ||
+              activeView === 'pipeline' ||
+              activeView === 'rute' ||
+              activeView === 'lapangan'
+              ? activeView
+              : 'lainnya'
+            : activeView === 'dashboard' ||
+              activeView === 'jalur' ||
+              activeView === 'riset' ||
+              activeView === 'pipeline'
             ? activeView
             : 'lainnya'
         }
         isMoreOpen={isMobileMoreOpen}
         isOtherViewActive={
-          activeView !== 'dashboard' &&
-          activeView !== 'jalur' &&
-          activeView !== 'riset' &&
-          activeView !== 'pipeline'
+          role === 'SE'
+            ? activeView !== 'dashboard' &&
+              activeView !== 'pipeline' &&
+              activeView !== 'rute' &&
+              activeView !== 'lapangan'
+            : activeView !== 'dashboard' &&
+              activeView !== 'jalur' &&
+              activeView !== 'riset' &&
+              activeView !== 'pipeline'
         }
         onSelectTab={handleMobileTabSelect}
       />

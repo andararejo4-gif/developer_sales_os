@@ -16,6 +16,7 @@ import {
   X,
   UserCheck,
   ShieldCheck,
+  Camera,
 } from 'lucide-react';
 import {
   getAttendanceRecords,
@@ -36,6 +37,8 @@ import {
   savePersistedState,
 } from '../lib/navigation/router';
 import type { SeActivityCategory, CallOutcome, GpsActivityType } from '../lib/field-ops/types';
+import { GpsLiveRadarMap, type LiveGpsState, type RadarWaypoint } from './field/GpsLiveRadarMap';
+import { generateDailyRoutePlan } from '../lib/playbook/route-generator';
 
 type FieldOpsTab = 'absen' | 'gps' | 'call' | 'ai_guide';
 const VALID_FIELD_TABS: FieldOpsTab[] = ['absen', 'gps', 'call', 'ai_guide'];
@@ -43,20 +46,28 @@ const VALID_FIELD_TABS: FieldOpsTab[] = ['absen', 'gps', 'call', 'ai_guide'];
 interface FieldOpsModalProps {
   projectName?: string;
   currentSeName?: string;
+  userEmail?: string;
+  userRole?: string;
+  hideAiGuide?: boolean;
   initialTab?: FieldOpsTab;
   planCode?: 'gold' | 'platinum' | 'diamond';
   variant?: 'modal' | 'page';
   onClose?: () => void;
+  onDataChanged?: () => void;
   onUpgradeRequest?: () => void;
 }
 
 export function FieldOpsModal({
   projectName = 'The Park Townhouse Sukoharjo',
-  currentSeName = 'SE 001 Budi Santoso',
+  currentSeName = 'Raka Pratama',
+  userEmail = 'raka@andararejomakmur.co.id',
+  userRole = 'SE',
+  hideAiGuide = false,
   initialTab = 'absen',
   planCode = 'platinum',
   variant = 'modal',
   onClose,
+  onDataChanged,
   onUpgradeRequest,
 }: FieldOpsModalProps) {
   const [activeTab, setActiveTab] = useState<FieldOpsTab>(() => {
@@ -68,14 +79,22 @@ export function FieldOpsModal({
   });
   const [simulatedPlan, setSimulatedPlan] = useState<'gold' | 'platinum' | 'diamond'>(planCode);
 
+  const userScope = userEmail.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
   const [attendanceList, setAttendanceList] = useState(() =>
-    loadPersistedState('devos_field_attendance', getAttendanceRecords('proj-the-park-01'))
+    userRole === 'SE'
+      ? loadPersistedState(`devos_field_attendance_${userScope}`, [])
+      : loadPersistedState('devos_field_attendance', getAttendanceRecords('proj-the-park-01'))
   );
   const [gpsLogs, setGpsLogs] = useState(() =>
-    loadPersistedState('devos_field_gps_logs', getGpsTrackLogs('proj-the-park-01'))
+    userRole === 'SE'
+      ? loadPersistedState(`devos_field_gps_logs_${userScope}`, [])
+      : loadPersistedState('devos_field_gps_logs', getGpsTrackLogs('proj-the-park-01'))
   );
   const [callLogs, setCallLogs] = useState(() =>
-    loadPersistedState('devos_field_call_logs', getCallLogs('proj-the-park-01'))
+    userRole === 'SE'
+      ? loadPersistedState(`devos_field_call_logs_${userScope}`, [])
+      : loadPersistedState('devos_field_call_logs', getCallLogs('proj-the-park-01'))
   );
 
   const [selectedActivity, setSelectedActivity] = useState<SeActivityCategory>('COLD_CALL_SLA_5_MENIT');
@@ -101,13 +120,105 @@ export function FieldOpsModal({
     loadPersistedState<string>('devos_field_call_notes', '')
   );
 
-  // Add GPS Check-in Form
+  // Add GPS Check-in Form + Bukti Foto Lapangan + Live Radar Context
   const [gpsLocationLabel, setGpsLocationLabel] = useState(() =>
     loadPersistedState<string>('devos_field_gps_label', 'Kawasan Bisnis Solo Baru (Ruko Ir. Soekarno)')
   );
   const [gpsActivityType, setGpsActivityType] = useState<GpsActivityType>(() =>
     loadPersistedState<GpsActivityType>('devos_field_gps_type', 'CANVASSING')
   );
+  const [photoProofUrl, setPhotoProofUrl] = useState<string | null>(null);
+  const [liveGpsInfo, setLiveGpsInfo] = useState<LiveGpsState | null>(null);
+  const [matchedWaypoint, setMatchedWaypoint] = useState<RadarWaypoint | null>(null);
+  const [todayWaypoints, setTodayWaypoints] = useState<RadarWaypoint[]>([]);
+
+  const todayDayName = (() => {
+    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    const name = days[new Date().getDay()];
+    return name === 'Minggu' ? 'Senin' : name;
+  })();
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/se/routes?day=${encodeURIComponent(todayDayName)}`, {
+      headers: {
+        'X-User-Email': userEmail,
+        'X-User-Role': userRole,
+      },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active) return;
+        if (data?.ok && Array.isArray(data.waypoints) && data.waypoints.length > 0) {
+          setTodayWaypoints(data.waypoints);
+        } else {
+          const fallback = generateDailyRoutePlan('proj-the-park-01', 'The Park Townhouse Sukoharjo');
+          setTodayWaypoints(fallback.waypoints);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setTodayWaypoints(
+            generateDailyRoutePlan('proj-the-park-01', 'The Park Townhouse Sukoharjo').waypoints
+          );
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [todayDayName, userEmail, userRole]);
+  const [dbFieldLogs, setDbFieldLogs] = useState<any[]>([]);
+
+  const fetchDbFieldLogs = async () => {
+    try {
+      const res = await fetch('/api/se/field-logs', {
+        headers: { 'X-User-Email': userEmail, 'X-User-Role': userRole },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.ok && Array.isArray(json.logs)) {
+          setDbFieldLogs(json.logs);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  useEffect(() => {
+    fetchDbFieldLogs();
+  }, [userEmail, userRole]);
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setPhotoProofUrl(reader.result);
+        showToast('Bukti foto kunjungan siap dilampirkan.');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const persistFieldLogToDb = async (payload: Record<string, any>) => {
+    try {
+      await fetch('/api/se/field-logs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Email': userEmail,
+          'X-User-Role': userRole,
+        },
+        body: JSON.stringify(payload),
+      });
+      await fetchDbFieldLogs();
+      if (onDataChanged) onDataChanged();
+    } catch {
+      /* ignore */
+    }
+  };
 
   useEffect(() => {
     savePersistedState('devos_field_ops_tab', activeTab);
@@ -117,9 +228,18 @@ export function FieldOpsModal({
   }, [activeTab, variant]);
 
   useEffect(() => {
-    savePersistedState('devos_field_attendance', attendanceList);
-    savePersistedState('devos_field_gps_logs', gpsLogs);
-    savePersistedState('devos_field_call_logs', callLogs);
+    savePersistedState(
+      userRole === 'SE' ? `devos_field_attendance_${userScope}` : 'devos_field_attendance',
+      attendanceList
+    );
+    savePersistedState(
+      userRole === 'SE' ? `devos_field_gps_logs_${userScope}` : 'devos_field_gps_logs',
+      gpsLogs
+    );
+    savePersistedState(
+      userRole === 'SE' ? `devos_field_call_logs_${userScope}` : 'devos_field_call_logs',
+      callLogs
+    );
     savePersistedState('devos_field_show_call_form', showCallForm);
     savePersistedState('devos_field_call_lead', callLeadName);
     savePersistedState('devos_field_call_phone', callPhone);
@@ -153,29 +273,93 @@ export function FieldOpsModal({
       seName: currentSeName,
       lat: PROJECT_BASE_COORDS.lat,
       lng: PROJECT_BASE_COORDS.lng,
+      notes: photoProofUrl ? 'Check-in harian terverifikasi GPS + Bukti Foto' : 'Check-in harian terverifikasi GPS',
+    });
+    const nextAtt = getAttendanceRecords('proj-the-park-01');
+    setAttendanceList(
+      userRole === 'SE' ? nextAtt.filter((a) => a.seName === currentSeName) : [...nextAtt]
+    );
+    persistFieldLogToDb({
+      logType: 'CHECK_IN',
+      title: `Check-In Harian (${currentSeName})`,
+      locationLabel: 'Gerbang The Park Townhouse / Lapangan',
+      lat: PROJECT_BASE_COORDS.lat,
+      lng: PROJECT_BASE_COORDS.lng,
+      photoDataUrl: photoProofUrl,
       notes: 'Check-in harian terverifikasi GPS',
     });
-    setAttendanceList([...getAttendanceRecords('proj-the-park-01')]);
-    showToast(`${currentSeName} berhasil Check-In dengan koordinat GPS!`);
+    setPhotoProofUrl(null);
+    showToast(`${currentSeName} berhasil Check-In GPS & tersimpan ke database!`);
   };
 
   const handleCheckOut = () => {
     checkOutAttendance('proj-the-park-01', currentSeName, PROJECT_BASE_COORDS.lat, PROJECT_BASE_COORDS.lng);
-    setAttendanceList([...getAttendanceRecords('proj-the-park-01')]);
+    const nextAtt = getAttendanceRecords('proj-the-park-01');
+    setAttendanceList(
+      userRole === 'SE' ? nextAtt.filter((a) => a.seName === currentSeName) : [...nextAtt]
+    );
+    persistFieldLogToDb({
+      logType: 'CHECK_OUT',
+      title: `Check-Out Harian (${currentSeName})`,
+      locationLabel: 'Gerbang The Park Townhouse',
+      lat: PROJECT_BASE_COORDS.lat,
+      lng: PROJECT_BASE_COORDS.lng,
+      notes: 'Check-out harian selesai tugas',
+    });
     showToast(`${currentSeName} berhasil Check-Out hari ini.`);
   };
 
-  const handleRecordGps = () => {
+  const handleRecordGps = async () => {
+    const lat = liveGpsInfo?.lat ?? -7.6145;
+    const lng = liveGpsInfo?.lng ?? 110.8182;
     recordGpsPoint({
       projectId: 'proj-the-park-01',
       seName: currentSeName,
-      lat: -7.6145,
-      lng: 110.8182,
+      lat,
+      lng,
       activityType: gpsActivityType,
       locationLabel: gpsLocationLabel,
     });
-    setGpsLogs([...getGpsTrackLogs('proj-the-park-01')]);
-    showToast('Titik koordinat GPS aktivitas lapangan berhasil direkam!');
+    const nextGps = getGpsTrackLogs('proj-the-park-01');
+    setGpsLogs(
+      userRole === 'SE' ? nextGps.filter((g) => g.seName === currentSeName) : [...nextGps]
+    );
+    await persistFieldLogToDb({
+      logType: 'GPS',
+      title: gpsActivityType,
+      locationLabel: gpsLocationLabel,
+      lat,
+      lng,
+      photoDataUrl: photoProofUrl,
+      notes: `Aktivitas ${gpsActivityType} di ${gpsLocationLabel}`,
+    });
+
+    // Sinkronkan otomatis ke Rute Harian Canvassing jika check-in cocok dengan titik rute
+    if (matchedWaypoint && !matchedWaypoint.visited) {
+      const nextWps = todayWaypoints.map((w) =>
+        w.order === matchedWaypoint.order && w.name === matchedWaypoint.name
+          ? { ...w, visited: true }
+          : w
+      );
+      setTodayWaypoints(nextWps);
+      setMatchedWaypoint(null);
+      try {
+        await fetch('/api/se/routes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Email': userEmail,
+            'X-User-Role': userRole,
+          },
+          body: JSON.stringify({ dayName: todayDayName, waypoints: nextWps }),
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+
+    setPhotoProofUrl(null);
+    showToast('Titik koordinat GPS, bukti kunjungan & status rute tersimpan ke database!');
   };
 
   const handleSaveCall = (e: React.FormEvent) => {
@@ -191,12 +375,23 @@ export function FieldOpsModal({
       outcome: callOutcome,
       summaryNotes: callNotes || 'Catatan panggilan tersimpan ke log CRM.',
     });
-    setCallLogs([...getCallLogs('proj-the-park-01')]);
+    const nextCalls = getCallLogs('proj-the-park-01');
+    setCallLogs(
+      userRole === 'SE' ? nextCalls.filter((c) => c.seName === currentSeName) : [...nextCalls]
+    );
+    persistFieldLogToDb({
+      logType: 'CALL',
+      title: `${callLeadName} (${callPhone})`,
+      locationLabel: callPhone,
+      durationSeconds: Number(callDuration),
+      outcome: callOutcome,
+      notes: callNotes || 'Catatan panggilan tersimpan ke log CRM.',
+    });
     setShowCallForm(false);
     setCallLeadName('');
     setCallPhone('');
     setCallNotes('');
-    showToast('Log panggilan berhasil dicatat!');
+    showToast('Log panggilan tersimpan ke database & otomatis menambah Laporan Harian!');
   };
 
   const aiGuideResult = getAiActivityGuide(selectedActivity, simulatedPlan);
@@ -244,10 +439,12 @@ export function FieldOpsModal({
         <div className="px-4 sm:px-6 py-3 bg-white border-b border-warmborder">
           <div className="flex gap-2 overflow-x-auto no-scrollbar snap-x">
             {[
-              { id: 'absen', label: 'Absensi Harian SE', icon: UserCheck, badge: 'Semua Paket' },
-              { id: 'gps', label: 'Tracking GPS SE', icon: MapPin, badge: 'Semua Paket' },
-              { id: 'call', label: 'Log Panggilan', icon: PhoneCall, badge: 'Semua Paket' },
-              { id: 'ai_guide', label: 'AI Panduan Aktivitas SE', icon: Sparkles, badge: 'Platinum & Diamond' },
+              { id: 'absen', label: 'Absensi Harian', icon: UserCheck, badge: 'GPS' },
+              { id: 'gps', label: 'Tracking GPS & Foto', icon: MapPin, badge: 'Lapangan' },
+              { id: 'call', label: 'Log Panggilan', icon: PhoneCall, badge: 'Call' },
+              ...(!hideAiGuide
+                ? [{ id: 'ai_guide', label: 'AI Panduan Aktivitas SE', icon: Sparkles, badge: 'Platinum & Diamond' }]
+                : []),
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -297,23 +494,126 @@ export function FieldOpsModal({
                     Setiap absen masuk &amp; pulang mencatat titik koordinat lokasi SE untuk validasi kehadiran.
                   </p>
                 </div>
-                <div className="flex items-center gap-2.5">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <label className="min-h-[44px] px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-espresso border border-warmborder text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+                    <Camera className="size-4 text-terracotta" />
+                    <span>{photoProofUrl ? 'Foto Terlampir ✓' : 'Lampirkan Foto'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                  </label>
                   <button
                     onClick={handleCheckIn}
-                    className="px-4 py-2.5 rounded-xl bg-olive text-white text-xs font-bold hover:bg-olive/90 cursor-pointer flex items-center gap-1.5 shadow-xs"
+                    className="min-h-[44px] px-4 py-2.5 rounded-xl bg-olive text-white text-xs font-bold hover:bg-olive/90 cursor-pointer flex items-center gap-1.5 shadow-xs"
                   >
                     <CheckCircle2 className="size-4" /> Check-In GPS
                   </button>
                   <button
                     onClick={handleCheckOut}
-                    className="px-4 py-2.5 rounded-xl bg-espresso text-white text-xs font-bold hover:bg-espresso/90 cursor-pointer flex items-center gap-1.5"
+                    className="min-h-[44px] px-4 py-2.5 rounded-xl bg-espresso text-white text-xs font-bold hover:bg-espresso/90 cursor-pointer flex items-center gap-1.5"
                   >
                     <Clock className="size-4" /> Check-Out
                   </button>
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl border border-warmborder overflow-hidden">
+              {photoProofUrl && (
+                <div className="p-3 rounded-2xl bg-white border border-warmborder flex items-center gap-3">
+                  <img
+                    src={photoProofUrl}
+                    alt="Pratinjau Bukti Foto Kunjungan"
+                    className="size-16 rounded-xl object-cover border border-warmborder shrink-0"
+                  />
+                  <div className="text-xs min-w-0 flex-1">
+                    <p className="font-bold text-espresso">Bukti Foto Lapangan Siap Dikirim</p>
+                    <p className="text-warmmuted">Akan tersimpan bersama koordinat GPS saat Anda menekan Check-In atau Rekam Titik GPS.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoProofUrl(null)}
+                    className="min-h-[44px] px-3 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold cursor-pointer"
+                  >
+                    Hapus
+                  </button>
+                </div>
+              )}
+
+              {/* Ringkasan Absensi Masuk & Keluar Hari Ini (Per Akun SE dari DB) */}
+              {(() => {
+                const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+                const todayCheckIns = dbFieldLogs.filter(
+                  (l) => l.log_type === 'CHECK_IN' && l.created_at?.slice(0, 10) === todayKey
+                );
+                const todayCheckOuts = dbFieldLogs.filter(
+                  (l) => l.log_type === 'CHECK_OUT' && l.created_at?.slice(0, 10) === todayKey
+                );
+                const firstIn = todayCheckIns[todayCheckIns.length - 1];
+                const lastOut = todayCheckOuts[0];
+                const fmtTime = (iso?: string) =>
+                  iso
+                    ? new Date(iso).toLocaleTimeString('id-ID', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      }) + ' WIB'
+                    : 'Belum';
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3.5 rounded-2xl bg-white border border-warmborder">
+                      <p className="text-[11px] font-bold text-warmmuted uppercase">Jam Masuk Hari Ini</p>
+                      <p className="text-lg font-extrabold text-olive mt-0.5">{fmtTime(firstIn?.created_at)}</p>
+                      <p className="text-[11px] text-warmmuted truncate">{firstIn?.location_label || 'Belum check-in'}</p>
+                    </div>
+                    <div className="p-3.5 rounded-2xl bg-white border border-warmborder">
+                      <p className="text-[11px] font-bold text-warmmuted uppercase">Jam Keluar Hari Ini</p>
+                      <p className="text-lg font-extrabold text-espresso mt-0.5">{fmtTime(lastOut?.created_at)}</p>
+                      <p className="text-[11px] text-warmmuted truncate">{lastOut?.location_label || 'Belum check-out'}</p>
+                    </div>
+                    <div className="p-3.5 rounded-2xl bg-white border border-warmborder">
+                      <p className="text-[11px] font-bold text-warmmuted uppercase">Status Kehadiran Akun</p>
+                      <p className="text-lg font-extrabold text-terracotta mt-0.5">
+                        {firstIn ? (lastOut ? 'Selesai Tugas' : 'Sedang Bertugas') : 'Belum Absen'}
+                      </p>
+                      <p className="text-[11px] text-warmmuted truncate">Akun: {userEmail}</p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Mobile Reflow Cards (< md) */}
+              <div className="md:hidden space-y-2.5">
+                {attendanceList.map((att) => (
+                  <div key={att.id} className="p-4 rounded-2xl bg-white border border-warmborder space-y-2 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-extrabold text-espresso">{att.seName}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                          att.status === 'HADIR' ? 'bg-lime-100 text-olive' : 'bg-amber-100 text-terracotta'
+                        }`}
+                      >
+                        {att.status}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[11px] bg-sandstone/40 p-2.5 rounded-xl">
+                      <div>
+                        <span className="text-warmmuted block">Masuk:</span>
+                        <strong className="text-olive">{att.checkInAt || '-'}</strong>
+                      </div>
+                      <div>
+                        <span className="text-warmmuted block">Pulang:</span>
+                        <strong className="text-espresso">{att.checkOutAt || 'Belum'}</strong>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-warmmuted">{att.notes}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table (>= md) */}
+              <div className="hidden md:block bg-white rounded-2xl border border-warmborder overflow-hidden">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-sandstone/70 border-b border-warmborder text-[11px] font-extrabold uppercase text-warmmuted">
@@ -357,6 +657,21 @@ export function FieldOpsModal({
           {/* TAB 2: TRACKING GPS SE */}
           {activeTab === 'gps' && (
             <div className="space-y-5">
+              {/* Live Radar GPS ala ShopeeFood + Nama Jalan & Landmark Terdekat */}
+              <GpsLiveRadarMap
+                routeWaypoints={todayWaypoints}
+                onLocationResolved={(info) => setLiveGpsInfo(info)}
+                onUseLocationForCheckin={(info, matchedWp) => {
+                  const label = matchedWp
+                    ? `${matchedWp.name} — ${info.streetAddress}`
+                    : `${info.streetAddress} (${info.nearestPoiLabel})`;
+                  setGpsLocationLabel(label);
+                  setLiveGpsInfo(info);
+                  setMatchedWaypoint(matchedWp || null);
+                  showToast('Lokasi live diterapkan ke form Check-in GPS!');
+                }}
+              />
+
               <div className="p-5 rounded-2xl bg-white border border-warmborder space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
@@ -367,11 +682,11 @@ export function FieldOpsModal({
                       Jejak Pergerakan &amp; Kanvasing SE Lapangan
                     </h3>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                     <select
                       value={gpsActivityType}
                       onChange={(e) => setGpsActivityType(e.target.value as GpsActivityType)}
-                      className="h-9 px-3 rounded-xl border border-warmborder text-xs font-bold bg-sandstone text-espresso"
+                      className="min-h-[44px] md:min-h-[36px] px-3 rounded-xl border border-warmborder text-xs font-bold bg-sandstone text-espresso w-full sm:w-auto"
                     >
                       <option value="CANVASSING">Kanvasing Lapangan</option>
                       <option value="SURVEY_LOKASI">Survei Lokasi Klien</option>
@@ -381,18 +696,70 @@ export function FieldOpsModal({
                       type="text"
                       value={gpsLocationLabel}
                       onChange={(e) => setGpsLocationLabel(e.target.value)}
-                      className="h-9 px-3 rounded-xl border border-warmborder text-xs w-60"
+                      className="min-h-[44px] md:min-h-[36px] px-3 rounded-xl border border-warmborder text-xs w-full sm:w-60"
                       placeholder="Nama lokasi kunjungan..."
                     />
+                    <label className="min-h-[44px] md:min-h-[36px] px-3 rounded-xl bg-sandstone hover:bg-warmborder text-espresso border border-warmborder text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+                      <Camera className="size-3.5 text-terracotta" />
+                      <span>{photoProofUrl ? 'Foto ✓' : 'Bukti Foto'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handlePhotoUpload}
+                        className="hidden"
+                      />
+                    </label>
                     <button
                       onClick={handleRecordGps}
-                      className="h-9 px-4 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 cursor-pointer flex items-center gap-1.5"
+                      className="min-h-[44px] md:min-h-[36px] px-4 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 cursor-pointer flex items-center gap-1.5 w-full sm:w-auto justify-center"
                     >
                       <MapPin className="size-3.5" /> Rekam Titik GPS
                     </button>
                   </div>
                 </div>
               </div>
+
+              {/* Riwayat Tersimpan di Database sales_os (dengan Bukti Foto) */}
+              {dbFieldLogs.length > 0 && (
+                <div className="space-y-2.5">
+                  <p className="text-xs font-extrabold text-olive uppercase tracking-wider">
+                    Tersimpan Real di Database ({dbFieldLogs.length} Catatan)
+                  </p>
+                  {dbFieldLogs
+                    .filter((l) => l.log_type === 'GPS' || l.log_type === 'CHECK_IN')
+                    .slice(0, 5)
+                    .map((log) => (
+                      <div
+                        key={log.id}
+                        className="p-3.5 rounded-2xl bg-white border border-lime-300/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="flex items-start gap-3 min-w-0">
+                          {log.photo_data_url ? (
+                            <img
+                              src={log.photo_data_url}
+                              alt="Bukti Kunjungan"
+                              className="size-12 rounded-xl object-cover border border-warmborder shrink-0"
+                            />
+                          ) : (
+                            <div className="size-10 rounded-xl bg-lime-100 text-olive grid place-items-center shrink-0">
+                              <MapPin className="size-4" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-extrabold text-espresso truncate">{log.location_label || log.title}</p>
+                            <p className="text-[11px] text-warmmuted">
+                              {log.log_type} · {new Date(log.created_at).toLocaleString('id-ID')}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 rounded-lg bg-lime-100 text-olive text-[10px] font-extrabold self-start sm:self-center shrink-0">
+                          Tercatat DB ✓
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
 
               <div className="space-y-3">
                 {gpsLogs.map((pt) => (
@@ -532,7 +899,40 @@ export function FieldOpsModal({
                 </form>
               )}
 
-              <div className="bg-white rounded-2xl border border-warmborder overflow-hidden">
+              {/* Mobile Call Log Cards (< md) */}
+              <div className="md:hidden space-y-2.5">
+                {callLogs.map((c) => (
+                  <div key={c.id} className="p-4 rounded-2xl bg-white border border-warmborder space-y-2 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-extrabold text-espresso">{c.leadName}</p>
+                        <p className="text-[11px] font-mono text-warmmuted">{c.phoneNumber}</p>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-extrabold shrink-0 ${
+                          c.outcome === 'JANJI_SURVEI' || c.outcome === 'TERJAWAB_TERTARIK'
+                            ? 'bg-lime-100 text-olive'
+                            : c.outcome === 'TIDAK_ANGKAT'
+                            ? 'bg-rose-50 text-rose-700'
+                            : 'bg-amber-50 text-terracotta'
+                        }`}
+                      >
+                        {c.outcome.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-warmmuted bg-sandstone/40 px-3 py-1.5 rounded-xl">
+                      <span>{c.calledAt} · {c.seName}</span>
+                      <strong className="text-espresso">
+                        {Math.floor(c.durationSeconds / 60)}m {c.durationSeconds % 60}d
+                      </strong>
+                    </div>
+                    <p className="text-[11px] text-warmmuted">{c.summaryNotes}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Call Log Table (>= md) */}
+              <div className="hidden md:block bg-white rounded-2xl border border-warmborder overflow-hidden">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-sandstone/70 border-b border-warmborder text-[11px] font-extrabold uppercase text-warmmuted">

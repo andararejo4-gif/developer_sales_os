@@ -123,7 +123,16 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
     ],
   };
 
-  const projectMenuItems: SheetActionItem[] = [
+  const seMenuItems: SheetActionItem[] = [
+    { label: 'Kalender Konten', subtitle: 'Jadwal posting & pengingat SE', icon: Calendar, onClick: actions.onOpenCalendar, tone: 'terracotta' },
+    { label: 'Playbook', subtitle: 'SOP, skrip follow-up & objection handling', icon: BookOpen, onClick: actions.onOpenPlaybook, tone: 'terracotta' },
+    { label: 'Rute Harian Canvassing', subtitle: 'Titik kunjungan & input rute mandiri', icon: MapPin, onClick: actions.onOpenDailyRoute, tone: 'terracotta' },
+    { label: 'Absen, GPS, Call', subtitle: 'Presensi GPS, bukti foto & log panggilan', icon: PhoneCall, onClick: actions.onOpenFieldOps, tone: 'olive' },
+    { label: 'Knowledge Base Produk', subtitle: 'Spesifikasi, siteplan, harga & simulasi KPR', icon: Database, onClick: actions.onOpenKb, tone: 'olive' },
+    { label: 'Surat Cinta 99 Keunggulan', subtitle: 'Materi storytelling & 99 nilai jual proyek', icon: HeartHandshake, onClick: actions.onOpenLoveLetter, tone: 'terracotta' },
+  ];
+
+  const defaultProjectMenuItems: SheetActionItem[] = [
     { label: 'Target Penjualan 100%', subtitle: 'Skenario sold out & alokasi kuota SE', icon: TrendingUp, onClick: actions.onOpenTarget, tone: 'terracotta' },
     { label: 'Kalender Konten (30 Hari)', subtitle: 'Jadwal TOFU, MOFU, BOFU harian', icon: Calendar, onClick: actions.onOpenCalendar, tone: 'terracotta' },
     { label: 'Playbook Sales (SE/TL/SM)', subtitle: 'SOP eksekusi & BANT >= 7', icon: BookOpen, onClick: actions.onOpenPlaybook, tone: 'terracotta' },
@@ -135,6 +144,8 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
     { label: 'Knowledge Base Produk', subtitle: 'Fakta terverifikasi & kuis produk', icon: Database, onClick: actions.onOpenKb, tone: 'olive' },
     { label: 'Surat Cinta 99 Keunggulan', subtitle: 'Dokumen keunggulan proyek', icon: HeartHandshake, onClick: actions.onOpenLoveLetter, tone: 'terracotta' },
   ];
+
+  const projectMenuItems: SheetActionItem[] = role === 'SE' ? seMenuItems : defaultProjectMenuItems;
 
   if (role === 'IT' || role === 'DIREKSI') {
     projectMenuItems.push({

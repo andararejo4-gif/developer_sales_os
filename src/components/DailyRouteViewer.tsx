@@ -10,6 +10,11 @@ import {
   Printer,
   X,
   Navigation,
+  Plus,
+  Trash2,
+  Edit3,
+  CheckCircle2,
+  RotateCcw,
 } from 'lucide-react';
 import { generateDailyRoutePlan } from '../lib/playbook/route-generator';
 import {
@@ -18,13 +23,20 @@ import {
   loadPersistedState,
   savePersistedState,
 } from '../lib/navigation/router';
-import type { DailyRoutePlan } from '../lib/playbook/types';
+import type { DailyRoutePlan, DailyRouteWaypoint } from '../lib/playbook/types';
 
 const VALID_DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
+interface CustomWaypoint extends DailyRouteWaypoint {
+  isCustom?: boolean;
+  visited?: boolean;
+}
 
 interface DailyRouteViewerProps {
   projectId?: string;
   projectName?: string;
+  userEmail?: string;
+  userRole?: string;
   variant?: 'modal' | 'page';
   onClose?: () => void;
 }
@@ -32,6 +44,8 @@ interface DailyRouteViewerProps {
 export function DailyRouteViewer({
   projectId = 'proj-the-park-01',
   projectName = 'The Park Townhouse Sukoharjo',
+  userEmail = 'raka@andararejomakmur.co.id',
+  userRole = 'SE',
   variant = 'modal',
   onClose,
 }: DailyRouteViewerProps) {
@@ -41,14 +55,158 @@ export function DailyRouteViewer({
     return loadPersistedState<string>(`devos_route_day_${projectId}`, 'Senin');
   });
 
+  const baseRoute: DailyRoutePlan = generateDailyRoutePlan(selectedDay);
+  const [waypoints, setWaypoints] = useState<CustomWaypoint[]>(() =>
+    loadPersistedState<CustomWaypoint[]>(
+      `devos_route_wp_${projectId}_${selectedDay}`,
+      baseRoute.waypoints
+    )
+  );
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<number | null>(null);
+  const [wpName, setWpName] = useState('');
+  const [wpCategory, setWpCategory] = useState<DailyRouteWaypoint['category']>('Perkantoran & RS');
+  const [wpObjective, setWpObjective] = useState('');
+  const [wpDriveMin, setWpDriveMin] = useState(10);
+  const [wpDurationMin, setWpDurationMin] = useState(60);
+  const [wpFlyers, setWpFlyers] = useState(15);
+  const [wpLeads, setWpLeads] = useState(3);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2600);
+  };
+
   useEffect(() => {
     savePersistedState(`devos_route_day_${projectId}`, selectedDay);
     if (variant === 'page') {
       setQueryParam('tab', selectedDay);
     }
-  }, [selectedDay, projectId, variant]);
+    const localSaved = loadPersistedState<CustomWaypoint[] | null>(
+      `devos_route_wp_${projectId}_${selectedDay}`,
+      null
+    );
+    setWaypoints(localSaved || generateDailyRoutePlan(selectedDay).waypoints);
 
-  const route: DailyRoutePlan = generateDailyRoutePlan(selectedDay);
+    fetch(`/api/se/routes?day=${encodeURIComponent(selectedDay)}`, {
+      headers: { 'X-User-Email': userEmail, 'X-User-Role': userRole },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (json?.ok && Array.isArray(json.waypoints) && json.waypoints.length > 0) {
+          setWaypoints(json.waypoints);
+          savePersistedState(`devos_route_wp_${projectId}_${selectedDay}`, json.waypoints);
+        }
+      })
+      .catch(() => {});
+  }, [selectedDay, projectId, variant, userEmail, userRole]);
+
+  const persistWaypoints = async (next: CustomWaypoint[]) => {
+    const reordered = next.map((w, idx) => ({ ...w, order: idx + 1 }));
+    setWaypoints(reordered);
+    savePersistedState(`devos_route_wp_${projectId}_${selectedDay}`, reordered);
+    try {
+      await fetch('/api/se/routes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Email': userEmail,
+          'X-User-Role': userRole,
+        },
+        body: JSON.stringify({ dayName: selectedDay, waypoints: reordered }),
+      });
+    } catch {
+      /* fallback ke localStorage */
+    }
+  };
+
+  const resetFormFields = () => {
+    setEditingOrder(null);
+    setWpName('');
+    setWpCategory('Perkantoran & RS');
+    setWpObjective('');
+    setWpDriveMin(10);
+    setWpDurationMin(60);
+    setWpFlyers(15);
+    setWpLeads(3);
+  };
+
+  const handleSaveWaypoint = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!wpName.trim()) return;
+    if (editingOrder !== null) {
+      const updated = waypoints.map((w) =>
+        w.order === editingOrder
+          ? {
+              ...w,
+              name: wpName.trim(),
+              category: wpCategory,
+              canvassingObjective: wpObjective.trim() || 'Kunjungan & penyebaran brosur prospek.',
+              estimatedDriveMinutes: Number(wpDriveMin),
+              canvassingDurationMinutes: Number(wpDurationMin),
+              flyersTarget: Number(wpFlyers),
+              leadTarget: Number(wpLeads),
+              isCustom: true,
+            }
+          : w
+      );
+      await persistWaypoints(updated);
+      showToast('Titik kunjungan berhasil diperbarui ke database!');
+    } else {
+      const created: CustomWaypoint = {
+        order: waypoints.length + 1,
+        name: wpName.trim(),
+        category: wpCategory,
+        coordinates: baseRoute.startPoint,
+        estimatedDriveMinutes: Number(wpDriveMin),
+        canvassingDurationMinutes: Number(wpDurationMin),
+        canvassingObjective: wpObjective.trim() || 'Kunjungan mandiri & pengumpulan kontak prospek.',
+        flyersTarget: Number(wpFlyers),
+        leadTarget: Number(wpLeads),
+        isCustom: true,
+        visited: false,
+      };
+      await persistWaypoints([...waypoints, created]);
+      showToast('Titik kunjungan baru ditambahkan ke rute harian!');
+    }
+    resetFormFields();
+    setShowAddForm(false);
+  };
+
+  const handleEditWaypoint = (wp: CustomWaypoint) => {
+    setEditingOrder(wp.order);
+    setWpName(wp.name);
+    setWpCategory(wp.category);
+    setWpObjective(wp.canvassingObjective);
+    setWpDriveMin(wp.estimatedDriveMinutes);
+    setWpDurationMin(wp.canvassingDurationMinutes);
+    setWpFlyers(wp.flyersTarget);
+    setWpLeads(wp.leadTarget);
+    setShowAddForm(true);
+  };
+
+  const handleDeleteWaypoint = async (orderNum: number) => {
+    const filtered = waypoints.filter((w) => w.order !== orderNum);
+    await persistWaypoints(filtered);
+    showToast('Titik kunjungan dihapus dari rute.');
+  };
+
+  const handleToggleVisited = async (orderNum: number) => {
+    const next = waypoints.map((w) =>
+      w.order === orderNum ? { ...w, visited: !w.visited } : w
+    );
+    await persistWaypoints(next);
+  };
+
+  const handleResetDefaultRoute = async () => {
+    await persistWaypoints(generateDailyRoutePlan(selectedDay).waypoints);
+    showToast(`Rute ${selectedDay} dikembalikan ke rekomendasi sistem.`);
+  };
+
+  const route = baseRoute;
+  const totalLeadTarget = waypoints.reduce((acc, w) => acc + Number(w.leadTarget || 0), 0);
+  const visitedCount = waypoints.filter((w) => w.visited).length;
 
   const days = VALID_DAYS;
 
@@ -136,76 +294,256 @@ export function DailyRouteViewer({
         </div>
 
         {/* Route Summary Metrics Banner */}
-        <div className="px-6 py-3 bg-sandstone/30 border-b border-warmborder grid grid-cols-3 gap-4 text-center shrink-0">
-          <div>
-            <span className="text-[10px] font-bold text-warmmuted uppercase">Total Jarak Tempuh</span>
-            <p className="text-sm font-extrabold text-espresso">{route.totalDistanceKm} km</p>
+        <div className="px-4 sm:px-6 py-3 bg-sandstone/30 border-b border-warmborder grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4 text-left sm:text-center shrink-0">
+          <div className="flex sm:block items-center justify-between">
+            <span className="text-[10px] font-bold text-warmmuted uppercase">Total Titik Kunjungan</span>
+            <p className="text-sm font-extrabold text-espresso">
+              {waypoints.length} Titik ({visitedCount} Selesai)
+            </p>
           </div>
-          <div>
+          <div className="flex sm:block items-center justify-between">
             <span className="text-[10px] font-bold text-warmmuted uppercase">Estimasi Waktu Lapangan</span>
             <p className="text-sm font-extrabold text-espresso">{route.estimatedHours} Jam</p>
           </div>
-          <div>
+          <div className="flex sm:block items-center justify-between">
             <span className="text-[10px] font-bold text-warmmuted uppercase">Target Lead Baru</span>
-            <p className="text-sm font-extrabold text-terracotta">{route.totalLeadTarget} Kontak Prospek</p>
+            <p className="text-sm font-extrabold text-terracotta">{totalLeadTarget} Kontak Prospek</p>
           </div>
         </div>
 
         {/* Body Content */}
-        <div className="p-6 overflow-y-auto flex-1 bg-[#FBF9F5] space-y-6">
-          {/* Waypoints Flow */}
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-[#FBF9F5] space-y-5">
+          {/* Waypoints Flow + Manual Input Controls */}
           <div className="space-y-3">
-            <h3 className="text-sm font-extrabold text-espresso flex items-center gap-2">
-              <MapPin className="size-4 text-terracotta" />
-              Titik Kunjungan Lapangan Terurut ({route.waypoints.length} Titik)
-            </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <h3 className="text-sm font-extrabold text-espresso flex items-center gap-2">
+                <MapPin className="size-4 text-terracotta shrink-0" />
+                <span>Titik Kunjungan Lapangan Terurut ({waypoints.length} Titik)</span>
+              </h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetDefaultRoute}
+                  className="min-h-[44px] px-3 rounded-xl bg-white border border-warmborder text-warmmuted hover:text-espresso text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RotateCcw className="size-3.5" />
+                  <span>Rekomendasi AI</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetFormFields();
+                    setShowAddForm((prev) => !prev);
+                  }}
+                  className="min-h-[44px] px-3.5 rounded-xl bg-espresso text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="size-4 text-amber-400" />
+                  <span>Tambah Titik Manual</span>
+                </button>
+              </div>
+            </div>
+
+            {showAddForm && (
+              <form
+                onSubmit={handleSaveWaypoint}
+                className="p-4 rounded-2xl bg-white border-2 border-terracotta/40 space-y-3"
+              >
+                <h4 className="text-xs font-extrabold text-terracotta uppercase">
+                  {editingOrder !== null ? `Edit Titik Kunjungan #${editingOrder}` : 'Tambah Titik Kunjungan Mandiri'}
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block font-bold text-espresso mb-1">Nama Lokasi / Area Target *</label>
+                    <input
+                      required
+                      value={wpName}
+                      onChange={(e) => setWpName(e.target.value)}
+                      placeholder="Contoh: Sentra Ruko Jl. Slamet Riyadi / Klinik Pratama"
+                      className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-espresso mb-1">Kategori Area</label>
+                    <select
+                      value={wpCategory}
+                      onChange={(e) => setWpCategory(e.target.value as DailyRouteWaypoint['category'])}
+                      className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder bg-white"
+                    >
+                      <option value="Perkantoran & RS">Perkantoran &amp; RS</option>
+                      <option value="Perbankan & Finansial">Perbankan &amp; Finansial</option>
+                      <option value="Pasar & Sentra Niaga">Pasar &amp; Sentra Niaga</option>
+                      <option value="Perumahan Sekitar">Perumahan Sekitar</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="text-xs">
+                  <label className="block font-bold text-espresso mb-1">Tujuan &amp; Target Aktivitas</label>
+                  <input
+                    value={wpObjective}
+                    onChange={(e) => setWpObjective(e.target.value)}
+                    placeholder="Contoh: Temui pemilik toko & bagikan brosur promo cash bertahap..."
+                    className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder"
+                  />
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <label className="block font-bold text-warmmuted mb-1">Tempuh (Mnt)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={wpDriveMin}
+                      onChange={(e) => setWpDriveMin(Number(e.target.value))}
+                      className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-warmmuted mb-1">Durasi (Mnt)</label>
+                    <input
+                      type="number"
+                      min={5}
+                      value={wpDurationMin}
+                      onChange={(e) => setWpDurationMin(Number(e.target.value))}
+                      className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-warmmuted mb-1">Target Flyer</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={wpFlyers}
+                      onChange={(e) => setWpFlyers(Number(e.target.value))}
+                      className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-warmmuted mb-1">Target Lead</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={wpLeads}
+                      onChange={(e) => setWpLeads(Number(e.target.value))}
+                      className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder"
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetFormFields();
+                      setShowAddForm(false);
+                    }}
+                    className="min-h-[44px] px-4 rounded-xl bg-sandstone text-espresso text-xs font-bold cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="min-h-[44px] px-5 rounded-xl bg-terracotta text-white text-xs font-bold cursor-pointer"
+                  >
+                    Simpan Titik Rute
+                  </button>
+                </div>
+              </form>
+            )}
 
             <div className="space-y-3">
-              {route.waypoints.map((wp) => (
+              {waypoints.map((wp) => (
                 <div
-                  key={wp.order}
-                  className="p-4 rounded-2xl bg-white border border-warmborder shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4"
+                  key={`${wp.order}-${wp.name}`}
+                  className={`p-4 rounded-2xl bg-white border shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 ${
+                    wp.visited ? 'border-olive/50 bg-lime-50/20' : 'border-warmborder'
+                  }`}
                 >
-                  <div className="flex items-start gap-3.5">
-                    <div className="size-9 rounded-xl bg-terracotta text-white flex items-center justify-center font-black text-xs shrink-0 shadow-sm">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div
+                      className={`size-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-sm ${
+                        wp.visited ? 'bg-olive text-white' : 'bg-terracotta text-white'
+                      }`}
+                    >
                       {wp.order}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-sandstone text-warmmuted">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sandstone text-warmmuted">
                           {wp.category}
                         </span>
+                        {wp.isCustom && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-terracotta border border-amber-200">
+                            Rute Mandiri SE
+                          </span>
+                        )}
                         <span className="text-xs font-bold text-olive">
-                          Waktu tempuh ± {wp.estimatedDriveMinutes} mnt
+                          ± {wp.estimatedDriveMinutes} mnt
                         </span>
                       </div>
-                      <h4 className="text-sm font-extrabold text-espresso mt-0.5">
+                      <h4 className="text-sm font-extrabold text-espresso mt-1 break-words">
                         {wp.name}
                       </h4>
-                      <p className="text-xs text-warmmuted mt-0.5">
+                      <p className="text-xs text-warmmuted mt-0.5 break-words">
                         {wp.canvassingObjective}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 text-xs bg-amber-50/50 p-2.5 rounded-xl border border-amber-100 shrink-0">
-                    <div>
-                      <span className="text-[10px] text-warmmuted block">Durasi Kanvasing:</span>
-                      <strong className="text-espresso">{wp.canvassingDurationMinutes} menit</strong>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 shrink-0">
+                    <div className="grid grid-cols-3 gap-2 text-xs bg-amber-50/50 p-2.5 rounded-xl border border-amber-100">
+                      <div>
+                        <span className="text-[10px] text-warmmuted block">Durasi</span>
+                        <strong className="text-espresso">{wp.canvassingDurationMinutes}m</strong>
+                      </div>
+                      <div className="border-l border-amber-200 pl-2">
+                        <span className="text-[10px] text-warmmuted block">Flyer</span>
+                        <strong className="text-espresso">{wp.flyersTarget}</strong>
+                      </div>
+                      <div className="border-l border-amber-200 pl-2">
+                        <span className="text-[10px] text-warmmuted block">Target</span>
+                        <strong className="text-terracotta">{wp.leadTarget} Lead</strong>
+                      </div>
                     </div>
-                    <div className="border-l border-amber-200 pl-3">
-                      <span className="text-[10px] text-warmmuted block">Target Flyer:</span>
-                      <strong className="text-espresso">{wp.flyersTarget} Lembar</strong>
-                    </div>
-                    <div className="border-l border-amber-200 pl-3">
-                      <span className="text-[10px] text-warmmuted block">Target Kontak:</span>
-                      <strong className="text-terracotta">{wp.leadTarget} Lead</strong>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleVisited(wp.order)}
+                        className={`min-h-[44px] px-3 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer ${
+                          wp.visited
+                            ? 'bg-lime-100 text-olive border border-lime-300'
+                            : 'bg-sandstone text-espresso hover:bg-warmborder'
+                        }`}
+                      >
+                        <CheckCircle2 className="size-4" />
+                        <span>{wp.visited ? 'Selesai' : 'Tandai'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleEditWaypoint(wp)}
+                        aria-label="Edit Titik"
+                        className="min-h-[44px] min-w-[44px] rounded-xl bg-sandstone hover:bg-warmborder text-espresso grid place-items-center cursor-pointer"
+                      >
+                        <Edit3 className="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteWaypoint(wp.order)}
+                        aria-label="Hapus Titik"
+                        className="min-h-[44px] min-w-[44px] rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 grid place-items-center cursor-pointer"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
+
+          {toast && (
+            <div className="fixed bottom-20 md:bottom-6 right-4 z-50 bg-espresso text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg">
+              {toast}
+            </div>
+          )}
 
           {/* Hourly Timeline */}
           <div className="bg-white p-5 rounded-3xl border border-warmborder shadow-sm space-y-4">

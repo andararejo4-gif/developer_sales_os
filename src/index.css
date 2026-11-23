@@ -414,9 +414,29 @@
   }
 }
 
+@keyframes paper-sway {
+  0%,
+  100% {
+    transform: rotate(-0.65deg);
+  }
+  50% {
+    transform: rotate(0.65deg);
+  }
+}
+
+.pinned-paper-sway {
+  transform-origin: top center;
+  animation: paper-sway 5.5s ease-in-out infinite;
+}
+
+.pinned-paper-sway:hover {
+  animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .v3-hero-mesh,
-  .v3-ticker-track {
+  .v3-ticker-track,
+  .pinned-paper-sway {
     animation: none !important;
   }
 }
