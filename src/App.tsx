@@ -26,6 +26,14 @@ import {
   SeMobileDailyReportList,
 } from './components/mobile/SeMobileViews';
 import {
+  SeDailyRoadmapStrip,
+  SeGuidedTourModal,
+} from './components/se/SeGuidedTour';
+import {
+  exportDailyReportExcel,
+  exportDailyReportPdf,
+} from './lib/exporters/daily-report-exporter';
+import {
   clearAuthSession,
   loadAuthSession,
   saveAuthSession,
@@ -79,8 +87,7 @@ import {
   PhoneCall,
   Plus,
   RefreshCw,
-  Send,
-  Share2,
+  Download,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -611,7 +618,24 @@ export default function App() {
     }
   };
 
-  const copyWa = async () => {
+  const [isExportReportModalOpen, setIsExportReportModalOpen] = useState(false);
+  const [pipelineTargetFilter, setPipelineTargetFilter] = useState<string | undefined>(undefined);
+  const [tourSnoozedUntilMs, setTourSnoozedUntilMs] = useState<number>(() =>
+    loadPersistedState<number>(`devos_se_tour_snooze_${user.email}`, 0)
+  );
+
+  const handleSnoozeTour = () => {
+    const until = Date.now() + 30 * 60 * 1000;
+    setTourSnoozedUntilMs(until);
+    savePersistedState(`devos_se_tour_snooze_${user.email}`, until);
+  };
+
+  const handleOpenUrgentPipeline = () => {
+    setPipelineTargetFilter('PERLU_DITANGANI');
+    openView('pipeline');
+  };
+
+  const handleExportDailyReport = async (format: 'pdf' | 'excel') => {
     const itemNotesPayload: Record<string, string> = {};
     items.forEach((r) => {
       if (r.catatan) itemNotesPayload[String(r.id)] = r.catatan;
@@ -639,24 +663,47 @@ export default function App() {
         }
       }
     } catch {
-      /* tetap lanjut salin agar SE tidak terblokir */
+      /* tetap lanjut ekspor agar SE tidak terblokir */
     }
 
-    const lines = [
-      `*LAPORAN HARIAN SE — DEVELOPER SALES OS*`,
-      `${activeProject.nama}`,
-      `${todayShort} | ${user.name} | Scorecard Real: ${realScorecardTotal} Poin`,
-      '',
-    ];
-    items.forEach((r, i) =>
-      lines.push(`${i + 1}. *${r.item}*: ${r.realisasi} (Target: ${r.target})${r.catatan ? ' — ' + r.catatan : ''}`)
-    );
-    try {
-      await navigator.clipboard.writeText(lines.join('\n'));
-      setToast('Laporan Harian tersimpan ke database & disalin ke clipboard!');
-    } catch {
-      setToast('Laporan tersimpan ke DB, tetapi gagal menyalin ke clipboard');
+    const exportParams = {
+      projectName: activeProject.nama,
+      seName: user.name,
+      seEmail: user.email,
+      dateLabel: todayShort,
+      scorecardTotal: realScorecardTotal,
+      scorecardCategory: realScorecardCategory,
+      items: items.map((r) => {
+        const st = evalStatus(r);
+        return {
+          id: r.id,
+          cat: r.cat,
+          item: r.item,
+          target: r.target,
+          realisasi: r.realisasi,
+          catatan: r.catatan,
+          statusLabel:
+            st === 'hit'
+              ? 'Tercapai'
+              : st === 'near'
+              ? 'Mendekati'
+              : st === 'low'
+              ? 'Berjalan'
+              : st === 'note'
+              ? 'Catatan'
+              : 'Belum',
+        };
+      }),
+    };
+
+    if (format === 'excel') {
+      exportDailyReportExcel(exportParams);
+      setToast('Laporan Harian disimpan ke DB & diekspor ke Excel!');
+    } else {
+      exportDailyReportPdf(exportParams);
+      setToast('Laporan Harian disimpan ke DB & siap cetak/simpan PDF!');
     }
+    setIsExportReportModalOpen(false);
   };
 
   // Unit CRUD Handlers for SM
@@ -1538,10 +1585,11 @@ export default function App() {
                   </span>
                 </button>
                 <button
-                  onClick={copyWa}
+                  type="button"
+                  onClick={() => setIsExportReportModalOpen(true)}
                   className="h-10 px-4 rounded-xl bg-terracotta text-white text-xs font-semibold flex items-center gap-2 hover:bg-terracotta/90 cursor-pointer shadow-sm"
                 >
-                  <Share2 className="size-3.5" /> Salin Laporan WA
+                  <Download className="size-3.5" /> Export Laporan
                 </button>
               </>
             )}
@@ -1579,6 +1627,7 @@ export default function App() {
             <PipelinePage
               user={user}
               role={role}
+              initialFilter={pipelineTargetFilter}
               onDataChanged={fetchSeRealDashboard}
             />
           )}
@@ -1739,76 +1788,18 @@ export default function App() {
                 onJumpToReport={() => {
                   openDashboardSection('laporan-harian');
                 }}
-                onCopyWa={copyWa}
+                onExportReport={() => setIsExportReportModalOpen(true)}
               />
 
-              {/* Strip Status Operasional Harian SE (Absensi, Rute, Konten) */}
-              <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <button
-                  type="button"
-                  onClick={() => openView('lapangan')}
-                  className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-3.5 shadow-xs flex items-center justify-between gap-3 text-left cursor-pointer transition-colors"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`size-9 rounded-xl grid place-items-center shrink-0 ${seRealData?.quickStatus?.checkedIn ? 'bg-lime-100 text-olive' : 'bg-amber-50 text-terracotta'}`}>
-                      <PhoneCall className="size-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-bold uppercase text-warmmuted">Absensi Hari Ini</p>
-                      <p className="text-xs font-extrabold text-espresso truncate">
-                        {seRealData?.quickStatus?.checkedIn
-                          ? seRealData?.quickStatus?.checkedOut
-                            ? 'Selesai Tugas ✓'
-                            : 'Sudah Check-In ✓'
-                          : 'Belum Check-In'}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-[11px] font-bold text-terracotta shrink-0">Buka &rarr;</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openView('rute')}
-                  className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-3.5 shadow-xs flex items-center justify-between gap-3 text-left cursor-pointer transition-colors"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="size-9 rounded-xl bg-amber-50 text-terracotta grid place-items-center shrink-0">
-                      <MapPin className="size-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-bold uppercase text-warmmuted">
-                        Rute {seRealData?.quickStatus?.routeDayName || 'Hari Ini'}
-                      </p>
-                      <p className="text-xs font-extrabold text-espresso truncate">
-                        {seRealData?.quickStatus?.routeTotalCount
-                          ? `${seRealData.quickStatus.routeVisitedCount}/${seRealData.quickStatus.routeTotalCount} Titik Dikunjungi`
-                          : 'Lihat Rute Canvassing'}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-[11px] font-bold text-terracotta shrink-0">Buka &rarr;</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openView('kalender')}
-                  className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-3.5 shadow-xs flex items-center justify-between gap-3 text-left cursor-pointer transition-colors"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="size-9 rounded-xl bg-amber-50 text-terracotta grid place-items-center shrink-0">
-                      <Calendar className="size-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-bold uppercase text-warmmuted">Konten Hari Ini (TOFU/MOFU/BOFU)</p>
-                      <p className="text-xs font-extrabold text-espresso truncate">
-                        {seRealData?.quickStatus?.slotsUploadedToday ?? 0}/{seRealData?.quickStatus?.slotsTotalToday ?? 3} Slot Terunggah
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-[11px] font-bold text-terracotta shrink-0">Buka &rarr;</span>
-                </button>
-              </section>
+              {/* Roadmap Kerja Harian SE (4 Tahap Prioritas Terintegrasi) */}
+              <SeDailyRoadmapStrip
+                quickStatus={seRealData?.quickStatus}
+                onOpenFieldOps={() => openView('lapangan')}
+                onOpenUrgentPipeline={handleOpenUrgentPipeline}
+                onOpenCalendar={() => openView('kalender')}
+                onOpenDailyRoute={() => openView('rute')}
+                onOpenExportReport={() => setIsExportReportModalOpen(true)}
+              />
 
               {/* Top Split KPI Card & Monthly Revenue */}
               <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-5">
@@ -2173,10 +2164,11 @@ export default function App() {
                     <span>Sinkronkan Data Real Database</span>
                   </button>
                   <button
-                    onClick={copyWa}
+                    type="button"
+                    onClick={() => setIsExportReportModalOpen(true)}
                     className="min-h-[40px] px-5 rounded-xl bg-terracotta text-white text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-sm hover:bg-terracotta/90"
                   >
-                    <Send className="size-3.5" /> Simpan &amp; Salin Laporan WA
+                    <Download className="size-3.5" /> Export Laporan
                   </button>
                 </div>
               </section>
@@ -3538,6 +3530,59 @@ export default function App() {
       {showSuperadminModal && (
         <SuperadminPanel
           onClose={() => setShowSuperadminModal(false)}
+        />
+      )}
+
+      {/* Modal Pilihan Export Laporan Harian SE (PDF / Excel) */}
+      {isExportReportModalOpen && (
+        <div className="fixed inset-0 z-60 bg-espresso/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl border border-warmborder w-full sm:max-w-md shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 sm:zoom-in-95">
+            <div className="px-5 py-4 bg-sandstone border-b border-warmborder flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-extrabold text-espresso">Export Laporan Harian</h3>
+                <p className="text-xs text-warmmuted mt-0.5">
+                  Catatan laporan disimpan otomatis ke database sebelum file dibuat.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExportReportModalOpen(false)}
+                className="size-8 rounded-xl bg-white border border-warmborder text-espresso grid place-items-center cursor-pointer"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => void handleExportDailyReport('pdf')}
+                className="min-h-[56px] p-4 rounded-2xl bg-espresso hover:bg-espresso/90 text-white text-left flex flex-col justify-between gap-1 cursor-pointer shadow-sm"
+              >
+                <span className="text-xs font-extrabold">Export PDF</span>
+                <span className="text-[11px] text-white/75">Dokumen siap cetak / simpan PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleExportDailyReport('excel')}
+                className="min-h-[56px] p-4 rounded-2xl bg-terracotta hover:bg-terracotta/90 text-white text-left flex flex-col justify-between gap-1 cursor-pointer shadow-sm"
+              >
+                <span className="text-xs font-extrabold">Export Excel (.xls)</span>
+                <span className="text-[11px] text-white/85">Spreadsheet Microsoft Excel</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Guided Tour & Pengingat Prioritas Wajib SE (Desktop & Mobile) */}
+      {role === 'SE' && (
+        <SeGuidedTourModal
+          activeView={activeView}
+          quickStatus={seRealData?.quickStatus}
+          snoozedUntilMs={tourSnoozedUntilMs}
+          onSnooze={handleSnoozeTour}
+          onGoToFieldOps={() => openView('lapangan')}
+          onGoToUrgentPipeline={handleOpenUrgentPipeline}
         />
       )}
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, Share2, CheckCircle2 } from 'lucide-react';
+import { Clock, Download, CheckCircle2 } from 'lucide-react';
 import type { ReportItem, Status } from '../../data';
 import type { ScoreRow } from '../../data';
 
@@ -7,16 +7,16 @@ interface SeMobileActionCardProps {
   hits: number;
   totalItems: number;
   onJumpToReport: () => void;
-  onCopyWa: () => void;
+  onExportReport: () => void;
 }
 
 export const SeMobileActionCard: React.FC<SeMobileActionCardProps> = ({
   hits,
   totalItems,
   onJumpToReport,
-  onCopyWa,
+  onExportReport,
 }) => {
-  const remaining = Math.max(0, 10 - hits);
+  const remaining = Math.max(0, totalItems - hits);
 
   return (
     <section
@@ -35,7 +35,7 @@ export const SeMobileActionCard: React.FC<SeMobileActionCardProps> = ({
               : `${remaining} item target belum terpenuhi`}
           </h2>
           <p className="text-xs text-warmmuted mt-0.5">
-            Progres {hits}/10 target hit dari {totalItems} item aktivitas harian.
+            Progres {hits}/{totalItems} target hit aktivitas harian.
           </p>
         </div>
         {remaining === 0 && (
@@ -53,11 +53,11 @@ export const SeMobileActionCard: React.FC<SeMobileActionCardProps> = ({
         </button>
         <button
           type="button"
-          onClick={onCopyWa}
+          onClick={onExportReport}
           className="min-h-[44px] px-3 rounded-xl bg-terracotta text-white text-xs font-bold flex items-center justify-center gap-1.5 active:bg-terracotta/90 cursor-pointer"
         >
-          <Share2 className="size-3.5 shrink-0" />
-          <span>Salin Laporan WA</span>
+          <Download className="size-3.5 shrink-0" />
+          <span>Export Laporan</span>
         </button>
       </div>
     </section>

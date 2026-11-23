@@ -121,6 +121,7 @@ interface WaStatusData {
 interface PipelinePageProps {
   user: UserProfile;
   role: RoleKey;
+  initialFilter?: string;
   onDataChanged?: () => void;
 }
 
@@ -157,7 +158,30 @@ function createDefaultPersonaForm(code: PersonaCode): Record<string, string> {
   };
 }
 
-export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataChanged }) => {
+const isLeadNeedsHandling = (l: PipelineLeadRecord): boolean => {
+  const isWa =
+    l.lead_origin === 'WA_BAILEYS' ||
+    /whatsapp inbound|baileys/i.test(l.source || '');
+  const noReplyYet = !String(l.last_sales_message || '').trim();
+  const aCreated = l.latest_analysis?.created_at
+    ? new Date(l.latest_analysis.created_at).getTime()
+    : 0;
+  const lUpdated = l.updated_at ? new Date(l.updated_at).getTime() : 0;
+  const hasUnsentDraft =
+    aCreated > 0 &&
+    lUpdated > 0 &&
+    aCreated >= lUpdated - 1500 &&
+    (l.last_sales_message || '').trim() !==
+      (l.latest_analysis?.followup_draft_message || '').trim();
+  return (isWa && noReplyYet) || hasUnsentDraft || (l.stage === 'NEW' && noReplyYet);
+};
+
+export const PipelinePage: React.FC<PipelinePageProps> = ({
+  user,
+  role,
+  initialFilter,
+  onDataChanged,
+}) => {
   const [leads, setLeads] = useState<PipelineLeadRecord[]>([]);
   const [waStatus, setWaStatus] = useState<WaStatusData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -184,8 +208,14 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
 
   // Filter & Search (Disinkronkan ke URL ?tab=... dan localStorage)
   const [activeFilter, setActiveFilter] = useState<string>(() => {
-    return getQueryParam('tab') || loadPersistedState<string>(`devos_pipeline_filter_${user.email}`, 'ALL');
+    return initialFilter || getQueryParam('tab') || loadPersistedState<string>(`devos_pipeline_filter_${user.email}`, 'ALL');
   });
+
+  useEffect(() => {
+    if (initialFilter) {
+      setActiveFilter(initialFilter);
+    }
+  }, [initialFilter]);
   const [searchQuery, setSearchQuery] = useState<string>(() =>
     loadPersistedState<string>(`devos_pipeline_search_${user.email}`, '')
   );
@@ -952,12 +982,14 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
   };
 
   const filteredLeads = useMemo(() => {
-    return leads.filter((l) => {
-      if (activeFilter === 'PERLU_DILENGKAPI' && l.validity_status !== 'PERLU_DILENGKAPI') return false;
+    const filtered = leads.filter((l) => {
+      if (activeFilter === 'PERLU_DITANGANI' && !isLeadNeedsHandling(l)) return false;
+      else if (activeFilter === 'PERLU_DILENGKAPI' && l.validity_status !== 'PERLU_DILENGKAPI') return false;
       else if (activeFilter === 'GRADE_A' && l.grade !== 'A') return false;
       else if (activeFilter === 'GRADE_B' && l.grade !== 'B') return false;
       else if (
         activeFilter !== 'ALL' &&
+        activeFilter !== 'PERLU_DITANGANI' &&
         activeFilter !== 'PERLU_DILENGKAPI' &&
         activeFilter !== 'GRADE_A' &&
         activeFilter !== 'GRADE_B' &&
@@ -977,8 +1009,16 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
       }
       return true;
     });
+
+    // Lead yang belum dibalas / perlu ditangani wajib selalu muncul paling atas
+    return [...filtered].sort((a, b) => {
+      const aUrgent = isLeadNeedsHandling(a) ? 1 : 0;
+      const bUrgent = isLeadNeedsHandling(b) ? 1 : 0;
+      return bUrgent - aUrgent;
+    });
   }, [leads, activeFilter, searchQuery]);
 
+  const needsHandlingCount = leads.filter(isLeadNeedsHandling).length;
   const validCount = leads.filter((l) => l.validity_status === 'VALID').length;
   const unclearCount = leads.filter((l) => l.validity_status === 'PERLU_DILENGKAPI').length;
   const qualifiedCount = leads.filter((l) => l.validity_status === 'VALID' && l.bant_total >= 7).length;
@@ -1824,26 +1864,51 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
 
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar snap-x pb-1">
           {[
-            { id: 'ALL', label: `Semua (${leads.length})` },
-            { id: 'PERLU_DILENGKAPI', label: `Perlu Dilengkapi (${unclearCount})` },
-            { id: 'GRADE_A', label: `Hot Grade A (${hotCount})` },
-            { id: 'GRADE_B', label: `Warm Grade B (${qualifiedCount})` },
+            { id: 'ALL', label: `Semua (${leads.length})`, isUrgentTab: false, count: 0 },
+            {
+              id: 'PERLU_DITANGANI',
+              label: `Perlu Ditangani`,
+              isUrgentTab: true,
+              count: needsHandlingCount,
+            },
+            { id: 'PERLU_DILENGKAPI', label: `Perlu Dilengkapi (${unclearCount})`, isUrgentTab: false, count: 0 },
+            { id: 'GRADE_A', label: `Hot Grade A (${hotCount})`, isUrgentTab: false, count: 0 },
+            { id: 'GRADE_B', label: `Warm Grade B (${qualifiedCount})`, isUrgentTab: false, count: 0 },
             ...PLAYBOOK_PIPELINE_STAGES.map((st) => ({
               id: st.code,
               label: `${st.shortLabel} (${leads.filter((l) => l.stage === st.code).length})`,
+              isUrgentTab: false,
+              count: 0,
             })),
           ].map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveFilter(tab.id)}
-              className={`min-h-[40px] px-3.5 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 snap-start transition-colors cursor-pointer ${
+              className={`min-h-[40px] px-3.5 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 snap-start transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
                 activeFilter === tab.id
-                  ? 'bg-espresso text-white'
+                  ? tab.isUrgentTab && tab.count > 0
+                    ? 'bg-rose-600 text-white'
+                    : 'bg-espresso text-white'
+                  : tab.isUrgentTab && tab.count > 0
+                  ? 'bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100'
                   : 'bg-sandstone text-warmmuted hover:text-espresso'
               }`}
             >
-              {tab.label}
+              <span>{tab.label}</span>
+              {tab.isUrgentTab && (
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-black tabular-nums ${
+                    activeFilter === tab.id
+                      ? 'bg-white text-rose-600'
+                      : tab.count > 0
+                      ? 'bg-rose-600 text-white animate-pulse'
+                      : 'bg-warmborder text-espresso'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -1936,11 +2001,17 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
               .map((w) => w[0]?.toUpperCase() || '')
               .join('');
 
+            const needsHandling = isLeadNeedsHandling(lead);
+
             return (
               <article
                 key={lead.id}
-                className={`bg-white border rounded-2xl p-4 sm:p-5 transition-all ${
-                  isUnclear ? 'border-rose-300 ring-1 ring-rose-200' : 'border-warmborder'
+                className={`border rounded-2xl p-4 sm:p-5 transition-all ${
+                  needsHandling
+                    ? 'bg-rose-50/45 border-rose-500 ring-1 ring-rose-300 shadow-sm'
+                    : isUnclear
+                    ? 'bg-white border-rose-300 ring-1 ring-rose-200'
+                    : 'bg-white border-warmborder'
                 }`}
               >
                 {/* Baris Ringkas Lead (Selalu Tampil) */}
@@ -1950,6 +2021,11 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                     className="space-y-1 cursor-pointer flex-1 min-w-0"
                   >
                     <div className="flex flex-wrap items-center gap-2">
+                      {needsHandling && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-rose-600 text-white animate-pulse">
+                          Perlu Ditangani · Belum Dibalas
+                        </span>
+                      )}
                       <h3 className="text-base font-extrabold text-espresso">{lead.full_name}</h3>
                       <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-50 text-terracotta border border-amber-200">
                         BANT {lead.bant_total}/12 · Grade {lead.grade}

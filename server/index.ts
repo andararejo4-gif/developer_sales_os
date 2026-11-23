@@ -676,7 +676,7 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       LIMIT 1
     `.catch(() => [] as any[]),
     sql`
-      SELECT status, day_number
+      SELECT status, day_number, media_status
       FROM sales_os.se_content_slots
       WHERE se_email = ${seEmail}
         AND (report_date = ${todayStr}::date OR day_number = 1)
@@ -688,6 +688,16 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
   const routeWps: any[] = Array.isArray(todayRouteRows[0]?.waypoints) ? todayRouteRows[0].waypoints : [];
   const routeVisitedCount = routeWps.filter((w) => Boolean(w?.visited)).length;
   const slotsUploadedToday = todaySlotRows.filter((s: any) => s.status === 'SUDAH_POSTING').length;
+  const slotsReadyToPostToday = todaySlotRows.filter(
+    (s: any) => s.media_status === 'READY' && s.status !== 'SUDAH_POSTING'
+  ).length;
+
+  const urgentLeads = validLeads.filter((l: any) => {
+    const isWa =
+      l.lead_origin === 'WA_BAILEYS' || /whatsapp inbound|baileys/i.test(String(l.source || ''));
+    const noReplyYet = !String(l.last_sales_message || '').trim();
+    return (isWa && noReplyYet) || (l.stage === 'NEW' && noReplyYet);
+  });
 
   return {
     seEmail,
@@ -702,6 +712,14 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       routeTotalCount: routeWps.length,
       slotsUploadedToday,
       slotsTotalToday: Math.max(3, todaySlotRows.length > 0 ? Math.min(3, todaySlotRows.length) : 3),
+      slotsReadyToPostToday,
+      urgentLeadsCount: urgentLeads.length,
+      urgentLeadPreviews: urgentLeads.slice(0, 3).map((l: any) => ({
+        id: String(l.id),
+        fullName: String(l.full_name || 'Prospek'),
+        phoneWa: String(l.phone_wa || ''),
+        unitInterest: String(l.unit_interest || ''),
+      })),
       reportSavedAt: daily.updated_at || null,
     },
     periods,
