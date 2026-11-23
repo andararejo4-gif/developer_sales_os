@@ -236,8 +236,8 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
           data-lenis-prevent
           className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 space-y-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
         >
-          {/* Universal Project Selector Mobile (Hanya untuk Role Proyek Developer, Bukan Superadmin Platform) */}
-          {!isPlatformSuperadmin && projects && projects.length > 0 && onSelectProject ? (
+          {/* Universal Project Selector Mobile (Disembunyikan untuk SE & Superadmin Platform) */}
+          {!isPlatformSuperadmin && role !== 'SE' && projects && projects.length > 0 && onSelectProject ? (
             <div className="p-3 rounded-2xl bg-sandstone border border-warmborder">
               <label className="block text-[10px] font-extrabold uppercase tracking-wider text-warmmuted mb-1.5">
                 Pilih Proyek Aktif
@@ -276,8 +276,8 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
             </div>
           ) : null}
 
-          {/* Bagian 1: Bagian Halaman Role (disembunyikan jika kosong, mis. SE cukup diwakili Dashboard) */}
-          {roleSectionItems[role].length > 0 && (
+          {/* Bagian 1: Bagian Halaman Role (disembunyikan untuk SE di Menu Lainnya) */}
+          {role !== 'SE' && roleSectionItems[role].length > 0 && (
             <section>
               <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-warmmuted mb-2">
                 Bagian Dashboard {role}

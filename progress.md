@@ -3,6 +3,16 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-038 | 2026-11-23 | Auto-Fill Link Hasil Posting + Tombol Akses Link & Polish Mobile-First SE
+- Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
+- Ubah: `src/components/content/ContentSlotOverviewPage.tsx`, `src/components/ContentCalendarViewer.tsx`, `src/components/mobile/MobileMoreSheet.tsx`
+- Detail Perubahan:
+  - **Auto-Fill & Tombol Akses Link Posting:** Menyinkronkan `urlInput` di `ContentSlotOverviewPage.tsx` secara otomatis saat `slot.postedUrl` atau `data.slot.posted_url` terisi dari auto-publish Zernio, lengkap dengan badge `Terisi Otomatis ✓` dan tombol **Akses Link Postingan** (`target="_blank"`) begitu link tersedia.
+  - **Mobile-First Layout Detail Konten:** Merapikan header sticky menjadi hierarki native 2-3 baris (App Bar `Kembali` + `Sosmed`/`Sudah Upload`, blok judul 2 baris bebas potong, tombol aksi full-width >=44px), merapikan tombol `Download Poster`, menyembunyikan thumbnail strip 5 kolom untuk Single Poster, serta memberi bottom clearance `pb-28 md:pb-8`.
+  - **Header Jadwal Konten SE:** Menyembunyikan Dual Track Switcher (`Akun Official Proyek` / `Akun Sales In-House (POV)`) untuk role `SE`, dan menyembunyikan Filter Bar (termasuk filter platform Facebook/IG/TikTok/X/YouTube) pada tampilan Harian (`viewMode === 'day'`).
+  - **Mobile Bottom Bar → Menu Lainnya (`MobileMoreSheet.tsx`):** Menyembunyikan blok `Pilih Proyek Aktif` dan section `Bagian Dashboard SE` untuk role `SE` agar menu fokus ke alat kerja SE.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
+
 ## P-037 | 2026-11-23 | Same-User Single-Slot Lock, Strict Cross-User FIFO & Cooldown Minimal 1 Menit Antar Slot
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `server/content-media-worker.ts`, `server/index.ts`, `src/components/content/ContentSlotOverviewPage.tsx`

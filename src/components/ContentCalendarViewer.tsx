@@ -838,41 +838,43 @@ export function ContentCalendarViewer({
           </button>
         </div>
 
-        {/* Dual Track Switcher & View Switcher */}
-        <div className="px-6 py-3 bg-white border-b border-warmborder flex flex-wrap items-center justify-between gap-3 shrink-0">
-          {/* Dual Track */}
-          <div className="flex items-center gap-1.5 p-1 bg-sandstone rounded-2xl border border-warmborder">
-            <button
-              onClick={() => handleTrackChange('OFFICIAL')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                track === 'OFFICIAL'
-                  ? 'bg-espresso text-white shadow-sm'
-                  : 'text-warmmuted hover:text-espresso'
-              }`}
-            >
-              Akun Official Proyek
-            </button>
-            <button
-              onClick={() => handleTrackChange('SALES_IN_HOUSE')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                track === 'SALES_IN_HOUSE'
-                  ? 'bg-espresso text-white shadow-sm'
-                  : 'text-warmmuted hover:text-espresso'
-              }`}
-            >
-              Akun Sales In-House (POV)
-            </button>
-          </div>
+        {/* Dual Track Switcher (Non-SE saja) & View Switcher */}
+        <div className="px-4 sm:px-6 py-3 bg-white border-b border-warmborder flex flex-wrap items-center justify-between gap-3 shrink-0">
+          {/* Dual Track — SE selalu akses akun pribadi SE saja */}
+          {userRole !== 'SE' && (
+            <div className="flex items-center gap-1.5 p-1 bg-sandstone rounded-2xl border border-warmborder">
+              <button
+                onClick={() => handleTrackChange('OFFICIAL')}
+                className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  track === 'OFFICIAL'
+                    ? 'bg-espresso text-white shadow-sm'
+                    : 'text-warmmuted hover:text-espresso'
+                }`}
+              >
+                Akun Official Proyek
+              </button>
+              <button
+                onClick={() => handleTrackChange('SALES_IN_HOUSE')}
+                className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  track === 'SALES_IN_HOUSE'
+                    ? 'bg-espresso text-white shadow-sm'
+                    : 'text-warmmuted hover:text-espresso'
+                }`}
+              >
+                Akun Sales In-House (POV)
+              </button>
+            </div>
+          )}
 
           {/* View Mode: Day (Default), Week, Month */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-warmmuted mr-1">Papan:</span>
-            <div className="flex p-1 bg-sandstone rounded-xl border border-warmborder">
+          <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto">
+            <span className="text-xs font-bold text-warmmuted">Tampilan:</span>
+            <div className="grid grid-cols-3 sm:flex p-1 bg-sandstone rounded-xl border border-warmborder flex-1 sm:flex-none">
               {(['day', 'week', 'month'] as const).map((m) => (
                 <button
                   key={m}
                   onClick={() => setViewMode(m)}
-                  className={`min-h-[36px] md:min-h-0 px-3 py-1 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer ${
+                  className={`min-h-[38px] md:min-h-[32px] px-3 py-1 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer ${
                     viewMode === m
                       ? 'bg-white text-espresso shadow-sm'
                       : 'text-warmmuted hover:text-espresso'
@@ -885,8 +887,9 @@ export function ContentCalendarViewer({
           </div>
         </div>
 
-        {/* Filters Bar */}
-        <div className="px-6 py-2.5 bg-sandstone/30 border-b border-warmborder flex flex-wrap items-center gap-3 text-xs shrink-0">
+        {/* Filters Bar — Disembunyikan di tampilan Harian (list per hari) agar header bersih & mobile-friendly */}
+        {viewMode !== 'day' && (
+        <div className="px-4 sm:px-6 py-2.5 bg-sandstone/30 border-b border-warmborder flex flex-wrap items-center gap-3 text-xs shrink-0">
           <span className="text-warmmuted font-bold flex items-center gap-1">
             <Filter className="size-3.5 text-terracotta" />
             Filter:
@@ -943,9 +946,10 @@ export function ContentCalendarViewer({
             ))}
           </div>
         </div>
+        )}
 
         {/* Papan Kerja Kertas Berpin */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-[#F3ECE0] bg-[radial-gradient(#D9CEBE_1px,transparent_1px)] [background-size:18px_18px] space-y-6">
+        <div className="p-4 sm:p-6 pb-24 md:pb-6 overflow-y-auto flex-1 bg-[#F3ECE0] bg-[radial-gradient(#D9CEBE_1px,transparent_1px)] [background-size:18px_18px] space-y-6">
           {!calendar ? (
             <div className="p-12 text-center rounded-3xl bg-white border border-dashed border-warmborder space-y-4 my-4">
               <div className="size-16 rounded-2xl bg-sandstone text-warmmuted grid place-items-center mx-auto">

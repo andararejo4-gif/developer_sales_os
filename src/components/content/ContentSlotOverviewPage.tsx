@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Copy,
   Download,
+  ExternalLink,
   Film,
   Image as ImageIcon,
   Link2,
@@ -129,6 +130,13 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
   const isGenerating = meta.mediaStatus === 'GENERATING';
   const isUploaded = slot.status === 'SUDAH_POSTING';
 
+  // Sinkronkan urlInput otomatis ketika slot.postedUrl terisi (mis. dari auto-publish Zernio)
+  useEffect(() => {
+    if (slot.postedUrl && slot.postedUrl.trim()) {
+      setUrlInput(slot.postedUrl.trim());
+    }
+  }, [slot.id, slot.postedUrl]);
+
   // Fetch status awal + polling setiap 3 detik saat GENERATING (background di server tetap jalan walau ditinggal)
   useEffect(() => {
     let active = true;
@@ -151,6 +159,9 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
         if (typeof data.globalQueuePending === 'number') setGlobalQueuePending(data.globalQueuePending);
         if (data.queueInfo) setQueueInfo(data.queueInfo);
         if (data.slot) {
+          if (typeof data.slot.posted_url === 'string' && data.slot.posted_url.trim()) {
+            setUrlInput((prev) => prev.trim() || String(data.slot.posted_url).trim());
+          }
           const nextMeta: SlotMediaMeta = {
             visualPrompt: data.slot.visual_prompt || meta.visualPrompt,
             durationSeconds: data.slot.duration_seconds
@@ -255,8 +266,14 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
   };
 
   const displayTitle = (localOverride.title || slot.title)
-    .replace(/^\[P\d+\]\s*/i, '')
+    .replace(/^\[[^\]]+\]\s*/i, '')
     .replace(/\s*\(H-\d+\)$/i, '');
+  const trimmedUrl = urlInput.trim();
+  const normalizedExternalUrl = trimmedUrl
+    ? /^https?:\/\//i.test(trimmedUrl)
+      ? trimmedUrl
+      : `https://${trimmedUrl}`
+    : '';
   const displayBrief = localOverride.brief || slot.brief;
   const displayCaption = localOverride.caption || slot.caption;
   const displayCta = localOverride.cta || slot.cta;
@@ -301,82 +318,90 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#FBF9F5]">
-      {/* Sticky Top Header (Mobile-First) */}
-      <div className="sticky top-0 z-20 bg-white border-b border-warmborder px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2.5 shadow-xs">
-        <div className="flex items-center gap-2.5 min-w-0">
+    <div className="flex flex-col h-full bg-[#FBF9F5] overflow-x-hidden">
+      {/* Sticky Top Header (True Mobile-First Hierarchy) */}
+      <div className="sticky top-0 z-20 bg-white border-b border-warmborder px-4 sm:px-6 py-3 space-y-2.5 shadow-xs">
+        {/* Baris 1: App Bar (Back di kiri, Status / Sosmed di kanan) */}
+        <div className="flex items-center justify-between gap-2.5">
           <button
             type="button"
             onClick={onBack}
-            className="min-h-[44px] px-3.5 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-xs font-extrabold inline-flex items-center gap-1.5 shrink-0 cursor-pointer"
+            className="min-h-[44px] px-3.5 rounded-xl bg-sandstone hover:bg-warmborder active:scale-[0.98] text-espresso text-xs font-extrabold inline-flex items-center gap-1.5 shrink-0 cursor-pointer"
           >
             <ArrowLeft className="size-4" />
             <span>Kembali</span>
           </button>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-950 text-[10px] font-extrabold">
-                Hari {slot.dayNumber} · {slot.funnelStage} · {slot.scheduledTime}
+
+          <div className="flex items-center gap-2 min-w-0">
+            {onOpenSocialModal && (
+              <button
+                type="button"
+                onClick={onOpenSocialModal}
+                className="min-h-[44px] px-3 rounded-xl bg-sandstone border border-warmborder text-espresso hover:bg-warmborder/40 text-xs font-bold inline-flex items-center gap-1.5 shrink-0 cursor-pointer whitespace-nowrap"
+              >
+                <Share2 className="size-3.5 text-terracotta shrink-0" />
+                <span>Sosmed ({socialAccounts.length}/4)</span>
+              </button>
+            )}
+            {isUploaded && (
+              <span className="min-h-[44px] px-3 rounded-xl bg-emerald-600 text-white text-xs font-extrabold inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                <CheckCircle2 className="size-3.5 shrink-0" />
+                <span>Sudah Upload</span>
               </span>
-              <span className="text-[11px] font-bold text-warmmuted">{slot.platform}</span>
-            </div>
-            <h2 className="text-sm sm:text-base font-extrabold text-espresso truncate mt-0.5">
-              {displayTitle}
-            </h2>
+            )}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {onOpenSocialModal && (
-            <button
-              type="button"
-              onClick={onOpenSocialModal}
-              className="min-h-[44px] px-3 py-1.5 rounded-xl bg-sandstone border border-warmborder text-espresso hover:bg-warmborder/40 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
-            >
-              <Share2 className="size-3.5 text-terracotta" />
-              <span>Akun Sosmed ({socialAccounts.length}/4)</span>
-            </button>
-          )}
-          {!isUploaded && readyUrls.length > 0 && onPublishNow && (
-            <button
-              type="button"
-              disabled={isPublishing}
-              onClick={onPublishNow}
-              className="min-h-[44px] px-3.5 py-1.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-60"
-            >
-              {isPublishing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-              <span>{isPublishing ? 'Memposting...' : 'Posting ke Social Media Sekarang'}</span>
-            </button>
-          )}
-          {isUploaded ? (
-            <span className="min-h-[36px] px-3 py-1 rounded-xl bg-emerald-600 text-white text-xs font-extrabold inline-flex items-center gap-1">
-              <CheckCircle2 className="size-3.5" />
-              SUDAH UPLOAD
+        {/* Baris 2: Metadata & Judul Lengkap (Bebas Potong Sempit) */}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-950 text-[11px] font-extrabold">
+              Hari {slot.dayNumber} · {slot.funnelStage} · {slot.scheduledTime}
             </span>
-          ) : (
+            <span className="text-xs font-bold text-warmmuted">{slot.platform}</span>
+          </div>
+          <h2 className="text-sm sm:text-base font-extrabold text-espresso leading-snug line-clamp-2 mt-1">
+            {displayTitle}
+          </h2>
+        </div>
+
+        {/* Baris 3: Primary Upload Actions (Hanya tampil jika belum diupload) */}
+        {!isUploaded && (
+          <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2.5 pt-0.5">
+            {readyUrls.length > 0 && onPublishNow && (
+              <button
+                type="button"
+                disabled={isPublishing}
+                onClick={onPublishNow}
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60"
+              >
+                {isPublishing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                <span>{isPublishing ? 'Memposting...' : 'Posting ke Social Media Sekarang'}</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onQuickMarkUploaded(slot)}
-              className="min-h-[44px] px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer"
+              className="w-full sm:w-auto min-h-[44px] px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 cursor-pointer"
             >
               <CheckCircle2 className="size-4" />
               <span>Tandai Sudah Upload</span>
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Main Content Body (Mobile 1 Kolom, Desktop 12 Kolom) */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-5">
+      {/* Main Content Body (Mobile 1 Kolom + Safe Bottom Padding, Desktop 12 Kolom) */}
+      <div className="flex-1 overflow-y-auto px-3.5 py-4 sm:p-6 pb-28 md:pb-8">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
           {/* Kolom Kiri (7 cols): Progres Render + Media Preview */}
-          <div className="lg:col-span-7 space-y-4">
+          <div className="lg:col-span-7 space-y-4 min-w-0">
             {/* Status & Progres Render Card */}
             <div className="bg-white rounded-2xl border border-warmborder p-4 sm:p-5 shadow-xs space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-extrabold text-espresso uppercase tracking-wider">
+                    <span className="text-[11px] font-extrabold text-espresso uppercase tracking-wider">
                       Status Render Hermes AI
                     </span>
                     {hermesHealth && (
@@ -403,13 +428,19 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
                     {isGenerating
                       ? isVideo
                         ? 'Sedang merender video Reels di background...'
+                        : isSinglePoster
+                        ? 'Sedang merender Poster Flow di background...'
                         : `Progres Carousel: ${completedCount} dari ${targetCount} Slide Selesai (${progressPct}%)`
                       : completedCount > 0
                       ? isVideo
                         ? 'Video Reels Siap Diunduh ✓'
+                        : isSinglePoster
+                        ? 'Poster Flow Siap Diunduh ✓'
                         : `${completedCount} / ${targetCount} Slide Carousel Siap ✓`
                       : isVideo
                       ? `Menunggu jadwal ${slot.scheduledTime} WIB (Durasi Brief: ${meta.durationSeconds || 15}s)`
+                      : isSinglePoster
+                      ? `Target 1 Poster Flow (Jadwal ${slot.scheduledTime} WIB)`
                       : `Target ${targetCount} Slide Carousel (Jadwal ${slot.scheduledTime} WIB)`}
                   </p>
                 </div>
@@ -516,19 +547,19 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
 
             {/* Media Preview Studio (Carousel Slider / Video Player) */}
             <div className="bg-white rounded-2xl border border-warmborder p-4 sm:p-5 shadow-xs space-y-4">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-extrabold text-espresso flex items-center gap-2">
+              <div className="flex items-center justify-between gap-2.5 flex-wrap">
+                <h3 className="text-sm font-extrabold text-espresso flex items-center gap-2 min-w-0">
                   {isVideo ? (
-                    <Film className="size-4 text-terracotta" />
+                    <Film className="size-4 text-terracotta shrink-0" />
                   ) : (
-                    <ImageIcon className="size-4 text-olive" />
+                    <ImageIcon className="size-4 text-olive shrink-0" />
                   )}
-                  <span>
+                  <span className="truncate">
                     {isVideo
-                      ? `Preview Video Reels (${meta.durationSeconds || 15} Detik)`
+                      ? `Preview Video Reels (${meta.durationSeconds || 15}s)`
                       : isSinglePoster
                       ? `Preview Poster Flow (${completedCount}/${targetCount})`
-                      : `Preview Carousel Flow (${completedCount}/${targetCount} Slide)`}
+                      : `Preview Carousel (${completedCount}/${targetCount} Slide)`}
                   </span>
                 </h3>
                 {readyUrls[carouselIdx] && (
@@ -536,18 +567,18 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
                     <a
                       href={readyUrls[carouselIdx]}
                       download
-                      className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-1.5"
+                      className="min-h-[44px] px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap"
                     >
-                      <Download className="size-3.5" />
+                      <Download className="size-3.5 shrink-0" />
                       <span>Download MP4</span>
                     </a>
                   ) : (
                     <a
                       href={readyUrls[carouselIdx]}
                       download={`poster-the-park-h${slot.dayNumber}-slide-${carouselIdx + 1}.jpg`}
-                      className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-1.5"
+                      className="min-h-[44px] px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap"
                     >
-                      <Download className="size-3.5" />
+                      <Download className="size-3.5 shrink-0" />
                       <span>
                         {isSinglePoster ? 'Download Poster' : `Download Slide ${carouselIdx + 1}`}
                       </span>
@@ -647,38 +678,40 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
                     </div>
                   )}
 
-                  {/* Thumbnail & Skeleton Progress Strip (1..5) */}
-                  <div className="grid grid-cols-5 gap-2">
-                    {Array.from({ length: targetCount }).map((_, idx) => {
-                      const url = readyUrls[idx];
-                      const active = idx === carouselIdx;
-                      return url ? (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setCarouselIdx(idx)}
-                          className={`relative aspect-[3/4] rounded-xl overflow-hidden border-2 cursor-pointer ${
-                            active ? 'border-terracotta ring-2 ring-terracotta/30' : 'border-warmborder'
-                          }`}
-                        >
-                          <img src={url} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
-                          <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[9px] font-extrabold">
-                            {idx + 1} ✓
-                          </span>
-                        </button>
-                      ) : (
-                        <div
-                          key={idx}
-                          className={`aspect-[3/4] rounded-xl border border-dashed border-warmborder bg-sandstone/60 flex flex-col items-center justify-center text-[10px] font-bold text-warmmuted ${
-                            isGenerating ? 'animate-pulse' : ''
-                          }`}
-                        >
-                          <span>#{idx + 1}</span>
-                          <span className="text-[9px]">{isGenerating ? 'Proses' : 'Antre'}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {/* Thumbnail & Skeleton Progress Strip (hanya untuk Carousel multi-slide) */}
+                  {targetCount > 1 && (
+                    <div className="grid grid-cols-5 gap-2">
+                      {Array.from({ length: targetCount }).map((_, idx) => {
+                        const url = readyUrls[idx];
+                        const active = idx === carouselIdx;
+                        return url ? (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setCarouselIdx(idx)}
+                            className={`relative aspect-[3/4] rounded-xl overflow-hidden border-2 cursor-pointer ${
+                              active ? 'border-terracotta ring-2 ring-terracotta/30' : 'border-warmborder'
+                            }`}
+                          >
+                            <img src={url} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                            <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[9px] font-extrabold">
+                              {idx + 1} ✓
+                            </span>
+                          </button>
+                        ) : (
+                          <div
+                            key={idx}
+                            className={`aspect-[3/4] rounded-xl border border-dashed border-warmborder bg-sandstone/60 flex flex-col items-center justify-center text-[10px] font-bold text-warmmuted ${
+                              isGenerating ? 'animate-pulse' : ''
+                            }`}
+                          >
+                            <span>#{idx + 1}</span>
+                            <span className="text-[9px]">{isGenerating ? 'Proses' : 'Antre'}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -770,24 +803,52 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
               onSubmit={handleSubmitUrl}
               className="bg-white rounded-2xl border border-warmborder p-4 sm:p-5 shadow-xs space-y-3 text-xs"
             >
-              <label className="font-extrabold text-espresso uppercase tracking-wider text-[11px] block">
-                Lapor Link Hasil Posting
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="font-extrabold text-espresso uppercase tracking-wider text-[11px] block">
+                  Lapor Link Hasil Posting
+                </label>
+                {isUploaded && normalizedExternalUrl && (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold">
+                    Terisi Otomatis ✓
+                  </span>
+                )}
+              </div>
               <input
                 type="url"
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
                 placeholder="https://instagram.com/p/..."
-                className="w-full min-h-[44px] px-3.5 rounded-xl border border-warmborder text-xs focus:outline-none focus:border-terracotta"
+                className="w-full min-h-[44px] px-3.5 rounded-xl border border-warmborder text-xs text-espresso bg-[#FBF9F5] focus:bg-white focus:outline-none focus:border-terracotta"
               />
-              <button
-                type="submit"
-                disabled={isSavingUrl}
-                className="w-full min-h-[44px] px-4 py-2 rounded-xl bg-terracotta hover:bg-amber-600 text-white font-extrabold inline-flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Link2 className="size-4" />
-                <span>{isSavingUrl ? 'Menyimpan...' : 'Simpan Link & Tandai Upload ✓'}</span>
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {normalizedExternalUrl && (
+                  <a
+                    href={normalizedExternalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full min-h-[44px] px-4 py-2 rounded-xl bg-espresso hover:bg-espresso/90 text-white font-extrabold inline-flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <ExternalLink className="size-4 shrink-0" />
+                    <span>Akses Link Postingan</span>
+                  </a>
+                )}
+                <button
+                  type="submit"
+                  disabled={isSavingUrl}
+                  className={`w-full min-h-[44px] px-4 py-2 rounded-xl bg-terracotta hover:bg-amber-600 text-white font-extrabold inline-flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 ${
+                    normalizedExternalUrl ? '' : 'sm:col-span-2'
+                  }`}
+                >
+                  <Link2 className="size-4 shrink-0" />
+                  <span>
+                    {isSavingUrl
+                      ? 'Menyimpan...'
+                      : isUploaded
+                      ? 'Perbarui Link ✓'
+                      : 'Simpan Link & Tandai Upload ✓'}
+                  </span>
+                </button>
+              </div>
             </form>
           </div>
         </div>
