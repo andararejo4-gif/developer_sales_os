@@ -1829,6 +1829,9 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
             const isWaInboundLead =
               lead.lead_origin === 'WA_BAILEYS' ||
               /whatsapp inbound|baileys/i.test(lead.source || '');
+            const isFollowUpAlreadySent = Boolean(
+              lead.last_sales_message && lead.last_sales_message.trim()
+            );
             const draftMsg =
               customDrafts[lead.id] ??
               analysis?.followup_draft_message ??
@@ -2098,93 +2101,106 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                                   {lead.full_name}
                                 </p>
                                 <p className="text-[10px] text-white/80 truncate">
-                                  +{lead.phone_wa} · Pratinjau Pesan WA
+                                  +{lead.phone_wa} · {isFollowUpAlreadySent ? 'Pesan Terkirim' : 'Pratinjau Pesan WA'}
                                 </p>
                               </div>
                             </div>
                             <span className="px-2 py-0.5 rounded-full bg-white/15 text-[10px] font-semibold shrink-0">
-                              Draf AI
+                              {isFollowUpAlreadySent ? 'Terkirim ✓✓' : 'Draf AI'}
                             </span>
                           </div>
 
-                          {/* Area Gelembung Pesan (Incoming Customer Bubble jika ada + Outgoing Sales Bubble) */}
+                          {/* Area Gelembung Pesan (Turn-by-Turn Percakapan Sungguhan) */}
                           <div className="p-3.5 flex-1 flex flex-col justify-end space-y-2.5">
-                            <div className="self-center px-2.5 py-0.5 rounded-lg bg-[#E1F3FB] text-[#54656F] text-[10px] font-semibold shadow-2xs">
-                              {isWaInboundLead
-                                ? 'Mode Balasan Chat WA · Klik gelembung hijau untuk edit'
-                                : 'Mode Follow-Up Pasca-Temu · Klik gelembung hijau untuk edit'}
+                            <div className="self-center px-2.5 py-0.5 rounded-lg bg-[#E1F3FB] text-[#54656F] text-[10px] font-semibold shadow-2xs text-center">
+                              {isFollowUpAlreadySent
+                                ? `Pesan telah dikirim ke ${lead.full_name} · Menunggu balasan berikutnya`
+                                : isWaInboundLead
+                                ? 'Mode Balasan Chat WA · Klik gelembung hijau untuk edit sebelum kirim'
+                                : 'Mode Follow-Up Pasca-Temu · Klik gelembung hijau untuk edit sebelum kirim'}
                             </div>
 
                             {lead.last_customer_message && (
                               <div className="mr-6 rounded-2xl rounded-tl-xs bg-white p-2.5 shadow-2xs border border-black/5 text-xs text-[#111B21]">
                                 <p className="text-[10px] font-bold text-[#075E54] mb-0.5">
-                                  Pesan Terakhir {lead.full_name}:
+                                  {lead.full_name}:
                                 </p>
-                                <p className="leading-snug">{lead.last_customer_message}</p>
+                                <p className="leading-snug whitespace-pre-line">
+                                  {lead.last_customer_message}
+                                </p>
                               </div>
                             )}
 
-                            {lead.last_sales_message && (
-                              <div className="ml-6 rounded-2xl rounded-tr-xs bg-[#E7FFDB] p-2.5 shadow-2xs border border-[#c7eab0] text-xs text-[#111B21]">
-                                <div className="flex items-center justify-between gap-2 mb-0.5">
-                                  <p className="text-[10px] font-bold text-[#075E54]">
-                                    Terkirim dari WA {user.name.split(' ')[0]}:
-                                  </p>
-                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-[#075E54]">
-                                    <span>Terkirim</span>
-                                    <CheckCheck className="size-3 text-[#53BDEB]" />
-                                  </span>
-                                </div>
-                                <p className="leading-snug whitespace-pre-line line-clamp-3">
+                            {isFollowUpAlreadySent ? (
+                              /* Jika pesan sudah dikirim, sembunyikan kotak draf rekomendasi & tampilkan gelembung chat terkirim */
+                              <div className="ml-6 rounded-2xl rounded-tr-xs bg-[#DCF8C6] p-3 shadow-xs border border-[#c7eab0] text-xs text-[#111B21] space-y-1.5">
+                                <p className="text-[10px] font-bold text-[#075E54]">
+                                  Anda ({user.name.split(' ')[0]}):
+                                </p>
+                                <p className="leading-relaxed whitespace-pre-line">
                                   {lead.last_sales_message}
                                 </p>
+                                <div className="flex items-center justify-end gap-1 pt-1 text-[10px] text-[#667781]">
+                                  <span>Terkirim via WhatsApp</span>
+                                  <CheckCheck className="size-3.5 text-[#53BDEB]" />
+                                </div>
+                              </div>
+                            ) : (
+                              /* Jika belum dikirim (atau prospek baru saja membalas & AI memberi saran baru), tampilkan rekomendasi AI */
+                              <div className="relative ml-3 rounded-2xl rounded-tr-xs bg-[#DCF8C6] p-3 shadow-xs border border-[#c7eab0]">
+                                <textarea
+                                  rows={7}
+                                  value={draftMsg}
+                                  aria-label="Edit draf pesan WhatsApp"
+                                  onChange={(e) =>
+                                    setCustomDrafts((prev) => ({
+                                      ...prev,
+                                      [lead.id]: e.target.value,
+                                    }))
+                                  }
+                                  className="w-full bg-transparent text-xs text-[#111B21] leading-relaxed focus:outline-none resize-y"
+                                />
+                                <div className="flex items-center justify-between gap-2 mt-1 text-[10px] text-[#667781]">
+                                  <span>Playbook v1.2</span>
+                                  <span className="inline-flex items-center gap-1">
+                                    <span>Rekomendasi AI · Siap dikirim oleh {user.name.split(' ')[0]}</span>
+                                    <CheckCheck className="size-3.5 text-[#53BDEB]" />
+                                  </span>
+                                </div>
                               </div>
                             )}
-
-                            <div className="relative ml-3 rounded-2xl rounded-tr-xs bg-[#DCF8C6] p-3 shadow-xs border border-[#c7eab0]">
-                              <textarea
-                                rows={7}
-                                value={draftMsg}
-                                aria-label="Edit draf pesan WhatsApp"
-                                onChange={(e) =>
-                                  setCustomDrafts((prev) => ({
-                                    ...prev,
-                                    [lead.id]: e.target.value,
-                                  }))
-                                }
-                                className="w-full bg-transparent text-xs text-[#111B21] leading-relaxed focus:outline-none resize-y"
-                              />
-                              <div className="flex items-center justify-between gap-2 mt-1 text-[10px] text-[#667781]">
-                                <span>Playbook v1.2</span>
-                                <span className="inline-flex items-center gap-1">
-                                  <span>Siap dikirim oleh {user.name.split(' ')[0]}</span>
-                                  <CheckCheck className="size-3.5 text-[#53BDEB]" />
-                                </span>
-                              </div>
-                            </div>
                           </div>
 
                           {/* Bottom Composer Bar WhatsApp */}
                           <div className="p-2.5 bg-[#F0F2F5] border-t border-black/10 flex flex-col gap-1.5">
-                            <button
-                              type="button"
-                              disabled={sendingLeadId === lead.id}
-                              onClick={() => handleFollowUpWa(lead)}
-                              className={`w-full min-h-[44px] px-4 rounded-full text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-colors disabled:opacity-60 ${
-                                waStatus?.status === 'CONNECTED'
-                                  ? 'bg-[#128C7E] hover:bg-[#075E54]'
-                                  : 'bg-terracotta hover:bg-terracotta/90'
-                              }`}
-                            >
-                              <Send className="size-4 shrink-0" />
-                              <span>
-                                {sendingLeadId === lead.id
-                                  ? 'Mengirim Pesan WhatsApp Otomatis...'
-                                  : waStatus?.status === 'CONNECTED'
-                                  ? `Follow Up · Kirim Otomatis via WA (${waStatus.phoneNumber})`
-                                  : 'Follow Up · Hubungkan WA Dulu untuk Kirim Otomatis'}
-                              </span>
-                            </button>
+                            {isFollowUpAlreadySent ? (
+                              <div className="min-h-[40px] px-3.5 py-2 rounded-full bg-white border border-black/10 text-[11px] font-bold text-[#075E54] flex items-center justify-center gap-2 text-center">
+                                <CheckCheck className="size-4 text-[#53BDEB] shrink-0" />
+                                <span>
+                                  Pesan Terkirim · Rekomendasi baru akan muncul otomatis saat {lead.full_name} membalas
+                                </span>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={sendingLeadId === lead.id}
+                                onClick={() => handleFollowUpWa(lead)}
+                                className={`w-full min-h-[44px] px-4 rounded-full text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-colors disabled:opacity-60 ${
+                                  waStatus?.status === 'CONNECTED'
+                                    ? 'bg-[#128C7E] hover:bg-[#075E54]'
+                                    : 'bg-terracotta hover:bg-terracotta/90'
+                                }`}
+                              >
+                                <Send className="size-4 shrink-0" />
+                                <span>
+                                  {sendingLeadId === lead.id
+                                    ? 'Mengirim Pesan WhatsApp Otomatis...'
+                                    : waStatus?.status === 'CONNECTED'
+                                    ? `Follow Up · Kirim Otomatis via WA (${waStatus.phoneNumber})`
+                                    : 'Follow Up · Hubungkan WA Dulu untuk Kirim Otomatis'}
+                                </span>
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>

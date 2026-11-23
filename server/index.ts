@@ -1112,6 +1112,10 @@ const server = http.createServer(async (req, res) => {
         latestAnalysis = insertedAnalysis[0];
       }
 
+      const nextLastSalesMessage = body.reanalyze
+        ? ''
+        : String(body.lastSalesMessage ?? prev.last_sales_message ?? '');
+
       const updatedRows = await sql`
         UPDATE sales_os.pipeline_leads
         SET full_name = ${nextFullName},
@@ -1139,6 +1143,7 @@ const server = http.createServer(async (req, res) => {
             visited_at = ${visitedAt},
             sales_notes = ${nextNotes},
             next_action = ${String(body.nextAction ?? prev.next_action)},
+            last_sales_message = ${nextLastSalesMessage},
             lost_reason = ${nextLostReason || null},
             updated_at = NOW()
         WHERE id = ${leadId}

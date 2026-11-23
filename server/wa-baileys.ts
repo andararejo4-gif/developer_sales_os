@@ -413,6 +413,7 @@ export async function processInboundWaMessageForSe(params: {
           next_action = ${aiResult.rekomendasi[0] || currentLead.next_action},
           lead_origin = 'WA_BAILEYS',
           last_customer_message = ${latestCustomerMsg},
+          last_sales_message = '',
           interaction_count = ${nextInteractionCount},
           updated_at = NOW()
       WHERE id = ${leadId}
