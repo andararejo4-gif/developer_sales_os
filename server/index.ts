@@ -16,6 +16,7 @@ import {
   sendOutboundWaMessageForSe,
   normalizePhoneWa,
   resumeActiveWaSessionsOnStartup,
+  isLeadCurrentlyAnalyzing,
 } from './wa-baileys';
 import {
   evaluatePlaybookBant,
@@ -759,7 +760,12 @@ const server = http.createServer(async (req, res) => {
             ORDER BY l.created_at DESC
           `;
 
-      sendJson(res, 200, { ok: true, leads });
+      const enrichedLeads = leads.map((l: any) => ({
+        ...l,
+        is_ai_analyzing: isLeadCurrentlyAnalyzing(String(l.id)),
+      }));
+
+      sendJson(res, 200, { ok: true, leads: enrichedLeads });
       return;
     }
 

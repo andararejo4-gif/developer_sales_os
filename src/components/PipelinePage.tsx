@@ -5,7 +5,7 @@
 // WhatsApp Bubble Message Preview, & Integrasi WA Baileys Terisolasi Per SE
 // ============================================================================
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Users,
   Plus,
@@ -77,6 +77,7 @@ export interface PipelineLeadRecord {
   interaction_count?: number;
   lost_reason?: string | null;
   response_time_seconds?: number | null;
+  is_ai_analyzing?: boolean;
   created_at: string;
   updated_at: string;
   latest_analysis?: {
@@ -162,6 +163,9 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [sendingLeadId, setSendingLeadId] = useState<string | null>(null);
+  const [reanalyzingLeadId, setReanalyzingLeadId] = useState<string | null>(null);
+  const [skeletonLeadIds, setSkeletonLeadIds] = useState<Record<string, boolean>>({});
+  const prevLeadMsgMapRef = useRef<Record<string, string>>({});
   const [toast, setToast] = useState<string | null>(null);
 
   // Daftar ID lead yang sedang dibuka detailnya (default kosong = semua tertutup / list ringkas)
@@ -398,7 +402,59 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
     [user.email, role]
   );
 
-  const fetchPipelineAndWa = useCallback(async () => {
+  const applyIncomingLeadsWithSkeletonCheck = useCallback((fetchedLeads: PipelineLeadRecord[], isInitial = false) => {
+    setLeads(fetchedLeads);
+    const prevMap = prevLeadMsgMapRef.current;
+    const newlyChangedIds: string[] = [];
+
+    for (const l of fetchedLeads) {
+      const currentCustMsg = (l.last_customer_message || '').trim();
+      const prevCustMsg = prevMap[l.id];
+
+      if (!isInitial && currentCustMsg && prevCustMsg !== undefined && currentCustMsg !== prevCustMsg) {
+        newlyChangedIds.push(l.id);
+      } else if (!isInitial && prevCustMsg === undefined && l.lead_origin === 'WA_BAILEYS') {
+        newlyChangedIds.push(l.id);
+      }
+      prevMap[l.id] = currentCustMsg;
+    }
+
+    if (newlyChangedIds.length > 0) {
+      setExpandedLeadIds((prev) => {
+        const next = { ...prev };
+        for (const id of newlyChangedIds) next[id] = true;
+        return next;
+      });
+      setCustomDrafts((prev) => {
+        const next = { ...prev };
+        for (const id of newlyChangedIds) delete next[id];
+        return next;
+      });
+      setExpandedMessageKeys((prev) => {
+        const next = { ...prev };
+        for (const id of newlyChangedIds) {
+          delete next[`draft_${id}`];
+          delete next[`cust_${id}`];
+        }
+        return next;
+      });
+      setSkeletonLeadIds((prev) => {
+        const next = { ...prev };
+        for (const id of newlyChangedIds) next[id] = true;
+        return next;
+      });
+
+      setTimeout(() => {
+        setSkeletonLeadIds((prev) => {
+          const next = { ...prev };
+          for (const id of newlyChangedIds) delete next[id];
+          return next;
+        });
+      }, 2200);
+    }
+  }, []);
+
+  const fetchPipelineAndWa = useCallback(async (isInitial = false) => {
     try {
       const [leadsRes, waRes] = await Promise.all([
         fetch('/api/pipeline/leads', { headers: apiHeaders }),
@@ -406,7 +462,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
       ]);
       if (leadsRes.ok) {
         const lJson = await leadsRes.json();
-        setLeads(lJson.leads || []);
+        applyIncomingLeadsWithSkeletonCheck(lJson.leads || [], isInitial);
       }
       if (waRes.ok) {
         const wJson = await waRes.json();
@@ -417,21 +473,34 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
     } finally {
       setLoading(false);
     }
-  }, [apiHeaders]);
+  }, [apiHeaders, applyIncomingLeadsWithSkeletonCheck]);
 
   useEffect(() => {
-    fetchPipelineAndWa();
+    fetchPipelineAndWa(true);
   }, [fetchPipelineAndWa]);
 
   // Auto-polling real-time saat menunggu scan QR / sedang sinkronisasi maupun saat WA sudah terhubung
   useEffect(() => {
     const status = waStatus?.status;
-    if (!status || status === 'DISCONNECTED') return;
+    const anyAnalyzing = leads.some((l) => l.is_ai_analyzing);
+    if ((!status || status === 'DISCONNECTED') && !anyAnalyzing) return;
 
-    const intervalMs = status === 'QR_READY' || status === 'CONNECTING' ? 2500 : 6000;
+    const intervalMs = anyAnalyzing ? 1500 : 2500;
     const timer = setInterval(async () => {
       try {
-        const waRes = await fetch('/api/wa/status', { headers: apiHeaders });
+        const [waRes, leadsRes] = await Promise.all([
+          fetch('/api/wa/status', { headers: apiHeaders }),
+          fetch('/api/pipeline/leads', { headers: apiHeaders }),
+        ]);
+
+        let fetchedLeads: PipelineLeadRecord[] = [];
+        if (leadsRes.ok) {
+          const lJson = await leadsRes.json();
+          const rows: PipelineLeadRecord[] = lJson.leads || [];
+          fetchedLeads = rows;
+          applyIncomingLeadsWithSkeletonCheck(rows, false);
+        }
+
         if (!waRes.ok) return;
         const wJson = await waRes.json();
         const nextWa: WaStatusData | null = wJson.data || null;
@@ -445,11 +514,6 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
           showToast(
             `WhatsApp SE berhasil terhubung (${nextWa.phoneNumber || 'Aktif'})! Pesan masuk akan otomatis ditangkap & dianalisis AI.`
           );
-          const leadsRes = await fetch('/api/pipeline/leads', { headers: apiHeaders });
-          if (leadsRes.ok) {
-            const lJson = await leadsRes.json();
-            setLeads(lJson.leads || []);
-          }
           if (onDataChanged) onDataChanged();
         } else if (prevStatus === 'CONNECTED' && nextWa.status === 'DISCONNECTED') {
           showToast('Peringatan: Koneksi WhatsApp SE terdiskonek! Silakan hubungkan kembali.');
@@ -458,24 +522,13 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
           nextWa.status === 'CONNECTED' &&
           nextWa.metrics.totalInboundMessages > prevInbound
         ) {
-          const leadsRes = await fetch('/api/pipeline/leads', { headers: apiHeaders });
-          if (leadsRes.ok) {
-            const lJson = await leadsRes.json();
-            const fetchedLeads: PipelineLeadRecord[] = lJson.leads || [];
-            setLeads(fetchedLeads);
-            // Reset custom draft override pada lead WA terbaru agar draf AI hasil analisa pesan baru langsung tampil
-            if (fetchedLeads[0]?.id) {
-              const latestId = fetchedLeads[0].id;
-              setCustomDrafts((prev) => {
-                if (!(latestId in prev)) return prev;
-                const copy = { ...prev };
-                delete copy[latestId];
-                return copy;
-              });
-            }
-          }
           if (onDataChanged) onDataChanged();
-          showToast('Pesan WhatsApp baru diterima! AI telah memperbarui analisis, skor BANT & rekomendasi.');
+          const anyStillAnalyzing = fetchedLeads?.some((l) => l.is_ai_analyzing);
+          showToast(
+            anyStillAnalyzing
+              ? 'Pesan WhatsApp baru masuk! AI sedang menganalisis & menyusun rekomendasi balasan...'
+              : 'Pesan WhatsApp baru diterima! AI telah memperbarui analisis & rekomendasi balasan.'
+          );
         }
       } catch {
         /* ignore transient polling error */
@@ -483,7 +536,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
     }, intervalMs);
 
     return () => clearInterval(timer);
-  }, [waStatus, apiHeaders, onDataChanged]);
+  }, [waStatus, leads, apiHeaders, onDataChanged, applyIncomingLeadsWithSkeletonCheck]);
 
   const toggleLeadDetail = (leadId: string) => {
     setExpandedLeadIds((prev) => ({
@@ -727,6 +780,8 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
 
   const handleReanalyzeLead = async (lead: PipelineLeadRecord) => {
     setSubmitting(true);
+    setReanalyzingLeadId(lead.id);
+    setExpandedLeadIds((prev) => ({ ...prev, [lead.id]: true }));
     try {
       const res = await fetch(`/api/pipeline/leads/${lead.id}`, {
         method: 'PATCH',
@@ -741,12 +796,12 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
           return copy;
         });
         await fetchPipelineAndWa();
-        setExpandedLeadIds((prev) => ({ ...prev, [lead.id]: true }));
         if (onDataChanged) onDataChanged();
         showToast(`Analisis AI & rekomendasi untuk ${lead.full_name} berhasil diperbarui!`);
       }
     } finally {
       setSubmitting(false);
+      setReanalyzingLeadId(null);
     }
   };
 
@@ -1849,7 +1904,13 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
               analysisCreatedMs >= leadUpdatedMs - 1500 &&
               (lead.last_sales_message || '').trim() !==
                 (analysis?.followup_draft_message || '').trim();
+            const isAiWorking = Boolean(
+              lead.is_ai_analyzing ||
+                reanalyzingLeadId === lead.id ||
+                skeletonLeadIds[lead.id]
+            );
             const isFollowUpAlreadySent =
+              !isAiWorking &&
               Boolean(lead.last_sales_message && lead.last_sales_message.trim()) &&
               !hasNewUnsentAiDraft;
             const draftMsg =
@@ -2071,52 +2132,105 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                     </div>
 
                     {/* Grid Kiri: Analisis AI · Grid Kanan: Preview Tampilan Chat WhatsApp */}
-                    {analysis && (
+                    {(analysis || isAiWorking) && (
                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                         <div className="lg:col-span-7 space-y-2.5 text-xs">
-                          <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-1">
-                            <p className="font-extrabold text-terracotta flex items-center gap-1.5">
-                              <Sparkles className="size-3.5" />
-                              <span>Hasil Analisis AI</span>
-                            </p>
-                            <p className="text-espresso leading-relaxed">{analysis.ringkas}</p>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            {analysis.poin_kuat?.length > 0 && (
-                              <div className="p-3 rounded-xl bg-sandstone/40 border border-warmborder">
-                                <p className="font-bold text-olive mb-1">Poin Kuat Prospek:</p>
-                                <ul className="list-disc list-inside space-y-1 text-espresso">
-                                  {analysis.poin_kuat.map((p, i) => (
-                                    <li key={i}>{p}</li>
-                                  ))}
-                                </ul>
+                          {isAiWorking ? (
+                            /* ANIMASI SKELETON TEMPAT 1: HASIL ANALISIS AI, POIN KUAT, SARAN TAKTIS & PERTANYAAN BANT */
+                            <div className="space-y-2.5" aria-busy="true" aria-live="polite">
+                              <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200 space-y-2.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="font-extrabold text-terracotta flex items-center gap-2">
+                                    <Sparkles className="size-4 animate-spin text-terracotta" />
+                                    <span>AI Sedang Menganalisis Pesan Terbaru {lead.full_name}...</span>
+                                  </p>
+                                  <span className="px-2 py-0.5 rounded-full bg-amber-200/70 text-terracotta text-[10px] font-extrabold animate-pulse">
+                                    Menganalisis BANT &amp; Persona
+                                  </span>
+                                </div>
+                                <div className="space-y-2 animate-pulse pt-0.5">
+                                  <div className="h-3 bg-amber-200/80 rounded-full w-11/12" />
+                                  <div className="h-3 bg-amber-200/70 rounded-full w-4/5" />
+                                  <div className="h-3 bg-amber-200/60 rounded-full w-3/5" />
+                                </div>
                               </div>
-                            )}
 
-                            {analysis.rekomendasi?.length > 0 && (
-                              <div className="p-3 rounded-xl bg-sandstone/40 border border-warmborder">
-                                <p className="font-bold text-terracotta mb-1">Saran Taktis AI (Playbook):</p>
-                                <ul className="list-disc list-inside space-y-1 text-espresso">
-                                  {analysis.rekomendasi.map((r, i) => (
-                                    <li key={i}>{r}</li>
-                                  ))}
-                                </ul>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <div className="p-3 rounded-xl bg-sandstone/50 border border-warmborder space-y-2 animate-pulse">
+                                  <p className="font-bold text-olive">Poin Kuat Prospek:</p>
+                                  <div className="h-2.5 bg-warmborder rounded-full w-11/12" />
+                                  <div className="h-2.5 bg-warmborder rounded-full w-5/6" />
+                                  <div className="h-2.5 bg-warmborder rounded-full w-4/6" />
+                                  <div className="h-2.5 bg-warmborder rounded-full w-3/4" />
+                                </div>
+
+                                <div className="p-3 rounded-xl bg-sandstone/50 border border-warmborder space-y-2 animate-pulse">
+                                  <p className="font-bold text-terracotta">Saran Taktis AI (Playbook):</p>
+                                  <div className="h-2.5 bg-warmborder rounded-full w-full" />
+                                  <div className="h-2.5 bg-warmborder rounded-full w-10/12" />
+                                  <div className="h-2.5 bg-warmborder rounded-full w-4/5" />
+                                  <div className="h-2.5 bg-warmborder rounded-full w-3/5" />
+                                </div>
                               </div>
-                            )}
-                          </div>
 
-                          {analysis.perlu_dicek_ulang?.length > 0 && (
-                            <div className="p-3 rounded-xl bg-white border border-warmborder">
-                              <p className="font-bold text-espresso mb-1">
-                                Pertanyaan BANT Natural Berikutnya (Bab 5.3):
-                              </p>
-                              <ul className="list-disc list-inside space-y-1 text-warmmuted">
-                                {analysis.perlu_dicek_ulang.map((q, i) => (
-                                  <li key={i}>{q}</li>
-                                ))}
-                              </ul>
+                              <div className="p-3 rounded-xl bg-white border border-warmborder space-y-2 animate-pulse">
+                                <p className="font-bold text-espresso">
+                                  Pertanyaan BANT Natural Berikutnya (Bab 5.3):
+                                </p>
+                                <div className="h-2.5 bg-sandstone rounded-full w-11/12" />
+                                <div className="h-2.5 bg-sandstone rounded-full w-4/5" />
+                                <div className="h-2.5 bg-sandstone rounded-full w-3/4" />
+                              </div>
                             </div>
+                          ) : (
+                            analysis && (
+                              <>
+                                <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-1">
+                                  <p className="font-extrabold text-terracotta flex items-center gap-1.5">
+                                    <Sparkles className="size-3.5" />
+                                    <span>Hasil Analisis AI</span>
+                                  </p>
+                                  <p className="text-espresso leading-relaxed">{analysis.ringkas}</p>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                  {analysis.poin_kuat?.length > 0 && (
+                                    <div className="p-3 rounded-xl bg-sandstone/40 border border-warmborder">
+                                      <p className="font-bold text-olive mb-1">Poin Kuat Prospek:</p>
+                                      <ul className="list-disc list-inside space-y-1 text-espresso">
+                                        {analysis.poin_kuat.map((p, i) => (
+                                          <li key={i}>{p}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+
+                                  {analysis.rekomendasi?.length > 0 && (
+                                    <div className="p-3 rounded-xl bg-sandstone/40 border border-warmborder">
+                                      <p className="font-bold text-terracotta mb-1">Saran Taktis AI (Playbook):</p>
+                                      <ul className="list-disc list-inside space-y-1 text-espresso">
+                                        {analysis.rekomendasi.map((r, i) => (
+                                          <li key={i}>{r}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {analysis.perlu_dicek_ulang?.length > 0 && (
+                                  <div className="p-3 rounded-xl bg-white border border-warmborder">
+                                    <p className="font-bold text-espresso mb-1">
+                                      Pertanyaan BANT Natural Berikutnya (Bab 5.3):
+                                    </p>
+                                    <ul className="list-disc list-inside space-y-1 text-warmmuted">
+                                      {analysis.perlu_dicek_ulang.map((q, i) => (
+                                        <li key={i}>{q}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </>
+                            )
                           )}
                         </div>
 
@@ -2133,23 +2247,34 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                                   {lead.full_name}
                                 </p>
                                 <p className="text-[10px] text-white/80 truncate">
-                                  +{lead.phone_wa} · {isFollowUpAlreadySent ? 'Pesan Terkirim' : 'Pratinjau Pesan WA'}
+                                  +{lead.phone_wa} ·{' '}
+                                  {isAiWorking
+                                    ? 'AI Sedang Menyusun Balasan...'
+                                    : isFollowUpAlreadySent
+                                    ? 'Pesan Terkirim'
+                                    : 'Pratinjau Pesan WA'}
                                 </p>
                               </div>
                             </div>
                             <span className="px-2 py-0.5 rounded-full bg-white/15 text-[10px] font-semibold shrink-0">
-                              {isFollowUpAlreadySent ? 'Terkirim ✓✓' : 'Draf AI'}
+                              {isAiWorking
+                                ? 'Menyusun...'
+                                : isFollowUpAlreadySent
+                                ? 'Terkirim ✓✓'
+                                : 'Draf AI'}
                             </span>
                           </div>
 
                           {/* Area Gelembung Pesan (Turn-by-Turn Percakapan Sungguhan) */}
                           <div className="p-3.5 flex-1 flex flex-col justify-end space-y-2.5">
                             <div className="self-center px-2.5 py-0.5 rounded-lg bg-[#E1F3FB] text-[#54656F] text-[10px] font-semibold shadow-2xs text-center">
-                              {isFollowUpAlreadySent
+                              {isAiWorking
+                                ? `Pesan baru dari ${lead.full_name} diterima · AI sedang menyusun balasan`
+                                : isFollowUpAlreadySent
                                 ? `Pesan telah dikirim ke ${lead.full_name} · Menunggu balasan berikutnya`
                                 : isWaInboundLead
-                                ? 'Mode Balasan Chat WA · Klik gelembung hijau untuk edit sebelum kirim'
-                                : 'Mode Follow-Up Pasca-Temu · Klik gelembung hijau untuk edit sebelum kirim'}
+                                ? 'Mode Balasan Chat WA · Klik Lihat selengkapnya untuk edit sebelum kirim'
+                                : 'Mode Follow-Up Pasca-Temu · Klik Lihat selengkapnya untuk edit sebelum kirim'}
                             </div>
 
                             {lead.last_customer_message && (
@@ -2174,7 +2299,37 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                               </div>
                             )}
 
-                            {isFollowUpAlreadySent ? (
+                            {isAiWorking ? (
+                              /* ANIMASI SKELETON TEMPAT 2: GELEMBUNG HIJAU REKOMENDASI BALASAN AI */
+                              <div
+                                className="relative ml-3 rounded-2xl rounded-tr-xs bg-[#DCF8C6] p-3 shadow-xs border border-[#c7eab0] space-y-2.5"
+                                aria-busy="true"
+                                aria-live="polite"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[10px] font-extrabold text-[#075E54] flex items-center gap-1.5">
+                                    <Sparkles className="size-3.5 animate-spin text-[#075E54]" />
+                                    <span>AI sedang mengetik rekomendasi balasan ({user.name.split(' ')[0]})...</span>
+                                  </span>
+                                  <span className="inline-flex items-center gap-1">
+                                    <span className="size-1.5 rounded-full bg-[#075E54] animate-bounce" />
+                                    <span className="size-1.5 rounded-full bg-[#075E54] animate-bounce [animation-delay:150ms]" />
+                                    <span className="size-1.5 rounded-full bg-[#075E54] animate-bounce [animation-delay:300ms]" />
+                                  </span>
+                                </div>
+
+                                <div className="space-y-2 animate-pulse py-1">
+                                  <div className="h-2.5 bg-[#b5e496] rounded-full w-11/12" />
+                                  <div className="h-2.5 bg-[#b5e496] rounded-full w-full" />
+                                  <div className="h-2.5 bg-[#b5e496] rounded-full w-4/5" />
+                                </div>
+
+                                <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#c7eab0]/70 text-[10px] text-[#075E54] font-semibold">
+                                  <span>Menyesuaikan pesan dengan konteks terbaru...</span>
+                                  <span>Playbook v1.2</span>
+                                </div>
+                              </div>
+                            ) : isFollowUpAlreadySent ? (
                               /* Jika pesan sudah dikirim, sembunyikan kotak draf rekomendasi & tampilkan gelembung chat terkirim secara ringkas */
                               <div className="ml-6 rounded-2xl rounded-tr-xs bg-[#DCF8C6] p-3 shadow-xs border border-[#c7eab0] text-xs text-[#111B21] space-y-1.5">
                                 <p className="text-[10px] font-bold text-[#075E54]">
@@ -2245,17 +2400,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                                 )}
 
                                 <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#c7eab0]/70 text-[10px] text-[#667781]">
-                                  {isDraftMsgLong ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleMessageExpand(`draft_${lead.id}`)}
-                                      className="text-[11px] font-extrabold text-[#075E54] hover:underline cursor-pointer"
-                                    >
-                                      {isDraftMsgExpanded ? 'Tutup tampilan penuh' : 'Lihat selengkapnya'}
-                                    </button>
-                                  ) : (
-                                    <span>Playbook v1.2</span>
-                                  )}
+                                  <span>Playbook v1.2</span>
                                   <span className="inline-flex items-center gap-1">
                                     <span>Siap dikirim oleh {user.name.split(' ')[0]}</span>
                                     <CheckCheck className="size-3.5 text-[#53BDEB]" />
@@ -2267,7 +2412,12 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
 
                           {/* Bottom Composer Bar WhatsApp */}
                           <div className="p-2.5 bg-[#F0F2F5] border-t border-black/10 flex flex-col gap-1.5">
-                            {isFollowUpAlreadySent ? (
+                            {isAiWorking ? (
+                              <div className="min-h-[44px] px-4 rounded-full bg-[#128C7E]/70 text-white text-xs font-extrabold flex items-center justify-center gap-2 animate-pulse">
+                                <Sparkles className="size-4 animate-spin shrink-0" />
+                                <span>AI Sedang Menyusun Rekomendasi Balasan...</span>
+                              </div>
+                            ) : isFollowUpAlreadySent ? (
                               <div className="min-h-[40px] px-3.5 py-2 rounded-full bg-white border border-black/10 text-[11px] font-bold text-[#075E54] flex items-center justify-center gap-2 text-center">
                                 <CheckCheck className="size-4 text-[#53BDEB] shrink-0" />
                                 <span>

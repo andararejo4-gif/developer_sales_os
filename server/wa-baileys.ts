@@ -29,6 +29,11 @@ interface ActiveWaInstance {
 
 const instances = new Map<string, ActiveWaInstance>();
 const processedMessageIds = new Set<string>();
+const activeAnalyzingLeadIds = new Set<string>();
+
+export function isLeadCurrentlyAnalyzing(leadId: string): boolean {
+  return activeAnalyzingLeadIds.has(String(leadId));
+}
 
 function getSessionDir(seEmail: string): string {
   const hash = crypto.createHash('sha256').update(seEmail.toLowerCase()).digest('hex').slice(0, 24);
@@ -302,54 +307,8 @@ export async function processInboundWaMessageForSe(params: {
   historyLines.push(`[Pesan Masuk Terbaru (${new Date().toLocaleTimeString('id-ID')})]: ${decryptedMessages.join(' | ')}`);
   const combinedNotes = historyLines.join('\n').slice(-1200);
 
-  // 4. Jalankan AI Lead Analyzer berbasis Playbook v1.2 (Jalur B: WA_BAILEYS 2-Arah)
-  const aiResult = await analyzeLeadWithAi({
-    fullName: resolvedContactName,
-    phoneWa: cleanPhone,
-    domicile: detectedAttrs.domicile,
-    source: currentLead?.source || 'WhatsApp Inbound (Baileys)',
-    contentCode: currentLead?.content_code || 'WA-INBOUND',
-    stage: currentLead?.stage || 'NEW',
-    personaCode: (currentLead?.persona_code || 'P1') as any,
-    personaProfile: (currentLead?.persona_profile || {}) as Record<string, string>,
-    unitInterest: detectedAttrs.unitInterest,
-    paymentScheme: detectedAttrs.paymentScheme,
-    bantB: Number(currentLead?.bant_b ?? 1),
-    bantA: Number(currentLead?.bant_a ?? 1),
-    bantN: Number(currentLead?.bant_n ?? 2),
-    bantT: Number(currentLead?.bant_t ?? 1),
-    salesNotes: combinedNotes,
-    inboundMessages: decryptedMessages,
-    leadOrigin: 'WA_BAILEYS',
-    lastCustomerMessage: latestCustomerMsg,
-    lastSalesMessage: prevSalesMsg,
-    interactionCount: nextInteractionCount,
-    seName: params.seName,
-  });
-
-  const recBant = aiResult.recommended_bant;
-  const validityStatus = aiResult.clarity_status === 'PERLU_DILENGKAPI' ? 'PERLU_DILENGKAPI' : 'VALID';
-  const finalDomicile = aiResult.extracted_domicile || detectedAttrs.domicile;
-  const finalPaymentScheme = aiResult.extracted_payment_scheme || detectedAttrs.paymentScheme;
-  const finalUnitInterest = detectedAttrs.unitInterest;
-  const finalClusterInterest = detectedAttrs.clusterInterest;
-  const finalUnitPriceIdr = detectedAttrs.unitPriceIdr;
-
-  // Tentukan penyesuaian tahap otomatis jika BANT naik atau prospek minta jadwal survei
-  const wantsAppointment = /\b(survei|survey|lihat\s+lokasi|kunjung|datang|sabtu|minggu|besok|jadwal)\b/i.test(
-    latestCustomerMsg
-  );
-  const currentStage = String(currentLead?.stage || 'NEW');
-  const advancedStages = ['VISITED', 'HOT_NEGOTIATION', 'BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'];
-  let nextStage = currentStage;
-  if (!advancedStages.includes(currentStage)) {
-    if (wantsAppointment && recBant.total >= 7) {
-      nextStage = 'APPOINTMENT';
-    } else if (recBant.total >= 7 && (currentStage === 'NEW' || currentStage === 'CONTACTED')) {
-      nextStage = 'QUALIFIED';
-    }
-  }
-
+  // 3b. Segera simpan pesan masuk terbaru ke pipeline_leads SEBELUM menunggu LLM selesai,
+  //     agar pesan baru customer langsung muncul real-time di preview chat WA bersama animasi skeleton AI!
   let leadId: string;
   if (!currentLead) {
     const inserted = await sql`
@@ -363,24 +322,24 @@ export async function processInboundWaMessageForSe(params: {
         ${params.seName},
         ${resolvedContactName},
         ${cleanPhone},
-        ${finalDomicile},
+        ${detectedAttrs.domicile},
         ${'WhatsApp Inbound (Baileys)'},
         ${'WA-INBOUND'},
-        ${nextStage},
-        ${validityStatus},
-        ${aiResult.recommended_persona},
-        ${recBant.b},
-        ${recBant.a},
-        ${recBant.n},
-        ${recBant.t},
-        ${recBant.total},
-        ${recBant.grade},
-        ${finalClusterInterest},
-        ${finalUnitInterest},
-        ${finalUnitPriceIdr},
-        ${finalPaymentScheme},
+        ${'NEW'},
+        ${'VALID'},
+        ${'P1'},
+        ${1},
+        ${1},
+        ${2},
+        ${1},
+        ${5},
+        ${'C'},
+        ${detectedAttrs.clusterInterest},
+        ${detectedAttrs.unitInterest},
+        ${detectedAttrs.unitPriceIdr},
+        ${detectedAttrs.paymentScheme},
         ${combinedNotes},
-        ${aiResult.rekomendasi[0] || 'Balas <= 5 menit & kualifikasi BANT'},
+        ${'AI sedang menganalisis pesan masuk...'},
         ${'WA_BAILEYS'},
         ${latestCustomerMsg},
         ${''},
@@ -392,6 +351,75 @@ export async function processInboundWaMessageForSe(params: {
     leadId = String(inserted[0].id);
   } else {
     leadId = String(currentLead.id);
+    await sql`
+      UPDATE sales_os.pipeline_leads
+      SET full_name = ${resolvedContactName},
+          domicile = ${detectedAttrs.domicile},
+          cluster_interest = ${detectedAttrs.clusterInterest},
+          unit_interest = ${detectedAttrs.unitInterest},
+          unit_price_idr = ${detectedAttrs.unitPriceIdr},
+          payment_scheme = ${detectedAttrs.paymentScheme},
+          sales_notes = ${combinedNotes},
+          lead_origin = 'WA_BAILEYS',
+          last_customer_message = ${latestCustomerMsg},
+          last_sales_message = '',
+          interaction_count = ${nextInteractionCount},
+          updated_at = NOW()
+      WHERE id = ${leadId}
+    `;
+  }
+
+  activeAnalyzingLeadIds.add(leadId);
+
+  try {
+    // 4. Jalankan AI Lead Analyzer berbasis Playbook v1.2 (Jalur B: WA_BAILEYS 2-Arah)
+    const aiResult = await analyzeLeadWithAi({
+      fullName: resolvedContactName,
+      phoneWa: cleanPhone,
+      domicile: detectedAttrs.domicile,
+      source: currentLead?.source || 'WhatsApp Inbound (Baileys)',
+      contentCode: currentLead?.content_code || 'WA-INBOUND',
+      stage: currentLead?.stage || 'NEW',
+      personaCode: (currentLead?.persona_code || 'P1') as any,
+      personaProfile: (currentLead?.persona_profile || {}) as Record<string, string>,
+      unitInterest: detectedAttrs.unitInterest,
+      paymentScheme: detectedAttrs.paymentScheme,
+      bantB: Number(currentLead?.bant_b ?? 1),
+      bantA: Number(currentLead?.bant_a ?? 1),
+      bantN: Number(currentLead?.bant_n ?? 2),
+      bantT: Number(currentLead?.bant_t ?? 1),
+      salesNotes: combinedNotes,
+      inboundMessages: decryptedMessages,
+      leadOrigin: 'WA_BAILEYS',
+      lastCustomerMessage: latestCustomerMsg,
+      lastSalesMessage: prevSalesMsg,
+      interactionCount: nextInteractionCount,
+      seName: params.seName,
+    });
+
+    const recBant = aiResult.recommended_bant;
+    const validityStatus = aiResult.clarity_status === 'PERLU_DILENGKAPI' ? 'PERLU_DILENGKAPI' : 'VALID';
+    const finalDomicile = aiResult.extracted_domicile || detectedAttrs.domicile;
+    const finalPaymentScheme = aiResult.extracted_payment_scheme || detectedAttrs.paymentScheme;
+    const finalUnitInterest = detectedAttrs.unitInterest;
+    const finalClusterInterest = detectedAttrs.clusterInterest;
+    const finalUnitPriceIdr = detectedAttrs.unitPriceIdr;
+
+    // Tentukan penyesuaian tahap otomatis jika BANT naik atau prospek minta jadwal survei
+    const wantsAppointment = /\b(survei|survey|lihat\s+lokasi|kunjung|datang|sabtu|minggu|besok|jadwal)\b/i.test(
+      latestCustomerMsg
+    );
+    const currentStage = String(currentLead?.stage || 'NEW');
+    const advancedStages = ['VISITED', 'HOT_NEGOTIATION', 'BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'];
+    let nextStage = currentStage;
+    if (!advancedStages.includes(currentStage)) {
+      if (wantsAppointment && recBant.total >= 7) {
+        nextStage = 'APPOINTMENT';
+      } else if (recBant.total >= 7 && (currentStage === 'NEW' || currentStage === 'CONTACTED')) {
+        nextStage = 'QUALIFIED';
+      }
+    }
+
     await sql`
       UPDATE sales_os.pipeline_leads
       SET full_name = ${resolvedContactName},
@@ -410,7 +438,7 @@ export async function processInboundWaMessageForSe(params: {
           payment_scheme = ${finalPaymentScheme},
           validity_status = ${validityStatus},
           sales_notes = ${combinedNotes},
-          next_action = ${aiResult.rekomendasi[0] || currentLead.next_action},
+          next_action = ${aiResult.rekomendasi[0] || currentLead?.next_action || 'Balas <= 5 menit & kualifikasi BANT'},
           lead_origin = 'WA_BAILEYS',
           last_customer_message = ${latestCustomerMsg},
           last_sales_message = '',
@@ -418,34 +446,36 @@ export async function processInboundWaMessageForSe(params: {
           updated_at = NOW()
       WHERE id = ${leadId}
     `;
-  }
 
-  // Simpan hasil analisis AI
-  await sql`
-    INSERT INTO sales_os.lead_ai_analyses (
-      lead_id, owner_se_email, skor, label, clarity_status, unclear_parts, ringkas,
-      poin_kuat, poin_lemah, perlu_dicek_ulang, rekomendasi, recommended_persona,
-      recommended_bant, followup_draft_message, model, prompt_tokens, completion_tokens
-    ) VALUES (
-      ${leadId},
-      ${seEmail},
-      ${aiResult.skor},
-      ${aiResult.label},
-      ${aiResult.clarity_status},
-      ${sql.json(aiResult.unclear_parts as any)},
-      ${aiResult.ringkas},
-      ${sql.json(aiResult.poin_kuat as any)},
-      ${sql.json(aiResult.poin_lemah as any)},
-      ${sql.json(aiResult.perlu_dicek_ulang as any)},
-      ${sql.json(aiResult.rekomendasi as any)},
-      ${aiResult.recommended_persona},
-      ${sql.json(aiResult.recommended_bant as any)},
-      ${aiResult.followup_draft_message},
-      ${aiResult.model},
-      ${aiResult.prompt_tokens},
-      ${aiResult.completion_tokens}
-    )
-  `;
+    // Simpan hasil analisis AI
+    await sql`
+      INSERT INTO sales_os.lead_ai_analyses (
+        lead_id, owner_se_email, skor, label, clarity_status, unclear_parts, ringkas,
+        poin_kuat, poin_lemah, perlu_dicek_ulang, rekomendasi, recommended_persona,
+        recommended_bant, followup_draft_message, model, prompt_tokens, completion_tokens
+      ) VALUES (
+        ${leadId},
+        ${seEmail},
+        ${aiResult.skor},
+        ${aiResult.label},
+        ${aiResult.clarity_status},
+        ${sql.json(aiResult.unclear_parts as any)},
+        ${aiResult.ringkas},
+        ${sql.json(aiResult.poin_kuat as any)},
+        ${sql.json(aiResult.poin_lemah as any)},
+        ${sql.json(aiResult.perlu_dicek_ulang as any)},
+        ${sql.json(aiResult.rekomendasi as any)},
+        ${aiResult.recommended_persona},
+        ${sql.json(aiResult.recommended_bant as any)},
+        ${aiResult.followup_draft_message},
+        ${aiResult.model},
+        ${aiResult.prompt_tokens},
+        ${aiResult.completion_tokens}
+      )
+    `;
+  } finally {
+    activeAnalyzingLeadIds.delete(leadId);
+  }
 
   // Tautkan metrik kontak ke leadId
   await sql`
