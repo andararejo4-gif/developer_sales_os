@@ -11,9 +11,18 @@ import {
   Star,
   History,
   Search,
+  Sparkles,
+  Copy,
+  ExternalLink,
+  CheckCircle2,
+  Phone,
+  MessageCircle,
 } from 'lucide-react';
 import osmPoisData from '../data/osm_poi.json';
 import { POI } from './InteractiveMap';
+import { saveNewProject, type CompanyProject, saveSelectedProjectId } from '../lib/projects/projects-data';
+import { initProjectLoveLetter } from '../lib/love-letter/love-letter-engine';
+import { initProjectWebsiteConfig } from '../lib/website-generator/website-engine';
 
 interface TenantRecord {
   id: string;
@@ -72,12 +81,116 @@ const SAMPLE_TENANTS: TenantRecord[] = [
 
 interface SuperadminPanelProps {
   onClose?: () => void;
+  initialTab?: 'tenants' | 'poi_curation' | 'preseed';
 }
 
-export function SuperadminPanel({ onClose }: SuperadminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'tenants' | 'poi_curation'>('tenants');
+export function SuperadminPanel({ onClose, initialTab }: SuperadminPanelProps) {
+  const [activeTab, setActiveTab] = useState<'tenants' | 'poi_curation' | 'preseed'>(initialTab || 'preseed');
   const [tenants, setTenants] = useState<TenantRecord[]>(SAMPLE_TENANTS);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Pre-seed VIP Developer Prospek State
+  const [devName, setDevName] = useState('PT Graha Mandiri Propertindo');
+  const [ownerName, setOwnerName] = useState('Bpk. Hendra Gunawan');
+  const [ownerPhone, setOwnerPhone] = useState('081234567890');
+  const [projectName, setProjectName] = useState('Grand Mandiri Asri');
+  const [projectLocation, setProjectLocation] = useState('Mandan, Sukoharjo');
+  const [projectType, setProjectType] = useState<'Mewah' | 'Menengah' | 'Subsidi'>('Menengah');
+  const [totalUnit, setTotalUnit] = useState(45);
+  const [priceRange, setPriceRange] = useState('Rp 450 Jt - Rp 750 Jt');
+  const [gpsCoord, setGpsCoord] = useState('-7.675120, 110.842310');
+  const [description, setDescription] = useState('Kompleks perumahan modern 45 unit keluarga muda dengan one gate system dan akses kilat ke pusat kota.');
+
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [preseedResult, setPreseedResult] = useState<{
+    project: CompanyProject;
+    magicLink: string;
+    whatsappText: string;
+    ownerPhone: string;
+  } | null>(null);
+
+  const handleExecutePreseed = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsGenerating(true);
+
+    const slug = (projectName || 'proyek-baru')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    const newProj = saveNewProject({
+      nama: projectName,
+      kode: projectName.split(' ').map((w) => w[0]).join('').slice(0, 3).toUpperCase() || 'GMA',
+      tipe: projectType,
+      lokasi: projectLocation,
+      totalUnit: Number(totalUnit),
+      kisaranHarga: priceRange,
+      deskripsi: description,
+      koordinatGps: gpsCoord,
+      radiusKm: 25,
+      katalogFile: `katalog_${slug}.pdf`,
+      pricelistFile: `pricelist_${slug}.xlsx`,
+      generatedOutputs: {
+        suratCinta: true,
+        risetPasar: true,
+        targetPenjualan: true,
+        kalenderKonten: true,
+        playbook: true,
+        ruteHarian: true,
+      },
+    });
+
+    // Inisialisasi otomatis seluruh generator untuk proyek prospek
+    initProjectLoveLetter(newProj.id, newProj.nama, newProj.lokasi, newProj.tipe);
+    initProjectWebsiteConfig(newProj.id, newProj.nama, newProj);
+
+    // Daftarkan sebagai tenant baru di dashboard
+    const newTenant: TenantRecord = {
+      id: `t-${Date.now()}`,
+      name: devName,
+      status: 'DEMO',
+      plan: 'Diamond',
+      projectsCount: 1,
+      totalTokensUsed: 12500,
+      estimatedCostUsd: 0.025,
+      aiMode: 'semi_ai (Pre-seeded VIP)',
+    };
+    setTenants((prev) => [newTenant, ...prev]);
+
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const magicLink = `${origin}/?project=${newProj.id}&role=DIREKSI`;
+    const cleanSubdomain = (newProj.kode || projectName).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const webPreviewLink = `https://${cleanSubdomain}.developerproperti.glivepro.com`;
+
+    const waText = `Yth. ${ownerName} (${devName}),
+
+Salam hangat dari Tim Developer Sales OS.
+
+Kami telah menginisialisasi sistem operasional & penjualan digital siap pakai khusus untuk proyek Anda: *${projectName}* (${projectLocation}).
+
+Aset proyek yang sudah kami siapkan lengkap:
+✨ *Surat Cinta 99 Keunggulan*: Faktual dari titik koordinat GPS (${gpsCoord})
+🌐 *Website Landing Page & KPR*: ${webPreviewLink}
+🎯 *Riset Pasar Radius 25 km & 5 Profil Persona Pembeli*
+📊 *Target Penjualan 100% Sold Out (${totalUnit} Unit)*
+📱 *Playbook Sales, SOP & Kualifikasi BANT >= 7*
+
+Bapak/Ibu dapat langsung mencoba dashboard eksekutif proyek Anda di sini:
+👉 *Akses Preview VIP*: ${magicLink}
+
+Semua data telah disesuaikan dengan profil ${projectName}. Anda tinggal memilih paket langganan untuk menghubungkan nomor WhatsApp tim sales dan langsung jualan hari ini!`;
+
+    setPreseedResult({
+      project: newProj,
+      magicLink,
+      whatsappText: waText,
+      ownerPhone,
+    });
+
+    setIsGenerating(false);
+    setToastMessage(`Sukses! Ekosistem proyek ${projectName} (${devName}) berhasil dibuatkan.`);
+  };
 
   // POI Curation State
   const [poiList, setPoiList] = useState<POI[]>(osmPoisData as unknown as POI[]);
@@ -195,6 +308,18 @@ export function SuperadminPanel({ onClose }: SuperadminPanelProps) {
             <div className="inline-flex rounded-xl bg-white/10 p-1 border border-white/15">
               <button
                 type="button"
+                onClick={() => setActiveTab('preseed')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'preseed'
+                    ? 'bg-amber-400 text-espresso shadow-xs'
+                    : 'text-stone-300 hover:text-white'
+                }`}
+              >
+                <Sparkles className="size-3.5 text-amber-500" />
+                <span>Pre-Seed Prospek VIP</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveTab('tenants')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'tenants'
@@ -229,7 +354,259 @@ export function SuperadminPanel({ onClose }: SuperadminPanelProps) {
           </div>
         </div>
 
-        {activeTab === 'tenants' ? (
+        {activeTab === 'preseed' ? (
+          <div className="p-6 overflow-y-auto flex-1 bg-[#FBF9F5] space-y-6">
+            {/* Header Concierge */}
+            <div className="bg-white rounded-3xl border border-warmborder p-6 shadow-xs">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-warmborder pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300">
+                      Done-For-You Concierge Onboarding
+                    </span>
+                    <span className="text-xs text-warmmuted">Internal IT Sales Acceleration</span>
+                  </div>
+                  <h3 className="text-lg font-black text-espresso mt-1">
+                    Buatkan Akun &amp; Ekosistem Proyek Prospek Developer Baru
+                  </h3>
+                  <p className="text-xs text-warmmuted mt-0.5">
+                    Isi data proyek prospek dari brosur/pricelist. Sistem otomatis mengenerate Surat Cinta 99 Keunggulan, Website, Riset Pasar, dan Dashboard siap demo agar calon developer langsung terkesan (&quot;Wah, proyek saya sudah dibuatkan!&quot;).
+                  </p>
+                </div>
+              </div>
+
+              {/* Form Input Prospek */}
+              <form onSubmit={handleExecutePreseed} className="mt-5 space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-espresso mb-1">Nama Developer / PT *</label>
+                    <input
+                      type="text"
+                      required
+                      value={devName}
+                      onChange={(e) => setDevName(e.target.value)}
+                      placeholder="Contoh: PT Graha Mulia Abadi"
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder text-xs focus:outline-none focus:border-terracotta bg-sandstone/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-espresso mb-1">Nama Owner / Direktur *</label>
+                    <input
+                      type="text"
+                      required
+                      value={ownerName}
+                      onChange={(e) => setOwnerName(e.target.value)}
+                      placeholder="Contoh: Bpk. Irwan Santoso"
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder text-xs focus:outline-none focus:border-terracotta bg-sandstone/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-espresso mb-1">No. WhatsApp Owner *</label>
+                    <input
+                      type="text"
+                      required
+                      value={ownerPhone}
+                      onChange={(e) => setOwnerPhone(e.target.value)}
+                      placeholder="081234567890"
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder text-xs focus:outline-none focus:border-terracotta bg-sandstone/30"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-espresso mb-1">Nama Proyek Properti *</label>
+                    <input
+                      type="text"
+                      required
+                      value={projectName}
+                      onChange={(e) => setProjectName(e.target.value)}
+                      placeholder="Contoh: Graha Mulia Asri Colomadu"
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder text-xs focus:outline-none focus:border-terracotta bg-sandstone/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-espresso mb-1">Lokasi (Kecamatan / Kota) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={projectLocation}
+                      onChange={(e) => setProjectLocation(e.target.value)}
+                      placeholder="Colomadu, Karanganyar"
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder text-xs focus:outline-none focus:border-terracotta bg-sandstone/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-espresso mb-1">Kategori / Segmen Proyek</label>
+                    <select
+                      value={projectType}
+                      onChange={(e) => setProjectType(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder text-xs font-semibold bg-white focus:outline-none focus:border-terracotta"
+                    >
+                      <option value="Komersil Menengah">Komersil Menengah</option>
+                      <option value="Perumahan Mewah">Perumahan Mewah</option>
+                      <option value="Rumah Subsidi FLPP">Rumah Subsidi FLPP</option>
+                      <option value="Ruko &amp; Komersial">Ruko &amp; Komersial</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-espresso mb-1">Total Unit Kavling</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={totalUnit}
+                      onChange={(e) => setTotalUnit(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder text-xs focus:outline-none focus:border-terracotta bg-sandstone/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-espresso mb-1">Kisaran Harga Jual</label>
+                    <input
+                      type="text"
+                      value={priceRange}
+                      onChange={(e) => setPriceRange(e.target.value)}
+                      placeholder="Rp 450 Jt - Rp 750 Jt"
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder text-xs focus:outline-none focus:border-terracotta bg-sandstone/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-espresso mb-1">Koordinat GPS (Lat, Long)</label>
+                    <input
+                      type="text"
+                      value={gpsCoord}
+                      onChange={(e) => setGpsCoord(e.target.value)}
+                      placeholder="-7.534210, 110.771230"
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder text-xs font-mono focus:outline-none focus:border-terracotta bg-sandstone/30"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-espresso mb-1">Deskripsi Singkat / Selling Point Utama</label>
+                  <textarea
+                    rows={2}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Tuliskan keunggulan unik proyek, misal 5 menit dari tol, sistem satu gerbang, dll."
+                    className="w-full px-3 py-2 rounded-xl border border-warmborder text-xs focus:outline-none focus:border-terracotta bg-sandstone/30"
+                  />
+                </div>
+
+                <div className="pt-2 flex items-center justify-between">
+                  <span className="text-[11px] text-warmmuted">
+                    ⚡ Otomatis menginisialisasi 8 modul &amp; menautkan tenant baru dengan status demo.
+                  </span>
+                  <button
+                    type="submit"
+                    disabled={isGenerating}
+                    className="px-5 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white font-extrabold text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Sparkles className="size-4" />
+                    <span>{isGenerating ? 'Mengenerate Ekosistem...' : '⚡ Generate Ekosistem Prospek Sekarang'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Kartu Hasil Pre-Seed */}
+            {preseedResult && (
+              <div className="bg-white rounded-3xl border-2 border-emerald-400 p-6 shadow-md space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-100">
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                      <CheckCircle2 className="size-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-espresso text-base">
+                        Ekosistem Prospek {preseedResult.project.nama} Siap Dikirim!
+                      </h4>
+                      <p className="text-xs text-warmmuted">
+                        Tenant terdaftar untuk <strong className="text-espresso">{devName}</strong> (Owner: {ownerName})
+                      </p>
+                    </div>
+                  </div>
+                  <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-800 border border-emerald-300">
+                    VIP Concierge Active
+                  </span>
+                </div>
+
+                {/* Akses Cepat */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="p-3.5 bg-sandstone/40 rounded-2xl border border-warmborder">
+                    <span className="text-[10px] font-bold text-warmmuted uppercase block mb-1">
+                      Magic Dashboard Link (Direksi Mode)
+                    </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-mono text-terracotta truncate">{preseedResult.magicLink}</span>
+                      <a
+                        href={preseedResult.magicLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => saveSelectedProjectId(preseedResult.project.id)}
+                        className="px-3 py-1.5 rounded-lg bg-espresso hover:bg-espresso/90 text-white text-[11px] font-bold shrink-0 flex items-center gap-1.5"
+                      >
+                        <ExternalLink className="size-3" />
+                        <span>Buka Dashboard</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 bg-sandstone/40 rounded-2xl border border-warmborder">
+                    <span className="text-[10px] font-bold text-warmmuted uppercase block mb-1">
+                      Aset Terintegrasi Otomatis
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-espresso font-semibold">
+                      <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">✓ Surat Cinta 99</span>
+                      <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800">✓ Website Landing Page</span>
+                      <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800">✓ Riset 25km</span>
+                      <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800">✓ Target &amp; SOP</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Draft Copywriting WhatsApp Siap Kirim */}
+                <div className="p-4 bg-sandstone/50 rounded-2xl border border-warmborder space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MessageCircle className="size-4 text-emerald-600" />
+                      <span className="text-xs font-extrabold text-espresso">Draft Pesan WhatsApp ke Owner</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(preseedResult.whatsappText);
+                          setToastMessage('Pesan WhatsApp disalin ke clipboard!');
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-white border border-warmborder text-[11px] font-bold text-espresso hover:bg-sandstone flex items-center gap-1 cursor-pointer"
+                      >
+                        <Copy className="size-3 text-warmmuted" />
+                        <span>Salin Pesan</span>
+                      </button>
+                      <a
+                        href={`https://wa.me/${preseedResult.ownerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                          preseedResult.whatsappText
+                        )}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold flex items-center gap-1.5"
+                      >
+                        <Phone className="size-3" />
+                        <span>Kirim WA Langsung</span>
+                      </a>
+                    </div>
+                  </div>
+                  <pre className="p-3 bg-white rounded-xl border border-warmborder text-[11px] font-sans text-stone-700 whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed">
+                    {preseedResult.whatsappText}
+                  </pre>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : activeTab === 'tenants' ? (
           <>
             {/* Aggregate AI Metric Banner */}
             <div className="px-6 py-4 bg-sandstone/50 border-b border-warmborder grid grid-cols-1 sm:grid-cols-3 gap-4 shrink-0">

@@ -10,8 +10,9 @@ import {
   X,
   AlertCircle,
   Clock,
+  Sparkles,
 } from 'lucide-react';
-import { getPlaybook } from '../lib/playbook/playbook-generator';
+import { getPlaybook, initProjectPlaybook } from '../lib/playbook/playbook-generator';
 import { generatePlaybookDocx } from '../lib/exporters/playbook-docx';
 import {
   getQueryParam,
@@ -44,9 +45,14 @@ export function PlaybookViewer({
   const [role, setRole] = useState<PlaybookRole>(() =>
     loadPersistedState<PlaybookRole>(`devos_playbook_role_${projectId}`, initialRole)
   );
-  const [playbook, setPlaybook] = useState<PlaybookPlan>(() =>
+  const [playbook, setPlaybook] = useState<PlaybookPlan | null>(() =>
     getPlaybook(projectId, role, isDemoMode)
   );
+
+  useEffect(() => {
+    setPlaybook(getPlaybook(projectId, role, isDemoMode));
+  }, [projectId, role, isDemoMode]);
+
   const [activeTab, setActiveTab] = useState<PlaybookTab>(() => {
     const urlTab = variant === 'page' ? getQueryParam('tab') : null;
     if (urlTab && VALID_PLAYBOOK_TABS.includes(urlTab as PlaybookTab)) {
@@ -84,6 +90,12 @@ export function PlaybookViewer({
     setPlaybook(getPlaybook(projectId, newRole, isDemoMode));
   };
 
+  const handleInitPlaybook = () => {
+    initProjectPlaybook(projectId);
+    setPlaybook(getPlaybook(projectId, role, isDemoMode));
+    setToastMessage(`Playbook penjualan 5 peran untuk ${projectName} berhasil diaktifkan!`);
+  };
+
   const calculatedBantAverage = Number(
     (
       (bantScores.Budget * 0.3 +
@@ -96,6 +108,7 @@ export function PlaybookViewer({
   const isBantQualified = calculatedBantAverage >= 7.0;
 
   const handleExportDocx = async () => {
+    if (!playbook) return;
     setIsExporting(true);
     try {
       const blob = await generatePlaybookDocx(playbook);
@@ -186,21 +199,30 @@ export function PlaybookViewer({
 
         {/* Role Selector & Tab Bar */}
         <div className="px-6 py-3 bg-white border-b border-warmborder flex flex-wrap items-center justify-between gap-3 shrink-0">
-          {/* Role Switcher */}
-          <div className="flex items-center gap-1 p-1 bg-sandstone rounded-2xl border border-warmborder">
-            {(['SE', 'TL', 'SM'] as PlaybookRole[]).map((r) => (
-              <button
-                key={r}
-                onClick={() => handleRoleChange(r)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-                  role === r
-                    ? 'bg-espresso text-white shadow-sm'
-                    : 'text-warmmuted hover:text-espresso'
-                }`}
-              >
-                {r === 'SE' ? 'Sales Executive (SE)' : r === 'TL' ? 'Team Leader (TL)' : 'Sales Manager (SM)'}
-              </button>
-            ))}
+          {/* Role Switcher (SE, TL, SM, Digital Marketing, Admin) */}
+          <div className="flex flex-wrap items-center gap-1 p-1 bg-sandstone rounded-2xl border border-warmborder">
+            {(['SE', 'TL', 'SM', 'DIGITAL_MARKETING', 'ADMIN'] as PlaybookRole[]).map((r) => {
+              const roleLabels: Record<PlaybookRole, string> = {
+                SE: 'SE (Sales)',
+                TL: 'TL (Leader)',
+                SM: 'SM (Manager)',
+                DIGITAL_MARKETING: 'Digital Marketing',
+                ADMIN: 'Admin & KPR',
+              };
+              return (
+                <button
+                  key={r}
+                  onClick={() => handleRoleChange(r)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                    role === r
+                      ? 'bg-espresso text-white shadow-sm'
+                      : 'text-warmmuted hover:text-espresso'
+                  }`}
+                >
+                  {roleLabels[r]}
+                </button>
+              );
+            })}
           </div>
 
           {/* Tab Navigation */}
@@ -230,29 +252,51 @@ export function PlaybookViewer({
 
         {/* Body Content */}
         <div className="p-6 overflow-y-auto flex-1 bg-[#FBF9F5] space-y-6">
-          {/* TAB 1: SOP HARIAN */}
-          {activeTab === 'sop' && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-sm font-extrabold text-espresso">
-                  Rutinitas Kerja Harian ({role})
-                </h3>
-                <span className="text-xs text-warmmuted">
-                  Wajib dipatuhi untuk menjaga ritme kerja closing bulanan
-                </span>
+          {!playbook ? (
+            <div className="p-12 text-center rounded-3xl bg-white border border-dashed border-warmborder space-y-4 my-4">
+              <div className="size-16 rounded-2xl bg-sandstone text-warmmuted grid place-items-center mx-auto">
+                <BookOpen className="size-8 text-warmmuted" />
               </div>
+              <div>
+                <h3 className="text-base font-extrabold text-espresso">Belum ada playbook</h3>
+                <p className="text-xs text-warmmuted mt-1 max-w-md mx-auto leading-relaxed">
+                  Playbook Penjualan &amp; SOP (SE, TL, SM, Digital Marketing, Admin) belum dibuat untuk <strong>{projectName}</strong>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleInitPlaybook}
+                className="px-4 py-2.5 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 cursor-pointer shadow-xs inline-flex items-center gap-2"
+              >
+                <Sparkles className="size-4" />
+                <span>Buat Playbook Proyek Ini</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* TAB 1: SOP HARIAN */}
+              {activeTab === 'sop' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-sm font-extrabold text-espresso">
+                      Rutinitas Kerja Harian ({role})
+                    </h3>
+                    <span className="text-xs text-warmmuted">
+                      Wajib dipatuhi untuk menjaga ritme kerja closing bulanan
+                    </span>
+                  </div>
 
-              <div className="space-y-3">
-                {playbook.dailySop.map((sop, idx) => (
-                  <div
-                    key={idx}
-                    className="p-4 rounded-2xl bg-white border border-warmborder shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3"
-                  >
-                    <div className="flex items-start gap-3.5">
-                      <div className="size-9 rounded-xl bg-sandstone border border-warmborder flex items-center justify-center font-bold text-xs text-espresso shrink-0">
-                        {idx + 1}
-                      </div>
-                      <div>
+                  <div className="space-y-3">
+                    {playbook.dailySop.map((sop, idx) => (
+                      <div
+                        key={idx}
+                        className="p-4 rounded-2xl bg-white border border-warmborder shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3"
+                      >
+                        <div className="flex items-start gap-3.5">
+                          <div className="size-9 rounded-xl bg-sandstone border border-warmborder flex items-center justify-center font-bold text-xs text-espresso shrink-0">
+                            {idx + 1}
+                          </div>
+                          <div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold text-terracotta flex items-center gap-1">
                             <Clock className="size-3" />
@@ -467,6 +511,8 @@ export function PlaybookViewer({
               </span>
               <span className="font-bold text-terracotta">Tingkatkan Paket untuk Versi Lengkap &rarr;</span>
             </div>
+          )}
+          </>
           )}
         </div>
 

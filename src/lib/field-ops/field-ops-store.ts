@@ -19,6 +19,15 @@ export const PROJECT_BASE_COORDS = {
   label: 'Kantor Pemasaran The Park Townhouse Sukoharjo',
 };
 
+export function parseCoordinates(coordStr?: string): { lat: number; lng: number } {
+  if (!coordStr) return { lat: PROJECT_BASE_COORDS.lat, lng: PROJECT_BASE_COORDS.lng };
+  const parts = coordStr.split(',').map((p) => parseFloat(p.trim()));
+  if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return { lat: parts[0], lng: parts[1] };
+  }
+  return { lat: PROJECT_BASE_COORDS.lat, lng: PROJECT_BASE_COORDS.lng };
+}
+
 export function calculateDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -275,8 +284,59 @@ export function resetFieldOpsStore(): void {
   callLogsDb = structuredClone(INITIAL_CALL_LOGS);
 }
 
-export function getAttendanceRecords(projectId: string = 'proj-the-park-01'): SeAttendanceRecord[] {
-  return attendanceDb.filter((a) => a.projectId === projectId);
+export function getAttendanceRecords(
+  projectId: string = 'proj-the-park-01',
+  baseCoords?: { lat: number; lng: number },
+  projectName?: string
+): SeAttendanceRecord[] {
+  const existing = attendanceDb.filter((a) => a.projectId === projectId);
+  if (existing.length > 0) return existing;
+
+  const lat = baseCoords?.lat ?? PROJECT_BASE_COORDS.lat;
+  const lng = baseCoords?.lng ?? PROJECT_BASE_COORDS.lng;
+  const name = projectName ?? 'The Park Townhouse Sukoharjo';
+
+  const defaultRecords: SeAttendanceRecord[] = [
+    {
+      id: `att-${projectId}-01`,
+      projectId,
+      seName: 'SE 001 Budi Santoso',
+      date: todayStr,
+      checkInAt: '08:02 WIB',
+      checkInLat: lat,
+      checkInLng: lng,
+      checkOutAt: null,
+      status: 'HADIR',
+      notes: `Siap kanvasing terintegrasi ${name}`,
+    },
+    {
+      id: `att-${projectId}-02`,
+      projectId,
+      seName: 'SE 002 Andi Wijaya',
+      date: todayStr,
+      checkInAt: '08:06 WIB',
+      checkInLat: lat + 0.00004,
+      checkInLng: lng - 0.00003,
+      checkOutAt: null,
+      status: 'HADIR',
+      notes: `Standby show unit & follow-up leads ${name}`,
+    },
+    {
+      id: `att-${projectId}-03`,
+      projectId,
+      seName: 'SE 003 Maya Kusuma',
+      date: todayStr,
+      checkInAt: '08:20 WIB',
+      checkInLat: lat - 0.00002,
+      checkInLng: lng + 0.00003,
+      checkOutAt: null,
+      status: 'HADIR',
+      notes: `Koordinasi berkas KPR pemohon unit ${name}`,
+    },
+  ];
+
+  attendanceDb.push(...defaultRecords);
+  return defaultRecords;
 }
 
 export function checkInAttendance(input: {
@@ -329,8 +389,56 @@ export function checkOutAttendance(projectId: string, seName: string, lat: numbe
   return { ...target };
 }
 
-export function getGpsTrackLogs(projectId: string = 'proj-the-park-01'): SeGpsTrackPoint[] {
-  return gpsLogsDb.filter((g) => g.projectId === projectId);
+export function getGpsTrackLogs(
+  projectId: string = 'proj-the-park-01',
+  baseCoords?: { lat: number; lng: number },
+  projectName?: string
+): SeGpsTrackPoint[] {
+  const existing = gpsLogsDb.filter((g) => g.projectId === projectId);
+  if (existing.length > 0) return existing;
+
+  const lat = baseCoords?.lat ?? PROJECT_BASE_COORDS.lat;
+  const lng = baseCoords?.lng ?? PROJECT_BASE_COORDS.lng;
+  const name = projectName ?? 'The Park Townhouse';
+
+  const defaultLogs: SeGpsTrackPoint[] = [
+    {
+      id: `gps-${projectId}-01`,
+      projectId,
+      seName: 'SE 001 Budi Santoso',
+      recordedAt: '08:02 WIB',
+      lat,
+      lng,
+      activityType: 'CHECK_IN',
+      locationLabel: `Kantor Pemasaran ${name}`,
+      distanceFromProjectKm: 0,
+    },
+    {
+      id: `gps-${projectId}-02`,
+      projectId,
+      seName: 'SE 001 Budi Santoso',
+      recordedAt: '09:15 WIB',
+      lat: lat + 0.04887,
+      lng: lng - 0.03198,
+      activityType: 'CANVASSING',
+      locationLabel: `Kawasan Bisnis & Sentra Layanan (${name})`,
+      distanceFromProjectKm: calculateDistanceKm(lat, lng, lat + 0.04887, lng - 0.03198),
+    },
+    {
+      id: `gps-${projectId}-03`,
+      projectId,
+      seName: 'SE 001 Budi Santoso',
+      recordedAt: '13:20 WIB',
+      lat: lat + 0.06587,
+      lng: lng - 0.02898,
+      activityType: 'MEETING_KLIEN',
+      locationLabel: `Sentra Perbankan & Edukasi Rekanan (${name})`,
+      distanceFromProjectKm: calculateDistanceKm(lat, lng, lat + 0.06587, lng - 0.02898),
+    },
+  ];
+
+  gpsLogsDb.push(...defaultLogs);
+  return defaultLogs;
 }
 
 export function recordGpsPoint(input: {
@@ -340,8 +448,11 @@ export function recordGpsPoint(input: {
   lng: number;
   activityType: GpsActivityType;
   locationLabel: string;
+  baseCoords?: { lat: number; lng: number };
 }): SeGpsTrackPoint {
-  const dist = calculateDistanceKm(PROJECT_BASE_COORDS.lat, PROJECT_BASE_COORDS.lng, input.lat, input.lng);
+  const originLat = input.baseCoords?.lat ?? PROJECT_BASE_COORDS.lat;
+  const originLng = input.baseCoords?.lng ?? PROJECT_BASE_COORDS.lng;
+  const dist = calculateDistanceKm(originLat, originLng, input.lat, input.lng);
   const point: SeGpsTrackPoint = {
     id: `gps-${Date.now()}`,
     projectId: input.projectId,
@@ -358,8 +469,52 @@ export function recordGpsPoint(input: {
   return point;
 }
 
-export function getCallLogs(projectId: string = 'proj-the-park-01'): SeCallLog[] {
-  return callLogsDb.filter((c) => c.projectId === projectId);
+export function getCallLogs(projectId: string = 'proj-the-park-01', projectName?: string): SeCallLog[] {
+  const existing = callLogsDb.filter((c) => c.projectId === projectId);
+  if (existing.length > 0) return existing;
+
+  const name = projectName ?? 'The Park Townhouse';
+  const defaultLogs: SeCallLog[] = [
+    {
+      id: `call-${projectId}-01`,
+      projectId,
+      seName: 'SE 001 Budi Santoso',
+      leadName: 'dr. Hendra Kusuma, Sp.A',
+      phoneNumber: '081234567891',
+      direction: 'OUTBOUND',
+      durationSeconds: 312,
+      outcome: 'JANJI_SURVEI',
+      summaryNotes: `Konfirmasi jadwal survei show unit proyek ${name} hari Sabtu jam 15.00 WIB.`,
+      calledAt: '08:45 WIB',
+    },
+    {
+      id: `call-${projectId}-02`,
+      projectId,
+      seName: 'SE 002 Andi Wijaya',
+      leadName: 'Ibu Ratna Paramitha',
+      phoneNumber: '081299887766',
+      direction: 'OUTBOUND',
+      durationSeconds: 185,
+      outcome: 'TERJAWAB_TERTARIK',
+      summaryNotes: `Menanyakan skema Cash Bertahap unit ${name}; sudah dikirim pricelist PDF.`,
+      calledAt: '09:30 WIB',
+    },
+    {
+      id: `call-${projectId}-03`,
+      projectId,
+      seName: 'SE 003 Maya Kusuma',
+      leadName: 'Bpk. Wahyu Hidayat',
+      phoneNumber: '081355667788',
+      direction: 'OUTBOUND',
+      durationSeconds: 22,
+      outcome: 'TIDAK_ANGKAT',
+      summaryNotes: `Nada sambung aktif peminat ${name} belum diangkat; dilanjutkan WhatsApp.`,
+      calledAt: '10:15 WIB',
+    },
+  ];
+
+  callLogsDb.push(...defaultLogs);
+  return defaultLogs;
 }
 
 export function addCallLog(input: {
@@ -384,13 +539,26 @@ export function addCallLog(input: {
 
 export function getAiActivityGuide(
   activityType: SeActivityCategory,
-  planCode: 'gold' | 'platinum' | 'diamond'
+  planCode: 'gold' | 'platinum' | 'diamond',
+  projectName?: string
 ): {
   isUnlocked: boolean;
   guide: AiActivityGuide;
   upgradeMessage?: string;
 } {
-  const guide = AI_ACTIVITY_GUIDES[activityType];
+  const baseGuide = AI_ACTIVITY_GUIDES[activityType];
+  const name = projectName || 'The Park Townhouse Sukoharjo';
+
+  const guide: AiActivityGuide = {
+    ...baseGuide,
+    title: baseGuide.title.replace(/The Park Townhouse Sukoharjo|The Park Townhouse/g, name),
+    openingScript: baseGuide.openingScript.replace(/The Park Townhouse Sukoharjo|The Park Townhouse/g, name),
+    executionSteps: baseGuide.executionSteps.map((step) =>
+      step.replace(/The Park Townhouse Sukoharjo|The Park Townhouse/g, name)
+    ),
+    closingChecklist: baseGuide.closingChecklist.replace(/The Park Townhouse Sukoharjo|The Park Townhouse/g, name),
+  };
+
   const isUnlocked = hasPlanFeature(planCode, 'se_ai_activity_guide');
 
   if (!isUnlocked) {

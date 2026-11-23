@@ -242,7 +242,7 @@ export const PlanCheckoutModal: React.FC<PlanCheckoutModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div className="p-3.5 rounded-lg bg-white border border-warmborder">
                   <span className="text-warmmuted font-bold block mb-1">DITAGIHKAN KEPADA:</span>
-                  <strong className="text-espresso block text-sm">PT Andara Rejo Makmur</strong>
+                  <strong className="text-espresso block text-sm">Developer Properti Terdaftar</strong>
                   <span className="text-warmmuted">Proyek: The Park Townhouse Sukoharjo</span>
                   <span className="text-warmmuted block">Sukoharjo, Jawa Tengah</span>
                 </div>

@@ -27,7 +27,7 @@ import {
   addCallLog,
   getAiActivityGuide,
   ALL_SE_ACTIVITY_CATEGORIES,
-  PROJECT_BASE_COORDS,
+  parseCoordinates,
 } from '../lib/field-ops/field-ops-store';
 import {
   getQueryParam,
@@ -35,14 +35,21 @@ import {
   loadPersistedState,
   savePersistedState,
 } from '../lib/navigation/router';
+import type { CompanyProject } from '../lib/projects/projects-data';
+import type { RoleKey, UserProfile } from '../data';
+import { SE_TEAM_DATA } from '../data';
 import type { SeActivityCategory, CallOutcome, GpsActivityType } from '../lib/field-ops/types';
 
 type FieldOpsTab = 'absen' | 'gps' | 'call' | 'ai_guide';
 const VALID_FIELD_TABS: FieldOpsTab[] = ['absen', 'gps', 'call', 'ai_guide'];
 
 interface FieldOpsModalProps {
+  projectId?: string;
+  project?: CompanyProject;
   projectName?: string;
   currentSeName?: string;
+  userRole?: RoleKey;
+  userProfile?: UserProfile;
   initialTab?: FieldOpsTab;
   planCode?: 'gold' | 'platinum' | 'diamond';
   variant?: 'modal' | 'page';
@@ -51,14 +58,29 @@ interface FieldOpsModalProps {
 }
 
 export function FieldOpsModal({
-  projectName = 'The Park Townhouse Sukoharjo',
-  currentSeName = 'SE 001 Budi Santoso',
+  projectId = 'proj-the-park-01',
+  project,
+  projectName: rawProjectName,
+  currentSeName,
+  userRole = 'SM',
+  userProfile,
   initialTab = 'absen',
   planCode = 'platinum',
   variant = 'modal',
   onClose,
   onUpgradeRequest,
 }: FieldOpsModalProps) {
+  const activeProjectId = project?.id || projectId;
+  const effectiveProjectName = project?.nama || rawProjectName || 'The Park Townhouse Sukoharjo';
+  const effectiveCoords = parseCoordinates(project?.koordinatGps);
+
+  // Identify current logged in person
+  const activeUserName = userProfile?.name || currentSeName || 'Ferry Kurniawan';
+  const isManager = userRole === 'SM' || userRole === 'TL' || userRole === 'DIREKSI' || userRole === 'ADMIN';
+
+  // For SM/TL: allow selecting which SE to inspect or default to all SEs
+  const [selectedSeFilter, setSelectedSeFilter] = useState<string>('SEMUA');
+
   const [activeTab, setActiveTab] = useState<FieldOpsTab>(() => {
     const urlTab = variant === 'page' ? getQueryParam('tab') : null;
     if (urlTab && VALID_FIELD_TABS.includes(urlTab as FieldOpsTab)) {
@@ -69,44 +91,78 @@ export function FieldOpsModal({
   const [simulatedPlan, setSimulatedPlan] = useState<'gold' | 'platinum' | 'diamond'>(planCode);
 
   const [attendanceList, setAttendanceList] = useState(() =>
-    loadPersistedState('devos_field_attendance', getAttendanceRecords('proj-the-park-01'))
+    loadPersistedState(
+      `devos_field_attendance_${activeProjectId}`,
+      getAttendanceRecords(activeProjectId, effectiveCoords, effectiveProjectName)
+    )
   );
   const [gpsLogs, setGpsLogs] = useState(() =>
-    loadPersistedState('devos_field_gps_logs', getGpsTrackLogs('proj-the-park-01'))
+    loadPersistedState(
+      `devos_field_gps_logs_${activeProjectId}`,
+      getGpsTrackLogs(activeProjectId, effectiveCoords, effectiveProjectName)
+    )
   );
   const [callLogs, setCallLogs] = useState(() =>
-    loadPersistedState('devos_field_call_logs', getCallLogs('proj-the-park-01'))
+    loadPersistedState(
+      `devos_field_call_logs_${activeProjectId}`,
+      getCallLogs(activeProjectId, effectiveProjectName)
+    )
   );
+
+  // Sync state when activeProjectId changes
+  useEffect(() => {
+    setAttendanceList(
+      loadPersistedState(
+        `devos_field_attendance_${activeProjectId}`,
+        getAttendanceRecords(activeProjectId, effectiveCoords, effectiveProjectName)
+      )
+    );
+    setGpsLogs(
+      loadPersistedState(
+        `devos_field_gps_logs_${activeProjectId}`,
+        getGpsTrackLogs(activeProjectId, effectiveCoords, effectiveProjectName)
+      )
+    );
+    setCallLogs(
+      loadPersistedState(
+        `devos_field_call_logs_${activeProjectId}`,
+        getCallLogs(activeProjectId, effectiveProjectName)
+      )
+    );
+  }, [activeProjectId, effectiveProjectName, project?.koordinatGps]);
 
   const [selectedActivity, setSelectedActivity] = useState<SeActivityCategory>('COLD_CALL_SLA_5_MENIT');
   const [toast, setToast] = useState<string | null>(null);
 
   // Add Call Form
   const [showCallForm, setShowCallForm] = useState(() =>
-    loadPersistedState<boolean>('devos_field_show_call_form', false)
+    loadPersistedState<boolean>(`devos_field_show_call_form_${activeProjectId}`, false)
   );
   const [callLeadName, setCallLeadName] = useState(() =>
-    loadPersistedState<string>('devos_field_call_lead', '')
+    loadPersistedState<string>(`devos_field_call_lead_${activeProjectId}`, '')
   );
   const [callPhone, setCallPhone] = useState(() =>
-    loadPersistedState<string>('devos_field_call_phone', '')
+    loadPersistedState<string>(`devos_field_call_phone_${activeProjectId}`, '')
   );
   const [callDuration, setCallDuration] = useState(() =>
-    loadPersistedState<number>('devos_field_call_dur', 120)
+    loadPersistedState<number>(`devos_field_call_dur_${activeProjectId}`, 120)
   );
   const [callOutcome, setCallOutcome] = useState<CallOutcome>(() =>
-    loadPersistedState<CallOutcome>('devos_field_call_outcome', 'TERJAWAB_TERTARIK')
+    loadPersistedState<CallOutcome>(`devos_field_call_outcome_${activeProjectId}`, 'TERJAWAB_TERTARIK')
   );
   const [callNotes, setCallNotes] = useState(() =>
-    loadPersistedState<string>('devos_field_call_notes', '')
+    loadPersistedState<string>(`devos_field_call_notes_${activeProjectId}`, '')
   );
 
   // Add GPS Check-in Form
   const [gpsLocationLabel, setGpsLocationLabel] = useState(() =>
-    loadPersistedState<string>('devos_field_gps_label', 'Kawasan Bisnis Solo Baru (Ruko Ir. Soekarno)')
+    loadPersistedState<string>(
+      `devos_field_gps_label_${activeProjectId}`,
+      `Kawasan Bisnis & Sekitar ${effectiveProjectName}`
+    )
   );
   const [gpsActivityType, setGpsActivityType] = useState<GpsActivityType>(() =>
-    loadPersistedState<GpsActivityType>('devos_field_gps_type', 'CANVASSING')
+    loadPersistedState<GpsActivityType>(`devos_field_gps_type_${activeProjectId}`, 'CANVASSING')
   );
 
   useEffect(() => {
@@ -117,18 +173,19 @@ export function FieldOpsModal({
   }, [activeTab, variant]);
 
   useEffect(() => {
-    savePersistedState('devos_field_attendance', attendanceList);
-    savePersistedState('devos_field_gps_logs', gpsLogs);
-    savePersistedState('devos_field_call_logs', callLogs);
-    savePersistedState('devos_field_show_call_form', showCallForm);
-    savePersistedState('devos_field_call_lead', callLeadName);
-    savePersistedState('devos_field_call_phone', callPhone);
-    savePersistedState('devos_field_call_dur', callDuration);
-    savePersistedState('devos_field_call_outcome', callOutcome);
-    savePersistedState('devos_field_call_notes', callNotes);
-    savePersistedState('devos_field_gps_label', gpsLocationLabel);
-    savePersistedState('devos_field_gps_type', gpsActivityType);
+    savePersistedState(`devos_field_attendance_${activeProjectId}`, attendanceList);
+    savePersistedState(`devos_field_gps_logs_${activeProjectId}`, gpsLogs);
+    savePersistedState(`devos_field_call_logs_${activeProjectId}`, callLogs);
+    savePersistedState(`devos_field_show_call_form_${activeProjectId}`, showCallForm);
+    savePersistedState(`devos_field_call_lead_${activeProjectId}`, callLeadName);
+    savePersistedState(`devos_field_call_phone_${activeProjectId}`, callPhone);
+    savePersistedState(`devos_field_call_dur_${activeProjectId}`, callDuration);
+    savePersistedState(`devos_field_call_outcome_${activeProjectId}`, callOutcome);
+    savePersistedState(`devos_field_call_notes_${activeProjectId}`, callNotes);
+    savePersistedState(`devos_field_gps_label_${activeProjectId}`, gpsLocationLabel);
+    savePersistedState(`devos_field_gps_type_${activeProjectId}`, gpsActivityType);
   }, [
+    activeProjectId,
     attendanceList,
     gpsLogs,
     callLogs,
@@ -149,57 +206,63 @@ export function FieldOpsModal({
 
   const handleCheckIn = () => {
     checkInAttendance({
-      projectId: 'proj-the-park-01',
-      seName: currentSeName,
-      lat: PROJECT_BASE_COORDS.lat,
-      lng: PROJECT_BASE_COORDS.lng,
-      notes: 'Check-in harian terverifikasi GPS',
+      projectId: activeProjectId,
+      seName: activeUserName,
+      lat: effectiveCoords.lat,
+      lng: effectiveCoords.lng,
+      notes: isManager
+        ? `Supervisi lapangan ${userProfile?.roleLabel || userRole} di ${effectiveProjectName}`
+        : `Check-in GPS kantor/gerbang ${effectiveProjectName}`,
     });
-    setAttendanceList([...getAttendanceRecords('proj-the-park-01')]);
-    showToast(`${currentSeName} berhasil Check-In dengan koordinat GPS!`);
+    setAttendanceList([...getAttendanceRecords(activeProjectId, effectiveCoords, effectiveProjectName)]);
+    showToast(`${activeUserName} (${userRole}) berhasil Check-In di ${effectiveProjectName}!`);
   };
 
   const handleCheckOut = () => {
-    checkOutAttendance('proj-the-park-01', currentSeName, PROJECT_BASE_COORDS.lat, PROJECT_BASE_COORDS.lng);
-    setAttendanceList([...getAttendanceRecords('proj-the-park-01')]);
-    showToast(`${currentSeName} berhasil Check-Out hari ini.`);
+    checkOutAttendance(activeProjectId, activeUserName, effectiveCoords.lat, effectiveCoords.lng);
+    setAttendanceList([...getAttendanceRecords(activeProjectId, effectiveCoords, effectiveProjectName)]);
+    showToast(`${activeUserName} berhasil Check-Out dari ${effectiveProjectName}.`);
   };
 
   const handleRecordGps = () => {
+    // Generate slight offset for canvassing from project base
+    const offsetLat = (Math.random() - 0.5) * 0.04;
+    const offsetLng = (Math.random() - 0.5) * 0.04;
     recordGpsPoint({
-      projectId: 'proj-the-park-01',
-      seName: currentSeName,
-      lat: -7.6145,
-      lng: 110.8182,
+      projectId: activeProjectId,
+      seName: activeUserName,
+      lat: effectiveCoords.lat + offsetLat,
+      lng: effectiveCoords.lng + offsetLng,
       activityType: gpsActivityType,
-      locationLabel: gpsLocationLabel,
+      locationLabel: gpsLocationLabel || `Titik Kanvasing ${effectiveProjectName}`,
+      baseCoords: effectiveCoords,
     });
-    setGpsLogs([...getGpsTrackLogs('proj-the-park-01')]);
-    showToast('Titik koordinat GPS aktivitas lapangan berhasil direkam!');
+    setGpsLogs([...getGpsTrackLogs(activeProjectId, effectiveCoords, effectiveProjectName)]);
+    showToast(`Titik GPS ${gpsActivityType} berhasil direkam oleh ${activeUserName}!`);
   };
 
   const handleSaveCall = (e: React.FormEvent) => {
     e.preventDefault();
     if (!callLeadName || !callPhone) return;
     addCallLog({
-      projectId: 'proj-the-park-01',
-      seName: currentSeName,
+      projectId: activeProjectId,
+      seName: activeUserName,
       leadName: callLeadName,
       phoneNumber: callPhone,
       direction: 'OUTBOUND',
       durationSeconds: Number(callDuration),
       outcome: callOutcome,
-      summaryNotes: callNotes || 'Catatan panggilan tersimpan ke log CRM.',
+      summaryNotes: callNotes || `Catatan panggilan tersimpan ke log CRM ${effectiveProjectName}.`,
     });
-    setCallLogs([...getCallLogs('proj-the-park-01')]);
+    setCallLogs([...getCallLogs(activeProjectId, effectiveProjectName)]);
     setShowCallForm(false);
     setCallLeadName('');
     setCallPhone('');
     setCallNotes('');
-    showToast('Log panggilan berhasil dicatat!');
+    showToast(`Log panggilan untuk ${effectiveProjectName} berhasil dicatat!`);
   };
 
-  const aiGuideResult = getAiActivityGuide(selectedActivity, simulatedPlan);
+  const aiGuideResult = getAiActivityGuide(selectedActivity, simulatedPlan, effectiveProjectName);
 
   const outerClass =
     variant === 'page'
@@ -224,7 +287,7 @@ export function FieldOpsModal({
                 Operasional Lapangan SE &amp; AI Guide
               </h2>
               <p className="text-xs text-warmmuted mt-0.5 leading-relaxed">
-                {projectName} · Absensi, Tracking GPS, Log Panggilan &amp; Panduan AI
+                {effectiveProjectName} · Absensi, Tracking GPS, Log Panggilan &amp; Panduan AI
               </p>
             </div>
           </div>
@@ -282,19 +345,27 @@ export function FieldOpsModal({
 
         {/* Content Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
-          {/* TAB 1: ABSENSI HARIAN SE */}
+          {/* TAB 1: ABSENSI HARIAN */}
           {activeTab === 'absen' && (
             <div className="space-y-5">
               <div className="p-5 rounded-2xl bg-white border border-warmborder flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <span className="text-[10px] font-extrabold uppercase tracking-wider text-olive">
-                    Presensi Terkunci Koordinat GPS
+                    {isManager ? 'Mode Supervisi & Presensi Manajemen' : 'Presensi Terkunci Koordinat GPS'}
                   </span>
                   <h3 className="text-base font-extrabold text-espresso mt-0.5">
-                    Absensi Hari Ini ({currentSeName})
+                    {isManager ? (
+                      <>
+                        Monitoring Absensi Tim SE · Akun {userProfile?.roleLabel || userRole} ({activeUserName})
+                      </>
+                    ) : (
+                      <>Absensi Hari Ini ({activeUserName})</>
+                    )}
                   </h3>
                   <p className="text-xs text-warmmuted mt-0.5">
-                    Setiap absen masuk &amp; pulang mencatat titik koordinat lokasi SE untuk validasi kehadiran.
+                    {isManager
+                      ? `Memantau jam check-in & posisi GPS seluruh tim SE binaan di proyek ${effectiveProjectName}. Anda juga dapat melakukan check-in supervisi.`
+                      : 'Setiap absen masuk & pulang mencatat titik koordinat lokasi SE untuk validasi kehadiran.'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2.5">
@@ -302,7 +373,7 @@ export function FieldOpsModal({
                     onClick={handleCheckIn}
                     className="px-4 py-2.5 rounded-xl bg-olive text-white text-xs font-bold hover:bg-olive/90 cursor-pointer flex items-center gap-1.5 shadow-xs"
                   >
-                    <CheckCircle2 className="size-4" /> Check-In GPS
+                    <CheckCircle2 className="size-4" /> Check-In GPS ({userRole})
                   </button>
                   <button
                     onClick={handleCheckOut}
@@ -313,11 +384,35 @@ export function FieldOpsModal({
                 </div>
               </div>
 
+              {/* Filter SE untuk SM/TL */}
+              {isManager && (
+                <div className="p-3.5 rounded-xl bg-sandstone border border-warmborder flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <span className="font-bold text-espresso flex items-center gap-1.5">
+                    <UserCheck className="size-4 text-olive" /> Filter Personel:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['SEMUA', ...Array.from(new Set(attendanceList.map((a) => a.seName)))].map((name) => (
+                      <button
+                        key={name}
+                        onClick={() => setSelectedSeFilter(name)}
+                        className={`px-3 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                          selectedSeFilter === name
+                            ? 'bg-espresso text-white shadow-xs'
+                            : 'bg-white text-warmmuted hover:text-espresso border border-warmborder'
+                        }`}
+                      >
+                        {name === 'SEMUA' ? 'Semua Tim' : name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="bg-white rounded-2xl border border-warmborder overflow-hidden">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-sandstone/70 border-b border-warmborder text-[11px] font-extrabold uppercase text-warmmuted">
-                      <th className="py-3 px-4">Nama Sales Executive</th>
+                      <th className="py-3 px-4">Nama Personel / SE</th>
                       <th className="py-3 px-4">Jam Masuk</th>
                       <th className="py-3 px-4">Jam Pulang</th>
                       <th className="py-3 px-4">Koordinat Check-In</th>
@@ -326,37 +421,102 @@ export function FieldOpsModal({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-warmborder text-xs">
-                    {attendanceList.map((att) => (
-                      <tr key={att.id} className="hover:bg-sandstone/30">
-                        <td className="py-3 px-4 font-bold text-espresso">{att.seName}</td>
-                        <td className="py-3 px-4 font-semibold text-olive">{att.checkInAt || '-'}</td>
-                        <td className="py-3 px-4 text-warmmuted">{att.checkOutAt || 'Belum Check-Out'}</td>
-                        <td className="py-3 px-4 font-mono text-[11px] text-warmmuted">
-                          {att.checkInLat ? `${att.checkInLat.toFixed(5)}, ${att.checkInLng?.toFixed(5)}` : '-'}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
-                              att.status === 'HADIR'
-                                ? 'bg-lime-100 text-olive'
-                                : 'bg-amber-100 text-terracotta'
-                            }`}
-                          >
-                            {att.status}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-warmmuted">{att.notes}</td>
-                      </tr>
-                    ))}
+                    {attendanceList
+                      .filter((att) => selectedSeFilter === 'SEMUA' || att.seName === selectedSeFilter)
+                      .map((att) => (
+                        <tr key={att.id} className="hover:bg-sandstone/30">
+                          <td className="py-3 px-4 font-bold text-espresso">
+                            {att.seName}
+                            {att.seName === activeUserName && (
+                              <span className="ml-2 px-1.5 py-0.5 rounded text-[9px] bg-terracotta/10 text-terracotta font-extrabold">
+                                Akun Anda ({userRole})
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 font-semibold text-olive">{att.checkInAt || '-'}</td>
+                          <td className="py-3 px-4 text-warmmuted">{att.checkOutAt || 'Belum Check-Out'}</td>
+                          <td className="py-3 px-4 font-mono text-[11px] text-warmmuted">
+                            {att.checkInLat ? `${att.checkInLat.toFixed(5)}, ${att.checkInLng?.toFixed(5)}` : '-'}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                                att.status === 'HADIR'
+                                  ? 'bg-lime-100 text-olive'
+                                  : 'bg-amber-100 text-terracotta'
+                              }`}
+                            >
+                              {att.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-warmmuted">{att.notes}</td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
 
-          {/* TAB 2: TRACKING GPS SE */}
+          {/* TAB 2: TRACKING GPS SE & LIVE RADAR SM */}
           {activeTab === 'gps' && (
             <div className="space-y-5">
+              {/* SM LIVE RADAR DASHBOARD CARD */}
+              {isManager && (
+                <div className="p-5 rounded-2xl bg-espresso text-white space-y-4 shadow-sm border border-espresso/20">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="size-8 rounded-lg bg-terracotta text-white grid place-items-center font-bold">
+                        <MapPin className="size-4 animate-pulse" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-extrabold text-white flex items-center gap-2">
+                          Live Radar GPS Tim SE Binaan
+                          <span className="size-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                        </h4>
+                        <p className="text-[11px] text-stone-300">
+                          Posisi real-time tim SE di bawah naungan {activeUserName} ({userProfile?.roleLabel || userRole}) · {effectiveProjectName}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs bg-white/10 px-3 py-1 rounded-full text-stone-200 font-semibold self-start sm:self-auto">
+                      Titik Gerbang Proyek: <code className="text-amber-300">{effectiveCoords.lat.toFixed(5)}, {effectiveCoords.lng.toFixed(5)}</code>
+                    </span>
+                  </div>
+
+                  {/* Grid Status Live SE */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {SE_TEAM_DATA.map((se) => {
+                      // Ambil log GPS terbaru untuk SE ini
+                      const latestPoint = gpsLogs.find((p) => p.seName.includes(se.nama) || p.seName.includes(se.seId));
+                      const distance = latestPoint ? `${latestPoint.distanceFromProjectKm} km` : '0.0 km';
+                      const locName = latestPoint?.locationLabel || `Gerbang ${effectiveProjectName}`;
+                      const lastTime = latestPoint?.recordedAt || 'Baru Saja';
+
+                      return (
+                        <div key={se.seId} className="p-3.5 rounded-xl bg-white/10 border border-white/10 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                              <span className="size-2 rounded-full bg-emerald-400" />
+                              {se.nama}
+                            </span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/20 text-stone-200">
+                              {se.zonaHariIni}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-stone-300 space-y-0.5">
+                            <p className="font-semibold text-amber-300 truncate">📍 {locName}</p>
+                            <p className="text-[10px] text-stone-400">
+                              Jarak: <strong className="text-white">{distance}</strong> dari gerbang · Jam: {lastTime}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="p-5 rounded-2xl bg-white border border-warmborder space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
@@ -364,8 +524,11 @@ export function FieldOpsModal({
                       Live Field Tracking (Semua Paket)
                     </span>
                     <h3 className="text-base font-extrabold text-espresso">
-                      Jejak Pergerakan &amp; Kanvasing SE Lapangan
+                      Jejak Pergerakan &amp; Kanvasing Lapangan
                     </h3>
+                    <p className="text-xs text-warmmuted mt-0.5">
+                      Input atau rekam titik pergerakan lapangan SE / Manajer di sekeliling radius {effectiveProjectName}.
+                    </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <select
@@ -376,6 +539,7 @@ export function FieldOpsModal({
                       <option value="CANVASSING">Kanvasing Lapangan</option>
                       <option value="SURVEY_LOKASI">Survei Lokasi Klien</option>
                       <option value="MEETING_KLIEN">Meeting Klien / Bank</option>
+                      <option value="CHECK_IN">Supervisi Gerbang/Kantor</option>
                     </select>
                     <input
                       type="text"
@@ -394,39 +558,70 @@ export function FieldOpsModal({
                 </div>
               </div>
 
-              <div className="space-y-3">
-                {gpsLogs.map((pt) => (
-                  <div
-                    key={pt.id}
-                    className="p-4 rounded-2xl bg-white border border-warmborder flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="size-9 rounded-xl bg-amber-50 text-terracotta border border-amber-200 grid place-items-center shrink-0">
-                        <MapPin className="size-4" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-extrabold text-espresso">{pt.locationLabel}</span>
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-sandstone font-bold text-espresso">
-                            {pt.activityType}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-warmmuted mt-0.5">
-                          {pt.seName} · Pukul <strong className="text-espresso">{pt.recordedAt}</strong> · Koordinat:{' '}
-                          <span className="font-mono">
-                            {pt.lat.toFixed(5)}, {pt.lng.toFixed(5)}
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <span className="text-xs font-extrabold text-olive">
-                        {pt.distanceFromProjectKm} km
-                      </span>
-                      <p className="text-[10px] text-warmmuted">dari gerbang proyek</p>
-                    </div>
+              {/* Filter GPS Logs */}
+              {isManager && (
+                <div className="p-3.5 rounded-xl bg-sandstone border border-warmborder flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <span className="font-bold text-espresso flex items-center gap-1.5">
+                    <MapPin className="size-4 text-terracotta" /> Filter Riwayat Jejak:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['SEMUA', ...Array.from(new Set(gpsLogs.map((p) => p.seName)))].map((name) => (
+                      <button
+                        key={name}
+                        onClick={() => setSelectedSeFilter(name)}
+                        className={`px-3 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                          selectedSeFilter === name
+                            ? 'bg-espresso text-white shadow-xs'
+                            : 'bg-white text-warmmuted hover:text-espresso border border-warmborder'
+                        }`}
+                      >
+                        {name === 'SEMUA' ? 'Semua Personel' : name}
+                      </button>
+                    ))}
                   </div>
-                ))}
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {gpsLogs
+                  .filter((pt) => selectedSeFilter === 'SEMUA' || pt.seName === selectedSeFilter)
+                  .map((pt) => (
+                    <div
+                      key={pt.id}
+                      className="p-4 rounded-2xl bg-white border border-warmborder flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="size-9 rounded-xl bg-amber-50 text-terracotta border border-amber-200 grid place-items-center shrink-0">
+                          <MapPin className="size-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-extrabold text-espresso">{pt.locationLabel}</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-sandstone font-bold text-espresso">
+                              {pt.activityType}
+                            </span>
+                            {pt.seName === activeUserName && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-terracotta/10 text-terracotta font-extrabold">
+                                Anda ({userRole})
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-warmmuted mt-0.5">
+                            {pt.seName} · Pukul <strong className="text-espresso">{pt.recordedAt}</strong> · Koordinat:{' '}
+                            <span className="font-mono">
+                              {pt.lat.toFixed(5)}, {pt.lng.toFixed(5)}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-xs font-extrabold text-olive">
+                          {pt.distanceFromProjectKm} km
+                        </span>
+                        <p className="text-[10px] text-warmmuted">dari gerbang proyek</p>
+                      </div>
+                    </div>
+                  ))}
               </div>
             </div>
           )}
@@ -670,7 +865,7 @@ export function FieldOpsModal({
                         AI Coach Aktif · Paket {simulatedPlan.toUpperCase()}
                       </span>
                       <span className="text-[11px] font-semibold text-warmmuted flex items-center gap-1">
-                        <ShieldCheck className="size-3.5 text-olive" /> Terverifikasi KB The Park
+                        <ShieldCheck className="size-3.5 text-olive" /> Terverifikasi KB {effectiveProjectName}
                       </span>
                     </div>
                     <h4 className="text-base font-extrabold text-espresso">{aiGuideResult.guide.title}</h4>

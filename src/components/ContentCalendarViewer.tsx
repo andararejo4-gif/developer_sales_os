@@ -15,11 +15,13 @@ import {
   Copy,
   AlertCircle,
   Link2,
+  Sparkles,
 } from 'lucide-react';
 import {
   getContentCalendar,
   updateSlotPosting,
   generateContentCalendarSlots,
+  initProjectCalendar,
 } from '../lib/content-calendar/calendar-generator';
 import { generateContentCalendarDocx } from '../lib/exporters/content-calendar-docx';
 import {
@@ -58,19 +60,49 @@ export function ContentCalendarViewer({
   const [track, setTrack] = useState<ContentTrack>(() =>
     loadPersistedState<ContentTrack>(`devos_cal_track_${projectId}`, 'OFFICIAL')
   );
-  const [calendar, setCalendar] = useState<ContentCalendarPlan>(() => {
+  const [calendar, setCalendar] = useState<ContentCalendarPlan | null>(() => {
     const saved = loadPersistedState<ContentCalendarPlan | null>(
       `devos_cal_plan_${projectId}`,
       null
     );
     if (saved) return saved;
     const base = getContentCalendar(projectId, 1, isDemoMode);
+    if (!base) return null;
     if (track === 'SALES_IN_HOUSE') {
       const slots = generateContentCalendarSlots('SALES_IN_HOUSE');
       return { ...base, slots: isDemoMode ? slots.filter((s) => s.dayNumber <= 8) : slots };
     }
     return base;
   });
+
+  useEffect(() => {
+    const saved = loadPersistedState<ContentCalendarPlan | null>(
+      `devos_cal_plan_${projectId}`,
+      null
+    );
+    if (saved) {
+      setCalendar(saved);
+      return;
+    }
+    const base = getContentCalendar(projectId, 1, isDemoMode);
+    if (!base) {
+      setCalendar(null);
+      return;
+    }
+    if (track === 'SALES_IN_HOUSE') {
+      const slots = generateContentCalendarSlots('SALES_IN_HOUSE');
+      setCalendar({ ...base, slots: isDemoMode ? slots.filter((s) => s.dayNumber <= 8) : slots });
+    } else {
+      setCalendar(base);
+    }
+  }, [projectId, track, isDemoMode]);
+
+  const handleInitCalendar = () => {
+    const newPlan = initProjectCalendar(projectId);
+    setCalendar(newPlan);
+    savePersistedState(`devos_cal_plan_${projectId}`, newPlan);
+    setToastMessage(`Kalender konten 30 hari untuk ${projectName} berhasil diaktifkan!`);
+  };
 
   const [viewMode, setViewMode] = useState<CalendarViewTab>(() => {
     const urlTab = variant === 'page' ? getQueryParam('tab') : null;
@@ -135,19 +167,24 @@ export function ContentCalendarViewer({
   const handleTrackChange = (newTrack: ContentTrack) => {
     setTrack(newTrack);
     const slots = generateContentCalendarSlots(newTrack);
-    setCalendar((prev) => ({
-      ...prev,
-      slots: isDemoMode ? slots.filter((s) => s.dayNumber <= 8) : slots,
-    }));
+    setCalendar((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        slots: isDemoMode ? slots.filter((s) => s.dayNumber <= 8) : slots,
+      };
+    });
   };
 
   // Filter slots
-  const filteredSlots = calendar.slots.filter((slot) => {
-    if (selectedFunnel !== 'all' && slot.funnelStage !== selectedFunnel) return false;
-    if (selectedPlatform !== 'all' && slot.platform !== selectedPlatform) return false;
-    if (selectedStatus !== 'all' && slot.status !== selectedStatus) return false;
-    return true;
-  });
+  const filteredSlots = calendar
+    ? calendar.slots.filter((slot) => {
+        if (selectedFunnel !== 'all' && slot.funnelStage !== selectedFunnel) return false;
+        if (selectedPlatform !== 'all' && slot.platform !== selectedPlatform) return false;
+        if (selectedStatus !== 'all' && slot.status !== selectedStatus) return false;
+        return true;
+      })
+    : [];
 
   // Week slices (Day 1..7, 8..14, 15..21, 22..28, 29..30)
   const weekStartDay = (selectedWeek - 1) * 7 + 1;
@@ -164,11 +201,14 @@ export function ContentCalendarViewer({
     if (!linkInput.trim()) return;
     const updated = updateSlotPosting(projectId, slotId, linkInput.trim(), 'SUDAH_POSTING');
     if (updated) {
-      setCalendar((prev) => ({
-        ...prev,
-        slots: prev.slots.map((s) => (s.id === slotId ? { ...s, postedUrl: linkInput, status: 'SUDAH_POSTING' } : s)),
-        postedSlotsCount: prev.postedSlotsCount + 1,
-      }));
+      setCalendar((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          slots: prev.slots.map((s) => (s.id === slotId ? { ...s, postedUrl: linkInput, status: 'SUDAH_POSTING' } : s)),
+          postedSlotsCount: prev.postedSlotsCount + 1,
+        };
+      });
       setActiveSlotModal(null);
       setLinkInput('');
       setToastMessage('Tautan posting berhasil disimpan & status diperbarui ke "Sudah Posting"!');
@@ -184,6 +224,7 @@ export function ContentCalendarViewer({
 
   // Export DOCX
   const handleExportDocx = async () => {
+    if (!calendar) return;
     setIsExporting(true);
     try {
       const blob = await generateContentCalendarDocx(calendar);
@@ -236,7 +277,7 @@ export function ContentCalendarViewer({
                 )}
               </div>
               <p className="text-xs text-warmmuted mt-0.5 leading-relaxed">
-                {projectName} · {calendar.slots.length} Slot Terjadwal ({calendar.postedSlotsCount} Sudah Diposting)
+                {projectName} · {calendar ? `${calendar.slots.length} Slot Terjadwal (${calendar.postedSlotsCount} Sudah Diposting)` : 'Belum Ada Jadwal'}
               </p>
             </div>
             {variant === 'modal' && onClose && (
@@ -388,8 +429,30 @@ export function ContentCalendarViewer({
 
         {/* Content Body */}
         <div className="p-6 overflow-y-auto flex-1 bg-[#FBF9F5] space-y-6">
-          {/* VIEW 1: MONTH GRID (30 Days) */}
-          {viewMode === 'month' && (
+          {!calendar ? (
+            <div className="p-12 text-center rounded-3xl bg-white border border-dashed border-warmborder space-y-4 my-4">
+              <div className="size-16 rounded-2xl bg-sandstone text-warmmuted grid place-items-center mx-auto">
+                <CalendarIcon className="size-8 text-warmmuted" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-espresso">Belum ada kalender konten</h3>
+                <p className="text-xs text-warmmuted mt-1 max-w-md mx-auto leading-relaxed">
+                  Kalender konten 30 hari x 3 slot/hari (TOFU, MOFU, BOFU) belum dibuat untuk <strong>{projectName}</strong>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleInitCalendar}
+                className="px-4 py-2.5 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 cursor-pointer shadow-xs inline-flex items-center gap-2"
+              >
+                <Sparkles className="size-4" />
+                <span>Buat Kalender Konten Proyek Ini</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* VIEW 1: MONTH GRID (30 Days) */}
+              {viewMode === 'month' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {Array.from({ length: isDemoMode ? 8 : 30 }).map((_, idx) => {
                 const dayNum = idx + 1;
@@ -659,6 +722,8 @@ export function ContentCalendarViewer({
               </span>
               <span className="font-bold text-terracotta">Tingkatkan Paket untuk 30 Hari &rarr;</span>
             </div>
+          )}
+          </>
           )}
         </div>
 

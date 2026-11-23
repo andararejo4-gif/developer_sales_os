@@ -16,10 +16,8 @@ import {
   ExternalLink,
   ShieldCheck,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react';
-import {
-  DEFAULT_THE_PARK_RESEARCH_REPORT,
-} from '../lib/market-research/the-park-market-research';
 import {
   getMarketResearchReport,
   regenerateMarketResearch,
@@ -53,9 +51,21 @@ export function MarketResearchViewer({
   variant = 'modal',
   onClose,
 }: MarketResearchViewerProps) {
-  const [report, setReport] = useState<MarketResearchReport>(() =>
-    getMarketResearchReport({ projectId, isDemoMode })
-  );
+  const [report, setReport] = useState<MarketResearchReport | null>(() => {
+    return loadPersistedState<MarketResearchReport | null>(
+      `devos_market_research_${projectId}`,
+      getMarketResearchReport({ projectId, isDemoMode })
+    );
+  });
+
+  useEffect(() => {
+    const loaded = loadPersistedState<MarketResearchReport | null>(
+      `devos_market_research_${projectId}`,
+      getMarketResearchReport({ projectId, isDemoMode })
+    );
+    setReport(loaded);
+  }, [projectId, isDemoMode]);
+
   const [activeTab, setActiveTab] = useState<ResearchTab>(() => {
     const urlTab = variant === 'page' ? getQueryParam('tab') : null;
     if (urlTab && VALID_RESEARCH_TABS.includes(urlTab as ResearchTab)) {
@@ -63,7 +73,19 @@ export function MarketResearchViewer({
     }
     return loadPersistedState<ResearchTab>(`devos_research_tab_${projectId}`, 'personas');
   });
-  const [selectedPersona, setSelectedPersona] = useState<TargetPersona>(report.personas[0] || DEFAULT_THE_PARK_RESEARCH_REPORT.personas[0]);
+  const [selectedPersona, setSelectedPersona] = useState<TargetPersona | null>(() => {
+    if (report && report.personas && report.personas.length > 0) return report.personas[0];
+    return null;
+  });
+
+  useEffect(() => {
+    if (report && report.personas && report.personas.length > 0) {
+      setSelectedPersona(report.personas[0]);
+    } else {
+      setSelectedPersona(null);
+    }
+  }, [report]);
+
   const [selectedRadiusRing, setSelectedRadiusRing] = useState<number | 'all'>(() =>
     loadPersistedState<number | 'all'>(`devos_research_radius_${projectId}`, 'all')
   );
@@ -94,7 +116,10 @@ export function MarketResearchViewer({
       try {
         const updated = regenerateMarketResearch(projectId, projectName, userRole);
         setReport(updated);
-        setSelectedPersona(updated.personas[0]);
+        savePersistedState(`devos_market_research_${projectId}`, updated);
+        if (updated.personas.length > 0) {
+          setSelectedPersona(updated.personas[0]);
+        }
         setToastMessage(`Riset Pasar berhasil diperbarui ke Versi ${updated.version}!`);
       } catch (err: unknown) {
         if (err instanceof Error) {
@@ -109,6 +134,7 @@ export function MarketResearchViewer({
   };
 
   const handleExportDocx = async () => {
+    if (!report) return;
     setIsExporting(true);
     try {
       const blob = await generateMarketResearchDocx(report);
@@ -132,13 +158,17 @@ export function MarketResearchViewer({
     window.print();
   };
 
-  const filteredFacilities = selectedRadiusRing === 'all'
-    ? report.facilities
-    : report.facilities.filter((f) => f.radiusRing <= (selectedRadiusRing as RadiusDistanceMeters));
+  const filteredFacilities = report
+    ? selectedRadiusRing === 'all'
+      ? report.facilities
+      : report.facilities.filter((f) => f.radiusRing <= (selectedRadiusRing as RadiusDistanceMeters))
+    : [];
 
-  const filteredCompetitors = selectedRadiusRing === 'all'
-    ? report.competitors
-    : report.competitors.filter((c) => c.radiusRing <= (selectedRadiusRing as RadiusDistanceMeters));
+  const filteredCompetitors = report
+    ? selectedRadiusRing === 'all'
+      ? report.competitors
+      : report.competitors.filter((c) => c.radiusRing <= (selectedRadiusRing as RadiusDistanceMeters))
+    : [];
 
   const outerClass =
     variant === 'page'
@@ -163,9 +193,11 @@ export function MarketResearchViewer({
                 <h2 className="text-base sm:text-xl font-extrabold text-espresso tracking-tight leading-snug">
                   Riset Pasar &amp; Analisis Kompetisi
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-terracotta/10 text-terracotta border border-terracotta/20 shrink-0">
-                  v{report.version}
-                </span>
+                {report && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-terracotta/10 text-terracotta border border-terracotta/20 shrink-0">
+                    v{report.version}
+                  </span>
+                )}
                 {isDemoMode && (
                   <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shrink-0">
                     Mode Cuplikan 25% (Demo)
@@ -173,7 +205,7 @@ export function MarketResearchViewer({
                 )}
               </div>
               <p className="text-xs text-warmmuted mt-0.5 leading-relaxed">
-                {report.projectName} · Radius 500m s.d 25km Sukoharjo &amp; Solo Raya
+                {report?.projectName || projectName} · Radius 500m s.d 25km Sukoharjo &amp; Solo Raya
               </p>
             </div>
             {variant === 'modal' && onClose && (
@@ -239,7 +271,7 @@ export function MarketResearchViewer({
             }`}
           >
             <Users className="size-4 shrink-0" />
-            <span>5 Persona Target ({report.personas.length})</span>
+            <span>5 Persona Target ({report?.personas?.length || 0})</span>
           </button>
           <button
             onClick={() => setActiveTab('facilities')}
@@ -250,7 +282,7 @@ export function MarketResearchViewer({
             }`}
           >
             <Compass className="size-4 shrink-0" />
-            <span>Fasilitas Publik ({report.facilities.length})</span>
+            <span>Fasilitas Publik ({report?.facilities?.length || 0})</span>
           </button>
           <button
             onClick={() => setActiveTab('competitors')}
@@ -261,7 +293,7 @@ export function MarketResearchViewer({
             }`}
           >
             <Building className="size-4 shrink-0" />
-            <span>Kompetitor ({report.competitors.length})</span>
+            <span>Kompetitor ({report?.competitors?.length || 0})</span>
           </button>
           <button
             onClick={() => setActiveTab('market_share')}
@@ -278,46 +310,71 @@ export function MarketResearchViewer({
 
         {/* Content Body */}
         <div className="p-6 overflow-y-auto flex-1 bg-[#FBF9F5]">
-          {/* TAB 1: PERSONAS */}
-          {activeTab === 'personas' && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Persona List Selector */}
-              <div className="lg:col-span-4 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-warmmuted mb-3">
-                  Pilih Profil Persona ({report.personas.length} Terdefinisi)
+          {!report ? (
+            <div className="p-12 text-center rounded-3xl bg-white border border-dashed border-warmborder space-y-4 my-4">
+              <div className="size-16 rounded-2xl bg-sandstone text-warmmuted grid place-items-center mx-auto">
+                <Compass className="size-8 text-warmmuted" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-espresso">Belum ada riset pasar</h3>
+                <p className="text-xs text-warmmuted mt-1 max-w-md mx-auto leading-relaxed">
+                  Riset pasar dalam radius 25km (5 persona target, fasilitas publik, dan peta kompetitor) belum dibuat untuk <strong>{projectName}</strong>.
                 </p>
-                {report.personas.map((persona, index) => {
-                  const isSelected = selectedPersona.id === persona.id;
-                  return (
-                    <button
-                      key={persona.id}
-                      onClick={() => setSelectedPersona(persona)}
-                      className={`w-full text-left p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${
-                        isSelected
-                          ? 'bg-white border-terracotta shadow-md shadow-terracotta/5'
-                          : 'bg-white/70 border-warmborder hover:bg-white hover:border-warmmuted/50'
-                      }`}
-                    >
-                      <div
-                        className={`size-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
-                          isSelected ? 'bg-terracotta text-white' : 'bg-sandstone text-espresso'
-                        }`}
-                      >
-                        P{index + 1}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-espresso leading-snug truncate">
-                          {persona.name}
-                        </p>
-                        <p className="text-[11px] text-warmmuted truncate mt-0.5">
-                          {persona.demographics.ageRange} · {persona.demographics.monthlyIncome}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
+              </div>
+              {canRegenerate && (
+                <button
+                  type="button"
+                  onClick={handleRegenerate}
+                  disabled={isRegenerating}
+                  className="px-4 py-2.5 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 cursor-pointer shadow-xs inline-flex items-center gap-2 disabled:opacity-50"
+                >
+                  <Sparkles className="size-4" />
+                  <span>{isRegenerating ? 'Membuat Riset...' : 'Buat Riset Pasar Proyek Ini'}</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* TAB 1: PERSONAS */}
+              {activeTab === 'personas' && (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  {/* Persona List Selector */}
+                  <div className="lg:col-span-4 space-y-2">
+                    <p className="text-xs font-bold uppercase tracking-wider text-warmmuted mb-3">
+                      Pilih Profil Persona ({report.personas.length} Terdefinisi)
+                    </p>
+                    {report.personas.map((persona, index) => {
+                      const isSelected = selectedPersona?.id === persona.id;
+                      return (
+                        <button
+                          key={persona.id}
+                          onClick={() => setSelectedPersona(persona)}
+                          className={`w-full text-left p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${
+                            isSelected
+                              ? 'bg-white border-terracotta shadow-md shadow-terracotta/5'
+                              : 'bg-white/70 border-warmborder hover:bg-white hover:border-warmmuted/50'
+                          }`}
+                        >
+                          <div
+                            className={`size-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                              isSelected ? 'bg-terracotta text-white' : 'bg-sandstone text-espresso'
+                            }`}
+                          >
+                            P{index + 1}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-espresso leading-snug truncate">
+                              {persona.name}
+                            </p>
+                            <p className="text-[11px] text-warmmuted truncate mt-0.5">
+                              {persona.demographics.ageRange} · {persona.demographics.monthlyIncome}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
 
-                {isDemoMode && (
+                    {isDemoMode && (
                   <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 mt-4">
                     <p className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
                       <AlertCircle className="size-4 text-amber-700" />
@@ -332,114 +389,122 @@ export function MarketResearchViewer({
 
               {/* Persona Details Drawer */}
               <div className="lg:col-span-8 bg-white rounded-3xl p-6 border border-warmborder shadow-sm space-y-6">
-                <div className="border-b border-warmborder pb-4">
-                  <div className="flex items-center gap-2 text-xs font-bold text-terracotta uppercase tracking-wider">
-                    <span>{selectedPersona.code}</span>
-                    <span>·</span>
-                    <span>{selectedPersona.subtitle}</span>
-                  </div>
-                  <h3 className="text-xl font-extrabold text-espresso mt-1">
-                    {selectedPersona.name}
-                  </h3>
-                </div>
+                {selectedPersona ? (
+                  <>
+                    <div className="border-b border-warmborder pb-4">
+                      <div className="flex items-center gap-2 text-xs font-bold text-terracotta uppercase tracking-wider">
+                        <span>{selectedPersona.code}</span>
+                        <span>·</span>
+                        <span>{selectedPersona.subtitle}</span>
+                      </div>
+                      <h3 className="text-xl font-extrabold text-espresso mt-1">
+                        {selectedPersona.name}
+                      </h3>
+                    </div>
 
-                {/* Demographics Card */}
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 rounded-2xl bg-sandstone/50 border border-warmborder">
-                  <div>
-                    <span className="text-[11px] text-warmmuted block">Usia & Status</span>
-                    <span className="text-xs font-bold text-espresso">{selectedPersona.demographics.ageRange}</span>
-                    <span className="text-[11px] text-warmmuted block mt-0.5">{selectedPersona.demographics.householdType}</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] text-warmmuted block">Estimasi Penghasilan</span>
-                    <span className="text-xs font-bold text-olive">{selectedPersona.demographics.monthlyIncome}</span>
-                  </div>
-                  <div className="col-span-2 md:col-span-1">
-                    <span className="text-[11px] text-warmmuted block">Domisili Saat Ini</span>
-                    <span className="text-xs font-medium text-espresso">{selectedPersona.demographics.currentResidence}</span>
-                  </div>
-                  <div className="col-span-2 md:col-span-3 pt-2 border-t border-warmborder/60">
-                    <span className="text-[11px] text-warmmuted block mb-1">Profesi Khas:</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {selectedPersona.demographics.profession.map((prof, idx) => (
-                        <span key={idx} className="px-2 py-0.5 rounded-lg bg-white border border-warmborder text-[11px] text-espresso font-medium">
-                          {prof}
+                    {/* Demographics Card */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 rounded-2xl bg-sandstone/50 border border-warmborder">
+                      <div>
+                        <span className="text-[11px] text-warmmuted block">Usia & Status</span>
+                        <span className="text-xs font-bold text-espresso">{selectedPersona.demographics.ageRange}</span>
+                        <span className="text-[11px] text-warmmuted block mt-0.5">{selectedPersona.demographics.householdType}</span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-warmmuted block">Estimasi Penghasilan</span>
+                        <span className="text-xs font-bold text-olive">{selectedPersona.demographics.monthlyIncome}</span>
+                      </div>
+                      <div className="col-span-2 md:col-span-1">
+                        <span className="text-[11px] text-warmmuted block">Domisili Saat Ini</span>
+                        <span className="text-xs font-medium text-espresso">{selectedPersona.demographics.currentResidence}</span>
+                      </div>
+                      <div className="col-span-2 md:col-span-3 pt-2 border-t border-warmborder/60">
+                        <span className="text-[11px] text-warmmuted block mb-1">Profesi Khas:</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedPersona.demographics.profession.map((prof, idx) => (
+                            <span key={idx} className="px-2 py-0.5 rounded-lg bg-white border border-warmborder text-[11px] text-espresso font-medium">
+                              {prof}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Needs & Pain Points */}
+                    <div>
+                      <h4 className="text-xs font-extrabold text-espresso uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <span className="size-2 rounded-full bg-terracotta" />
+                        Kebutuhan Utama & Masalah yang Dihadapi (Needs & Pains)
+                      </h4>
+                      <ul className="space-y-1.5">
+                        {selectedPersona.needsAndPains.map((item, idx) => (
+                          <li key={idx} className="text-xs text-espresso flex items-start gap-2 bg-amber-50/50 p-2.5 rounded-xl border border-amber-100">
+                            <CheckCircle className="size-3.5 text-terracotta shrink-0 mt-0.5" />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Objections & Solutions */}
+                    <div>
+                      <h4 className="text-xs font-extrabold text-espresso uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <span className="size-2 rounded-full bg-rose-500" />
+                        Keberatan Umum & Keraguan Konsumen (Common Objections)
+                      </h4>
+                      <ul className="space-y-1.5">
+                        {selectedPersona.commonObjections.map((item, idx) => (
+                          <li key={idx} className="text-xs text-espresso italic bg-rose-50/50 p-2.5 rounded-xl border border-rose-100">
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Preferred Channels & Buying Triggers */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="p-4 rounded-2xl bg-white border border-warmborder">
+                        <h5 className="text-xs font-bold text-espresso mb-2">Kanal Penjualan Paling Efektif</h5>
+                        <ul className="space-y-1 text-xs text-warmmuted">
+                          {selectedPersona.preferredChannels.map((c, i) => (
+                            <li key={i} className="flex items-center gap-1.5">
+                              <span className="size-1.5 rounded-full bg-terracotta" />
+                              <span>{c}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-white border border-warmborder">
+                        <h5 className="text-xs font-bold text-espresso mb-2">Pemicu Keputusan Beli (Triggers)</h5>
+                        <ul className="space-y-1 text-xs text-warmmuted">
+                          {selectedPersona.buyingTriggers.map((t, i) => (
+                            <li key={i} className="flex items-center gap-1.5">
+                              <span className="size-1.5 rounded-full bg-olive" />
+                              <span className="text-espresso font-medium">{t}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    {/* Citation of KB Facts */}
+                    <div className="pt-2 border-t border-warmborder flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-bold text-warmmuted flex items-center gap-1">
+                        <ShieldCheck className="size-3.5 text-olive" />
+                        Terverifikasi Fakta Knowledge Base:
+                      </span>
+                      {selectedPersona.relevantFactIds.map((fid) => (
+                        <span key={fid} className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sandstone text-espresso border border-warmborder">
+                          {fid}
                         </span>
                       ))}
                     </div>
+                  </>
+                ) : (
+                  <div className="text-center py-12 text-warmmuted text-sm">
+                    Pilih profil persona di samping untuk melihat rincian.
                   </div>
-                </div>
-
-                {/* Needs & Pain Points */}
-                <div>
-                  <h4 className="text-xs font-extrabold text-espresso uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <span className="size-2 rounded-full bg-terracotta" />
-                    Kebutuhan Utama & Masalah yang Dihadapi (Needs & Pains)
-                  </h4>
-                  <ul className="space-y-1.5">
-                    {selectedPersona.needsAndPains.map((item, idx) => (
-                      <li key={idx} className="text-xs text-espresso flex items-start gap-2 bg-amber-50/50 p-2.5 rounded-xl border border-amber-100">
-                        <CheckCircle className="size-3.5 text-terracotta shrink-0 mt-0.5" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Objections & Solutions */}
-                <div>
-                  <h4 className="text-xs font-extrabold text-espresso uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <span className="size-2 rounded-full bg-rose-500" />
-                    Keberatan Umum & Keraguan Konsumen (Common Objections)
-                  </h4>
-                  <ul className="space-y-1.5">
-                    {selectedPersona.commonObjections.map((item, idx) => (
-                      <li key={idx} className="text-xs text-espresso italic bg-rose-50/50 p-2.5 rounded-xl border border-rose-100">
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Preferred Channels & Buying Triggers */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-2xl bg-white border border-warmborder">
-                    <h5 className="text-xs font-bold text-espresso mb-2">Kanal Penjualan Paling Efektif</h5>
-                    <ul className="space-y-1 text-xs text-warmmuted">
-                      {selectedPersona.preferredChannels.map((c, i) => (
-                        <li key={i} className="flex items-center gap-1.5">
-                          <span className="size-1.5 rounded-full bg-terracotta" />
-                          <span>{c}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="p-4 rounded-2xl bg-white border border-warmborder">
-                    <h5 className="text-xs font-bold text-espresso mb-2">Pemicu Keputusan Beli (Triggers)</h5>
-                    <ul className="space-y-1 text-xs text-warmmuted">
-                      {selectedPersona.buyingTriggers.map((t, i) => (
-                        <li key={i} className="flex items-center gap-1.5">
-                          <span className="size-1.5 rounded-full bg-olive" />
-                          <span className="text-espresso font-medium">{t}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                {/* Citation of KB Facts */}
-                <div className="pt-2 border-t border-warmborder flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-bold text-warmmuted flex items-center gap-1">
-                    <ShieldCheck className="size-3.5 text-olive" />
-                    Terverifikasi Fakta Knowledge Base:
-                  </span>
-                  {selectedPersona.relevantFactIds.map((fid) => (
-                    <span key={fid} className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sandstone text-espresso border border-warmborder">
-                      {fid}
-                    </span>
-                  ))}
-                </div>
+                )}
               </div>
             </div>
           )}
@@ -650,6 +715,8 @@ export function MarketResearchViewer({
                 </div>
               </div>
             </div>
+          )}
+          </>
           )}
         </div>
 

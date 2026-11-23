@@ -18,22 +18,26 @@ const researchStore = new Map<string, Map<number, MarketResearchReport>>();
 const theParkMap = new Map<number, MarketResearchReport>();
 theParkMap.set(1, structuredClone(DEFAULT_THE_PARK_RESEARCH_REPORT));
 researchStore.set('proj-the-park-01', theParkMap);
+researchStore.set('the-park-sukoharjo', theParkMap);
 
 export interface GetMarketResearchOptions {
   projectId: string;
+  projectName?: string;
   version?: number;
   isDemoMode?: boolean; // When true, apply 25% server-side teaser truncation
 }
 
-export function getMarketResearchReport(options: GetMarketResearchOptions): MarketResearchReport {
+export function getMarketResearchReport(options: GetMarketResearchOptions): MarketResearchReport | null {
   const { projectId, version, isDemoMode = false } = options;
   const projectVersions = researchStore.get(projectId);
 
-  let report: MarketResearchReport;
   if (!projectVersions || projectVersions.size === 0) {
-    // Fallback/Demo clone
-    report = structuredClone(DEFAULT_THE_PARK_RESEARCH_REPORT);
-  } else if (version && projectVersions.has(version)) {
+    // Proyek belum memiliki riset pasar tersimpan
+    return null;
+  }
+
+  let report: MarketResearchReport;
+  if (version && projectVersions.has(version)) {
     report = structuredClone(projectVersions.get(version)!);
   } else {
     // Return latest version

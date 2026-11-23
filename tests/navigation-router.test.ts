@@ -26,5 +26,7 @@ describe('Dashboard URL Router', () => {
     expect(getPathnameForView('riset')).toBe('/riset-pasar');
     expect(getPathnameForView('kalender')).toBe('/kalender-konten');
     expect(getPathnameForView('crm')).toBe('/crm');
+    expect(getPathnameForView('unit_park')).toBe('/unit-park');
+    expect(getPathnameForView('kinerja_se')).toBe('/kinerja-se');
   });
 });

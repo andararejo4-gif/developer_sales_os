@@ -16,6 +16,76 @@ export interface AuthSession {
 }
 
 export const AUTH_STORAGE_KEY = 'devos_auth_session_v1';
+export const REGISTERED_USERS_KEY = 'devos_registered_users_v1';
+
+export interface RegisteredUser {
+  companyName: string;
+  name: string;
+  email: string;
+  password: string;
+  phone: string;
+  role: RoleKey;
+  registeredAt: string;
+}
+
+let inMemoryRegisteredUsers: RegisteredUser[] = [];
+
+export function getRegisteredUsers(): RegisteredUser[] {
+  try {
+    if (typeof localStorage === 'undefined') return inMemoryRegisteredUsers;
+    const raw = localStorage.getItem(REGISTERED_USERS_KEY);
+    return raw ? (JSON.parse(raw) as RegisteredUser[]) : inMemoryRegisteredUsers;
+  } catch {
+    return inMemoryRegisteredUsers;
+  }
+}
+
+export function registerDeveloperAccount(data: {
+  companyName: string;
+  name: string;
+  email: string;
+  password: string;
+  phone: string;
+}): { ok: true; session: AuthSession } | { ok: false; error: string } {
+  const normEmail = data.email.trim().toLowerCase();
+  if (!normEmail || !data.password || !data.companyName.trim()) {
+    return { ok: false, error: 'Nama developer, email, dan kata sandi wajib diisi.' };
+  }
+
+  const existing = getRegisteredUsers();
+  if (existing.some((u) => u.email.toLowerCase() === normEmail)) {
+    return { ok: false, error: 'Email ini sudah terdaftar. Silakan pilih tab Masuk.' };
+  }
+
+  const newUser: RegisteredUser = {
+    companyName: data.companyName.trim(),
+    name: data.name.trim() || 'Direktur Developer',
+    email: normEmail,
+    password: data.password,
+    phone: data.phone.trim(),
+    role: 'DIREKSI',
+    registeredAt: new Date().toISOString(),
+  };
+
+  inMemoryRegisteredUsers = [...existing, newUser];
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(inMemoryRegisteredUsers));
+    }
+  } catch {
+    /* abaikan storage error */
+  }
+
+  const session: AuthSession = {
+    role: 'DIREKSI',
+    email: newUser.email,
+    name: newUser.name,
+    loggedInAt: new Date().toISOString(),
+  };
+
+  saveAuthSession(session);
+  return { ok: true, session };
+}
 
 /**
  * Kredensial akun dummy per role untuk simulasi login Developer Sales OS.
@@ -47,21 +117,21 @@ export const DUMMY_ACCOUNTS: DummyAccount[] = [
     role: 'DIREKSI',
     email: USERS_BY_ROLE.DIREKSI.email,
     password: 'AndaraDireksi#2026',
-    label: 'Direksi / Owner',
+    label: 'Direksi Developer Properti',
     profile: USERS_BY_ROLE.DIREKSI,
   },
   {
     role: 'ADMIN',
     email: USERS_BY_ROLE.ADMIN.email,
     password: 'AndaraAdmin#2026',
-    label: 'Admin Sales',
+    label: 'Admin Sales Developer',
     profile: USERS_BY_ROLE.ADMIN,
   },
   {
     role: 'IT',
     email: USERS_BY_ROLE.IT.email,
     password: 'AndaraIT#2026',
-    label: 'IT & System Lead',
+    label: 'IT & System Developer',
     profile: USERS_BY_ROLE.IT,
   },
   {
@@ -70,6 +140,20 @@ export const DUMMY_ACCOUNTS: DummyAccount[] = [
     password: 'AndaraMkt#2026',
     label: 'Digital Marketer',
     profile: USERS_BY_ROLE.DIGITAL_MARKETING,
+  },
+  {
+    role: 'SUPERADMIN',
+    email: USERS_BY_ROLE.SUPERADMIN.email,
+    password: 'DevosOwner#2026',
+    label: 'Direksi Pemilik Developer Sales OS',
+    profile: USERS_BY_ROLE.SUPERADMIN,
+  },
+  {
+    role: 'SUPERADMIN_IT',
+    email: USERS_BY_ROLE.SUPERADMIN_IT.email,
+    password: 'DevosIT#2026',
+    label: 'Tim IT Internal Developer Sales OS',
+    profile: USERS_BY_ROLE.SUPERADMIN_IT,
   },
 ];
 
@@ -89,16 +173,36 @@ export function authenticateDummyUser(
     (acc) => acc.email.toLowerCase() === normalizedEmail
   );
 
-  if (!account || account.password !== password) {
+  if (account) {
+    if (account.password !== password) {
+      return { ok: false, error: 'Kata sandi tidak sesuai.' };
+    }
+    return {
+      ok: true,
+      session: {
+        role: account.role,
+        email: account.email,
+        name: account.profile.name,
+        loggedInAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  // Periksa akun yang didaftarkan melalui form signup developer
+  const registered = getRegisteredUsers().find(
+    (u) => u.email.toLowerCase() === normalizedEmail
+  );
+
+  if (!registered || registered.password !== password) {
     return { ok: false, error: 'Email atau kata sandi tidak sesuai.' };
   }
 
   return {
     ok: true,
     session: {
-      role: account.role,
-      email: account.email,
-      name: account.profile.name,
+      role: registered.role,
+      email: registered.email,
+      name: registered.name,
       loggedInAt: new Date().toISOString(),
     },
   };
@@ -133,4 +237,43 @@ export function clearAuthSession(): void {
   } catch {
     /* abaikan jika storage tidak tersedia */
   }
+}
+
+export const IMPERSONATOR_BACKUP_KEY = 'devos_impersonator_backup_v1';
+let inMemoryImpersonatorBackup: AuthSession | null = null;
+
+export function saveImpersonatorBackup(session: AuthSession): void {
+  inMemoryImpersonatorBackup = session;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(IMPERSONATOR_BACKUP_KEY, JSON.stringify(session));
+    }
+  } catch {
+    /* abaikan */
+  }
+}
+
+export function loadImpersonatorBackup(): AuthSession | null {
+  try {
+    if (typeof localStorage === 'undefined') return inMemoryImpersonatorBackup;
+    const raw = localStorage.getItem(IMPERSONATOR_BACKUP_KEY);
+    return raw ? (JSON.parse(raw) as AuthSession) : inMemoryImpersonatorBackup;
+  } catch {
+    return inMemoryImpersonatorBackup;
+  }
+}
+
+export function clearImpersonatorBackup(): void {
+  inMemoryImpersonatorBackup = null;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(IMPERSONATOR_BACKUP_KEY);
+    }
+  } catch {
+    /* abaikan */
+  }
+}
+
+export function isImpersonating(): boolean {
+  return loadImpersonatorBackup() !== null;
 }

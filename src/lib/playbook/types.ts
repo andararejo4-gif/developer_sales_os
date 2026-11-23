@@ -2,7 +2,7 @@
 // PLAYBOOK & DAILY ROUTE TYPES - DEVELOPER SALES OS
 // ============================================================================
 
-export type PlaybookRole = 'SE' | 'TL' | 'SM';
+export type PlaybookRole = 'SE' | 'TL' | 'SM' | 'DIGITAL_MARKETING' | 'ADMIN';
 
 export interface BantDimension {
   dimension: 'Budget' | 'Authority' | 'Need' | 'Timeline';

@@ -12,7 +12,9 @@ export type DashboardView =
   | 'crm'
   | 'komisi'
   | 'kb'
-  | 'surat_cinta';
+  | 'surat_cinta'
+  | 'unit_park'
+  | 'kinerja_se';
 
 export const VIEW_PATHS: Record<DashboardView, string> = {
   dashboard: '/dashboard',
@@ -29,6 +31,8 @@ export const VIEW_PATHS: Record<DashboardView, string> = {
   komisi: '/komisi',
   kb: '/knowledge-base',
   surat_cinta: '/surat-cinta',
+  unit_park: '/unit-park',
+  kinerja_se: '/kinerja-se',
 };
 
 const PATH_TO_VIEW: Record<string, DashboardView> = Object.entries(VIEW_PATHS).reduce(

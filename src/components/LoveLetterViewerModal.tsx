@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { X, Search, Download, CheckCircle2 } from 'lucide-react';
-import { THE_PARK_99_POINTS } from '../lib/love-letter/points-data';
+import { X, Search, Download, CheckCircle2, Sparkles, BookOpen } from 'lucide-react';
+import { type LoveLetterPoint } from '../lib/love-letter/points-data';
+import { getLoveLetterPoints, initProjectLoveLetter } from '../lib/love-letter/love-letter-engine';
 import { generateLoveLetterDocx } from '../lib/love-letter/docx-exporter';
 import { generateLoveLetterHtml } from '../lib/love-letter/html-exporter';
 import {
@@ -13,33 +14,50 @@ import {
 interface ViewerProps {
   isOpen: boolean;
   variant?: 'modal' | 'page';
+  projectId?: string;
+  projectName?: string;
   onClose: () => void;
 }
 
 export const LoveLetterViewerModal: React.FC<ViewerProps> = ({
   isOpen,
   variant = 'modal',
+  projectId = 'the-park-sukoharjo',
+  projectName = 'The Park Townhouse Sukoharjo',
   onClose,
 }) => {
+  const [points, setPoints] = useState<LoveLetterPoint[] | null>(() =>
+    getLoveLetterPoints(projectId)
+  );
+
+  useEffect(() => {
+    setPoints(getLoveLetterPoints(projectId));
+  }, [projectId]);
+
   const [searchQuery, setSearchQuery] = useState(() =>
-    loadPersistedState<string>('devos_loveletter_search', '')
+    loadPersistedState<string>(`devos_loveletter_search_${projectId}`, '')
   );
   const [selectedChapter, setSelectedChapter] = useState(() => {
     const urlTab = variant === 'page' ? getQueryParam('tab') : null;
     if (urlTab) return urlTab;
-    return loadPersistedState<string>('devos_loveletter_chapter', 'Semua');
+    return loadPersistedState<string>(`devos_loveletter_chapter_${projectId}`, 'Semua');
   });
 
   useEffect(() => {
-    savePersistedState('devos_loveletter_chapter', selectedChapter);
+    savePersistedState(`devos_loveletter_chapter_${projectId}`, selectedChapter);
     if (variant === 'page') {
       setQueryParam('tab', selectedChapter);
     }
-  }, [selectedChapter, variant]);
+  }, [selectedChapter, variant, projectId]);
 
   useEffect(() => {
-    savePersistedState('devos_loveletter_search', searchQuery);
-  }, [searchQuery]);
+    savePersistedState(`devos_loveletter_search_${projectId}`, searchQuery);
+  }, [searchQuery, projectId]);
+
+  const handleInitLoveLetter = () => {
+    const newPoints = initProjectLoveLetter(projectId, projectName);
+    setPoints(newPoints);
+  };
 
   if (!isOpen && variant === 'modal') return null;
 
@@ -53,7 +71,7 @@ export const LoveLetterViewerModal: React.FC<ViewerProps> = ({
     'Bab VI: Legalitas, Skema Pembiayaan & Reputasi Pengembang',
   ];
 
-  const filteredPoints = THE_PARK_99_POINTS.filter(p => {
+  const filteredPoints = (points || []).filter(p => {
     const matchesSearch = 
       p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.narrative.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -64,17 +82,19 @@ export const LoveLetterViewerModal: React.FC<ViewerProps> = ({
   });
 
   const handleDownloadDocx = async () => {
+    if (!points || points.length === 0) return;
     try {
       const blob = await generateLoveLetterDocx(
-        "The Park Townhouse Sukoharjo",
+        projectName,
         "PT Andara Rejo Makmur",
         "Sukoharjo",
-        THE_PARK_99_POINTS
+        points
       );
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Surat_Cinta_99_Keunggulan_The_Park_Townhouse.docx`;
+      const safeProjectName = projectName.replace(/[^a-zA-Z0-9]/g, '_');
+      a.download = `Surat_Cinta_99_Keunggulan_${safeProjectName}.docx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -86,11 +106,12 @@ export const LoveLetterViewerModal: React.FC<ViewerProps> = ({
   };
 
   const handlePrintPdf = () => {
+    if (!points || points.length === 0) return;
     const html = generateLoveLetterHtml(
-      "The Park Townhouse Sukoharjo",
+      projectName,
       "PT Andara Rejo Makmur",
       "Sukoharjo",
-      THE_PARK_99_POINTS
+      points
     );
     const win = window.open('', '_blank');
     if (win) {
@@ -125,7 +146,7 @@ export const LoveLetterViewerModal: React.FC<ViewerProps> = ({
                 </h2>
               </div>
               <p className="text-xs text-warmmuted mt-0.5 leading-relaxed">
-                The Park Townhouse Sukoharjo &middot; Lolos uji guardrail 100%
+                {projectName} &middot; Lolos uji guardrail 100%
               </p>
             </div>
             {variant === 'modal' && (
@@ -166,64 +187,89 @@ export const LoveLetterViewerModal: React.FC<ViewerProps> = ({
           </div>
         </div>
 
-        {/* Filter and Search Bar */}
-        <div className="p-4 border-b border-warmborder bg-white flex flex-col sm:flex-row items-center gap-3 shrink-0">
-          <div className="relative w-full sm:flex-1">
-            <Search className="size-4 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Cari keunggulan (mis: akses, plafon, shm, jepang, kpr)..."
-              className="w-full h-9 pl-9 pr-3 rounded-xl border border-warmborder text-xs focus:border-terracotta focus:outline-none"
-            />
-          </div>
-
-          <div className="w-full sm:w-auto">
-            <select
-              value={selectedChapter}
-              onChange={e => setSelectedChapter(e.target.value)}
-              className="w-full sm:w-64 h-9 px-3 rounded-xl border border-warmborder text-xs font-medium text-espresso bg-sandstone/30 focus:border-terracotta focus:outline-none cursor-pointer"
-            >
-              {chapters.map((ch, idx) => (
-                <option key={idx} value={ch}>{ch}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* 99 Points List */}
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-3 bg-sandstone/20">
-          {filteredPoints.length === 0 ? (
-            <div className="py-12 text-center text-xs text-warmmuted">
-              Tidak ada poin yang cocok dengan pencarian &ldquo;{searchQuery}&rdquo;.
+        {/* Konten 99 Keunggulan atau Empty State */}
+        {!points || points.length === 0 ? (
+          <div className="p-12 text-center rounded-2xl bg-sandstone/30 border border-dashed border-warmborder space-y-4 m-6">
+            <div className="size-16 rounded-2xl bg-white border border-warmborder text-warmmuted grid place-items-center mx-auto shadow-2xs">
+              <BookOpen className="size-8 text-warmmuted" />
             </div>
-          ) : (
-            filteredPoints.map((point) => (
-              <article 
-                key={point.number}
-                className="p-4 rounded-xl bg-white border border-warmborder shadow-2xs hover:border-terracotta/40 transition-colors"
-              >
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-xs font-extrabold text-terracotta font-mono">
-                      #{point.number}
-                    </span>
-                    <h3 className="text-xs sm:text-sm font-bold text-espresso">
-                      {point.title}
-                    </h3>
-                  </div>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-sandstone text-warmmuted shrink-0">
-                    {point.category}
-                  </span>
+            <div>
+              <h3 className="text-base font-extrabold text-espresso">Belum ada surat cinta 99 keunggulan</h3>
+              <p className="text-xs text-warmmuted mt-1 max-w-md mx-auto leading-relaxed">
+                Surat cinta 99 keunggulan kurasi nilai kehidupan belum digenerate untuk <strong>{projectName}</strong>. Masukkan titik koordinat GPS, e-katalog, dan pricelist proyek untuk memicu narasi faktual.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleInitLoveLetter}
+              className="px-4 py-2.5 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 cursor-pointer shadow-xs inline-flex items-center gap-2"
+            >
+              <Sparkles className="size-4" />
+              <span>Generate 99 Keunggulan Proyek Ini</span>
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Filter and Search Bar */}
+            <div className="p-4 border-b border-warmborder bg-white flex flex-col sm:flex-row items-center gap-3 shrink-0">
+              <div className="relative w-full sm:flex-1">
+                <Search className="size-4 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Cari keunggulan (mis: akses, plafon, shm, jepang, kpr)..."
+                  className="w-full h-9 pl-9 pr-3 rounded-xl border border-warmborder text-xs focus:border-terracotta focus:outline-none"
+                />
+              </div>
+
+              <div className="w-full sm:w-auto">
+                <select
+                  value={selectedChapter}
+                  onChange={e => setSelectedChapter(e.target.value)}
+                  className="w-full sm:w-64 h-9 px-3 rounded-xl border border-warmborder text-xs font-medium text-espresso bg-sandstone/30 focus:border-terracotta focus:outline-none cursor-pointer"
+                >
+                  {chapters.map((ch, idx) => (
+                    <option key={idx} value={ch}>{ch}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* 99 Points List */}
+            <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-3 bg-sandstone/20">
+              {filteredPoints.length === 0 ? (
+                <div className="py-12 text-center text-xs text-warmmuted">
+                  Tidak ada poin yang cocok dengan pencarian &ldquo;{searchQuery}&rdquo;.
                 </div>
-                <p className="text-xs text-warmmuted leading-relaxed pl-6">
-                  {point.narrative}
-                </p>
-              </article>
-            ))
-          )}
-        </div>
+              ) : (
+                filteredPoints.map((point) => (
+                  <article 
+                    key={point.number}
+                    className="p-4 rounded-xl bg-white border border-warmborder shadow-2xs hover:border-terracotta/40 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs font-extrabold text-terracotta font-mono">
+                          #{point.number}
+                        </span>
+                        <h3 className="text-xs sm:text-sm font-bold text-espresso">
+                          {point.title}
+                        </h3>
+                      </div>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-sandstone text-warmmuted shrink-0">
+                        {point.category}
+                      </span>
+                    </div>
+                    <p className="text-xs text-warmmuted leading-relaxed pl-6">
+                      {point.narrative}
+                    </p>
+                  </article>
+                ))
+              )}
+            </div>
+          </>
+        )}
 
         {/* Footer Bar */}
         <div className="p-4 border-t border-warmborder bg-sandstone/50 flex items-center justify-between text-xs text-warmmuted shrink-0">

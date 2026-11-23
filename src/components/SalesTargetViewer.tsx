@@ -11,6 +11,8 @@ import {
   X,
   ExternalLink,
   AlertCircle,
+  Lock,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   calculateSalesTargetPlan,
@@ -23,6 +25,7 @@ import {
   loadPersistedState,
   savePersistedState,
 } from '../lib/navigation/router';
+import type { RoleKey } from '../data';
 import type {
   SalesTargetPlan,
   ScenarioType,
@@ -36,9 +39,11 @@ interface SalesTargetViewerProps {
   totalUnits?: number;
   avgPriceIdr?: number;
   seHeadcount?: number;
+  userRole?: RoleKey;
   isDemoMode?: boolean;
   variant?: 'modal' | 'page';
   onClose?: () => void;
+  onScenarioChange?: (newScenario: ScenarioType) => void;
 }
 
 export function SalesTargetViewer({
@@ -47,10 +52,20 @@ export function SalesTargetViewer({
   totalUnits = 30,
   avgPriceIdr = 900000000,
   seHeadcount = 3,
+  userRole = 'SM',
   isDemoMode = false,
   variant = 'modal',
   onClose,
+  onScenarioChange,
 }: SalesTargetViewerProps) {
+  // Hanya SM (dan Direksi/Superadmin) yang dapat mengubah skenario target penjualan
+  const canEditScenario =
+    userRole === 'SM' ||
+    userRole === 'DIREKSI' ||
+    userRole === 'ADMIN' ||
+    userRole === 'SUPERADMIN' ||
+    userRole === 'SUPERADMIN_IT';
+
   const [scenario, setScenario] = useState<ScenarioType>(() => {
     const urlTab = variant === 'page' ? getQueryParam('tab') : null;
     if (urlTab && VALID_SCENARIOS.includes(urlTab as ScenarioType)) {
@@ -103,6 +118,31 @@ export function SalesTargetViewer({
         seAllocations: fullPlan.seAllocations.slice(0, 1),
       }
     : fullPlan;
+
+  const handleSelectScenario = (scKey: ScenarioType) => {
+    if (!canEditScenario) {
+      setToastMessage('Akses Dibatasi: Hanya Sales Manager (SM) yang berwenang mengubah skenario target penjualan.');
+      return;
+    }
+    setScenario(scKey);
+    onScenarioChange?.(scKey);
+    setToastMessage(`Skenario target diubah ke "${scKey.toUpperCase()}". Seluruh ritme target & reverse-funnel tim SE telah diperbarui.`);
+  };
+
+  const handleUnitsChange = (val: number) => {
+    if (!canEditScenario) return;
+    setUnitsInput(Math.max(1, val));
+  };
+
+  const handlePriceChange = (val: number) => {
+    if (!canEditScenario) return;
+    setPriceInput(Math.max(100000000, val));
+  };
+
+  const handleSeCountChange = (val: number) => {
+    if (!canEditScenario) return;
+    setSeCountInput(Math.max(1, val));
+  };
 
   const activeScenarioDetail = fullPlan.scenarios[scenario];
 
@@ -209,6 +249,42 @@ export function SalesTargetViewer({
 
         {/* Content Body */}
         <div className="p-6 overflow-y-auto flex-1 bg-[#FBF9F5] space-y-6">
+          {/* Banner Otoritas Peran */}
+          <div
+            className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+              canEditScenario
+                ? 'bg-amber-50/80 border-amber-200 text-amber-900'
+                : 'bg-stone-100 border-warmborder text-warmmuted'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              {canEditScenario ? (
+                <ShieldCheck className="size-5 text-terracotta shrink-0" />
+              ) : (
+                <Lock className="size-5 text-warmmuted shrink-0" />
+              )}
+              <div>
+                <p className="font-extrabold text-espresso">
+                  {canEditScenario
+                    ? 'Wewenang Pengaturan Skenario: Sales Manager (SM)'
+                    : 'Mode Baca: Sales Executive (SE) / Tim Operasional'}
+                </p>
+                <p className="text-[11px] mt-0.5">
+                  {canEditScenario
+                    ? 'Pilihan skenario Anda di halaman ini menentukan beban kuota harian/mingguan dan cara tim SE bekerja.'
+                    : 'Target ditetapkan oleh SM. Skenario aktif saat ini menentukan ritme kontak harian dan survei mingguan Anda.'}
+                </p>
+              </div>
+            </div>
+            <span
+              className={`px-3 py-1 rounded-full font-bold text-[11px] self-start sm:self-auto uppercase ${
+                canEditScenario ? 'bg-terracotta text-white' : 'bg-warmborder text-espresso'
+              }`}
+            >
+              {canEditScenario ? 'SM Otomatis Sync SE' : 'Hanya Lihat (Read-Only)'}
+            </span>
+          </div>
+
           {/* Top Banner: Sold Out Countdown & Skenario Switcher */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {(['konservatif', 'realistis', 'optimis'] as ScenarioType[]).map((scKey) => {
@@ -217,8 +293,11 @@ export function SalesTargetViewer({
               return (
                 <button
                   key={scKey}
-                  onClick={() => setScenario(scKey)}
-                  className={`p-4 rounded-3xl text-left border transition-all cursor-pointer flex flex-col justify-between ${
+                  type="button"
+                  onClick={() => handleSelectScenario(scKey)}
+                  className={`p-4 rounded-3xl text-left border transition-all flex flex-col justify-between ${
+                    canEditScenario ? 'cursor-pointer' : 'cursor-default'
+                  } ${
                     isSelected
                       ? 'bg-white border-terracotta shadow-lg shadow-terracotta/5 ring-2 ring-terracotta/20'
                       : 'bg-white/80 border-warmborder hover:bg-white'
@@ -226,12 +305,20 @@ export function SalesTargetViewer({
                 >
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className={`text-[11px] font-bold uppercase tracking-wider ${isSelected ? 'text-terracotta' : 'text-warmmuted'}`}>
+                      <span
+                        className={`text-[11px] font-bold uppercase tracking-wider ${
+                          isSelected ? 'text-terracotta' : 'text-warmmuted'
+                        }`}
+                      >
                         {sc.label.split('(')[0]}
                       </span>
-                      {isSelected && (
-                        <span className="size-2 rounded-full bg-terracotta animate-pulse" />
-                      )}
+                      {isSelected ? (
+                        <span className="flex items-center gap-1 text-[10px] font-extrabold text-olive bg-lime-100 px-2 py-0.5 rounded-full">
+                          <span className="size-1.5 rounded-full bg-olive animate-pulse" /> Skenario Aktif
+                        </span>
+                      ) : !canEditScenario ? (
+                        <Lock className="size-3 text-stone-400" />
+                      ) : null}
                     </div>
                     <div className="flex items-baseline gap-1 mt-1">
                       <span className="text-2xl font-black text-espresso">{sc.monthsToSoldOut}</span>
@@ -252,9 +339,16 @@ export function SalesTargetViewer({
 
           {/* Interactive Parameter Controls */}
           <div className="bg-white p-5 rounded-3xl border border-warmborder shadow-sm">
-            <h3 className="text-xs font-extrabold uppercase tracking-wider text-warmmuted mb-3 flex items-center gap-2">
-              <Layers className="size-4 text-terracotta" />
-              Sesuaikan Parameter Proyek (Simulasi Fleksibel)
+            <h3 className="text-xs font-extrabold uppercase tracking-wider text-warmmuted mb-3 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Layers className="size-4 text-terracotta" />
+                Parameter Proyek &amp; Simulasi Kecepatan
+              </span>
+              {!canEditScenario && (
+                <span className="text-[11px] font-normal text-stone-400 flex items-center gap-1">
+                  <Lock className="size-3" /> Terkunci untuk akun SE
+                </span>
+              )}
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
@@ -263,9 +357,12 @@ export function SalesTargetViewer({
                   type="number"
                   min="5"
                   max="500"
+                  disabled={!canEditScenario}
                   value={unitsInput}
-                  onChange={(e) => setUnitsInput(Math.max(1, Number(e.target.value)))}
-                  className="w-full px-3.5 py-2 rounded-xl border border-warmborder text-xs font-bold text-espresso bg-sandstone/30 focus:outline-none focus:border-terracotta"
+                  onChange={(e) => handleUnitsChange(Number(e.target.value))}
+                  className={`w-full px-3.5 py-2 rounded-xl border border-warmborder text-xs font-bold text-espresso ${
+                    !canEditScenario ? 'bg-stone-100 cursor-not-allowed opacity-80' : 'bg-sandstone/30 focus:outline-none focus:border-terracotta'
+                  }`}
                 />
               </div>
 
@@ -275,9 +372,12 @@ export function SalesTargetViewer({
                   type="number"
                   step="50000000"
                   min="100000000"
+                  disabled={!canEditScenario}
                   value={priceInput}
-                  onChange={(e) => setPriceInput(Math.max(100000000, Number(e.target.value)))}
-                  className="w-full px-3.5 py-2 rounded-xl border border-warmborder text-xs font-bold text-espresso bg-sandstone/30 focus:outline-none focus:border-terracotta"
+                  onChange={(e) => handlePriceChange(Number(e.target.value))}
+                  className={`w-full px-3.5 py-2 rounded-xl border border-warmborder text-xs font-bold text-espresso ${
+                    !canEditScenario ? 'bg-stone-100 cursor-not-allowed opacity-80' : 'bg-sandstone/30 focus:outline-none focus:border-terracotta'
+                  }`}
                 />
               </div>
 
@@ -287,9 +387,12 @@ export function SalesTargetViewer({
                   type="number"
                   min="1"
                   max="50"
+                  disabled={!canEditScenario}
                   value={seCountInput}
-                  onChange={(e) => setSeCountInput(Math.max(1, Number(e.target.value)))}
-                  className="w-full px-3.5 py-2 rounded-xl border border-warmborder text-xs font-bold text-espresso bg-sandstone/30 focus:outline-none focus:border-terracotta"
+                  onChange={(e) => handleSeCountChange(Number(e.target.value))}
+                  className={`w-full px-3.5 py-2 rounded-xl border border-warmborder text-xs font-bold text-espresso ${
+                    !canEditScenario ? 'bg-stone-100 cursor-not-allowed opacity-80' : 'bg-sandstone/30 focus:outline-none focus:border-terracotta'
+                  }`}
                 />
               </div>
             </div>

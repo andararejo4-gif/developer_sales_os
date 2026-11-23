@@ -190,24 +190,77 @@ export function generatePlaybookPlan(
     SE: 'Playbook Standar Operasional & Target Aktivitas Sales Executive',
     TL: 'Playbook Supervisi Tim, Eskalasi, & SLA Team Leader',
     SM: 'Playbook Manajemen Master Proyek, Portofolio, & Tata Kelola Sales Manager',
+    DIGITAL_MARKETING: 'Playbook Iklan Berbayar, Optimasi CPL, & Distribusi Konten Digital Marketing',
+    ADMIN: 'Playbook Verifikasi Transaksi Booking, Dokumen KPR, & Legalitas Notaris Admin',
   };
 
-  const sops = role === 'SE' ? SE_DAILY_SOP : [
-    {
-      timeOrFrequency: '08:30 WIB',
-      channel: 'Supervisi' as const,
-      activityName: 'Audit Radar SLA 5 Menit Tim SE',
-      instruction: 'Pastikan seluruh lead baru telah dihubungi dalam 5 menit. Tarik lead yang mangkir >72 jam ke lead pool bersama.',
-      targetOutput: '0 lead terabaikan melebihi batas waktu SLA.',
-    },
-    {
-      timeOrFrequency: '11:00 WIB',
-      channel: 'Supervisi' as const,
-      activityName: 'Pendampingan Negosiasi Unit & Approval Diskon',
-      instruction: 'Dampingi SE pada prospek Hot yang mengajukan diskon cash keras atau skema cicilan khusus developer.',
-      targetOutput: 'Keputusan negosiasi selesai dalam batas wewenang.',
-    },
-  ];
+  let sops: SopStep[] = SE_DAILY_SOP;
+  if (role === 'DIGITAL_MARKETING') {
+    sops = [
+      {
+        timeOrFrequency: '08:00 - 09:30 WIB',
+        channel: 'Iklan Berbayar' as const,
+        activityName: 'Audit Harian Budget & CPL Kampanye Meta/TikTok Ads',
+        instruction: 'Evaluasi biaya per prospek (CPL) dari kampanye ads radius 25km. Matikan ad-set yang melebihi batas toleransi CPL Rp 45.000.',
+        targetOutput: 'Laporan CPL stabil di bawah target batas wajar.',
+      },
+      {
+        timeOrFrequency: '10:00 - 12:00 WIB',
+        channel: 'Posting Medsos' as const,
+        activityName: 'Eksekusi & Penjadwalan Slot Konten TOFU/MOFU Official',
+        instruction: 'Publikasi materi video Reels/TikTok akun official proyek sesuai kalender konten hari berjalan.',
+        targetOutput: '1-2 konten video terunggah dengan CTA form lead aktif.',
+      },
+      {
+        timeOrFrequency: '14:00 - 16:00 WIB',
+        channel: 'Supervisi' as const,
+        activityName: 'Sinkronisasi Kualitas Lead Inbound dengan Tim Sales',
+        instruction: 'Periksa feedback dari SE mengenai kecocokan profil calon pembeli (BANT) dari iklan yang masuk.',
+        targetOutput: 'Optimalisasi parameter audience targeting demografis & minat.',
+      },
+    ];
+  } else if (role === 'ADMIN') {
+    sops = [
+      {
+        timeOrFrequency: '08:30 - 10:00 WIB',
+        channel: 'Supervisi' as const,
+        activityName: 'Verifikasi Rekening Escrow Booking Fee H+1',
+        instruction: 'Cek mutasi rekening resmi PT Andara Rejo Makmur untuk seluruh tanda jadi/booking yang disetorkan pembeli.',
+        targetOutput: 'Kwitansi resmi terbit dan status unit terkunci otomatis di sistem.',
+      },
+      {
+        timeOrFrequency: '10:30 - 12:30 WIB',
+        channel: 'WhatsApp / DM' as const,
+        activityName: 'Checklist Berkas Pengajuan KPR Multi-Bank',
+        instruction: 'Verifikasi kelengkapan KTP, NPWP, Slip Gaji 3 bulan, dan hasil SLIK OJK bersama Bank BSI/BTN/Mandiri.',
+        targetOutput: 'Berkas masuk status SPK / lolos analis perbankan.',
+      },
+      {
+        timeOrFrequency: '14:00 - 16:30 WIB',
+        channel: 'Supervisi' as const,
+        activityName: 'Koordinasi Legalitas Notaris & Jadwal Akad Kredit',
+        instruction: 'Validasi pemecahan sertifikat SHM dan PBG/IMB per kavling dengan PPAT/Notaris rekanan.',
+        targetOutput: 'Jadwal akad kredit tervalidasi tanpa kendala legalitas.',
+      },
+    ];
+  } else if (role === 'TL' || role === 'SM') {
+    sops = [
+      {
+        timeOrFrequency: '08:30 WIB',
+        channel: 'Supervisi' as const,
+        activityName: 'Audit Radar SLA 5 Menit Tim SE',
+        instruction: 'Pastikan seluruh lead baru telah dihubungi dalam 5 menit. Tarik lead yang mangkir >72 jam ke lead pool bersama.',
+        targetOutput: '0 lead terabaikan melebihi batas waktu SLA.',
+      },
+      {
+        timeOrFrequency: '11:00 WIB',
+        channel: 'Supervisi' as const,
+        activityName: 'Pendampingan Negosiasi Unit & Approval Diskon',
+        instruction: 'Dampingi SE pada prospek Hot yang mengajukan diskon cash keras atau skema cicilan khusus developer.',
+        targetOutput: 'Keputusan negosiasi selesai dalam batas wewenang.',
+      },
+    ];
+  }
 
   return {
     id: `playbook-${projectId}-${role.toLowerCase()}-v${version}`,
@@ -254,18 +307,36 @@ export function generatePlaybookPlan(
 
 const playbookStore = new Map<string, Map<string, PlaybookPlan>>();
 
+// Seed bawaan khusus The Park Townhouse
+const theParkPlaybookMap = new Map<string, PlaybookPlan>();
+theParkPlaybookMap.set('SE', generatePlaybookPlan('proj-the-park-01', 'SE'));
+theParkPlaybookMap.set('TL', generatePlaybookPlan('proj-the-park-01', 'TL'));
+theParkPlaybookMap.set('SM', generatePlaybookPlan('proj-the-park-01', 'SM'));
+theParkPlaybookMap.set('DIGITAL_MARKETING', generatePlaybookPlan('proj-the-park-01', 'DIGITAL_MARKETING'));
+theParkPlaybookMap.set('ADMIN', generatePlaybookPlan('proj-the-park-01', 'ADMIN'));
+playbookStore.set('proj-the-park-01', theParkPlaybookMap);
+playbookStore.set('the-park-sukoharjo', theParkPlaybookMap);
+
 export function getPlaybook(
   projectId: string,
   role: PlaybookRole = 'SE',
   isDemoMode: boolean = false
-): PlaybookPlan {
+): PlaybookPlan | null {
+  // Dukung identitas The Park (ID atau Nama lengkap)
+  const isPark =
+    projectId === 'proj-the-park-01' ||
+    projectId === 'the-park-sukoharjo' ||
+    projectId.toLowerCase().includes('the park');
+
   let projMap = playbookStore.get(projectId);
-  if (!projMap) {
-    projMap = new Map();
+  if (!projMap && isPark) {
+    projMap = theParkPlaybookMap;
     playbookStore.set(projectId, projMap);
-    projMap.set('SE', generatePlaybookPlan(projectId, 'SE'));
-    projMap.set('TL', generatePlaybookPlan(projectId, 'TL'));
-    projMap.set('SM', generatePlaybookPlan(projectId, 'SM'));
+  }
+
+  if (!projMap || projMap.size === 0) {
+    // Proyek belum memiliki playbook
+    return null;
   }
 
   let plan = projMap.get(role);
@@ -284,4 +355,14 @@ export function getPlaybook(
   }
 
   return plan;
+}
+
+export function initProjectPlaybook(projectId: string): void {
+  const projMap = new Map<string, PlaybookPlan>();
+  projMap.set('SE', generatePlaybookPlan(projectId, 'SE'));
+  projMap.set('TL', generatePlaybookPlan(projectId, 'TL'));
+  projMap.set('SM', generatePlaybookPlan(projectId, 'SM'));
+  projMap.set('DIGITAL_MARKETING', generatePlaybookPlan(projectId, 'DIGITAL_MARKETING'));
+  projMap.set('ADMIN', generatePlaybookPlan(projectId, 'ADMIN'));
+  playbookStore.set(projectId, projMap);
 }
