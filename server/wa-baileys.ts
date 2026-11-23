@@ -28,6 +28,7 @@ interface ActiveWaInstance {
 }
 
 const instances = new Map<string, ActiveWaInstance>();
+const processedMessageIds = new Set<string>();
 
 function getSessionDir(seEmail: string): string {
   const hash = crypto.createHash('sha256').update(seEmail.toLowerCase()).digest('hex').slice(0, 24);
@@ -35,11 +36,163 @@ function getSessionDir(seEmail: string): string {
 }
 
 export function normalizePhoneWa(raw: string): string {
-  const digits = raw.replace(/@.*$/, '').replace(/\D/g, '');
+  const withoutDomainAndDevice = raw.trim().replace(/@.*$/, '').replace(/:.*$/, '');
+  const digits = withoutDomainAndDevice.replace(/\D/g, '');
   if (!digits) return '';
   if (digits.startsWith('0')) return `62${digits.slice(1)}`;
   if (digits.startsWith('8')) return `62${digits}`;
   return digits;
+}
+
+function unwrapWaMessageContent(msgObj: any): any {
+  if (!msgObj || typeof msgObj !== 'object') return null;
+  if (msgObj.ephemeralMessage?.message) return unwrapWaMessageContent(msgObj.ephemeralMessage.message);
+  if (msgObj.viewOnceMessage?.message) return unwrapWaMessageContent(msgObj.viewOnceMessage.message);
+  if (msgObj.viewOnceMessageV2?.message) return unwrapWaMessageContent(msgObj.viewOnceMessageV2.message);
+  if (msgObj.viewOnceMessageV2Extension?.message) return unwrapWaMessageContent(msgObj.viewOnceMessageV2Extension.message);
+  if (msgObj.documentWithCaptionMessage?.message) return unwrapWaMessageContent(msgObj.documentWithCaptionMessage.message);
+  if (msgObj.editedMessage?.message?.protocolMessage?.editedMessage) {
+    return unwrapWaMessageContent(msgObj.editedMessage.message.protocolMessage.editedMessage);
+  }
+  return msgObj;
+}
+
+function extractTextFromWaMessage(rawMessage: any): string {
+  const m = unwrapWaMessageContent(rawMessage);
+  if (!m) return '';
+  return (
+    m.conversation ||
+    m.extendedTextMessage?.text ||
+    m.imageMessage?.caption ||
+    m.videoMessage?.caption ||
+    m.documentMessage?.caption ||
+    m.buttonsResponseMessage?.selectedDisplayText ||
+    m.listResponseMessage?.title ||
+    m.listResponseMessage?.singleSelectReply?.selectedRowId ||
+    m.templateButtonReplyMessage?.selectedDisplayText ||
+    ''
+  ).trim();
+}
+
+function extractIntroducedNameFromText(text: string): string {
+  const cleaned = (text || '').trim();
+  if (!cleaned) return '';
+  const patterns = [
+    /(?:perkenalkan|kenalkan|nama\s+saya)\s*(?:saya\s+|adalah\s+)?([A-ZÀ-ÖØ-Ýa-zà-öø-ÿ][A-ZÀ-ÖØ-Ýa-zà-öø-ÿ .'-]{1,42}?)(?=\s*(?:,|;|\.|\bdari\b|\bmau\b|\bingin\b|\btanya\b|\bbertanya\b|\bminat\b|\bcari\b|$))/i,
+    /(?:^|[.,!]\s+)saya\s+((?:dr\.?\s+|drg\.?\s+|prof\.?\s+|ir\.?\s+|h\.?\s+|hj\.?\s+|pak\s+|bapak\s+|ibu\s+|bu\s+|mas\s+|mbak\s+)?[A-Z][a-zA-Z .'-]{2,38}?)(?=\s*(?:,|;|\.|\bdari\b|\bmau\b|\bingin\b|\btanya\b|\bbertanya\b|\bminat\b|\bcari\b|$))/i,
+  ];
+  for (const regex of patterns) {
+    const m = cleaned.match(regex);
+    if (m && m[1]) {
+      const candidate = m[1].trim().replace(/[.,;]+$/, '').trim();
+      const lower = candidate.toLowerCase();
+      if (
+        candidate.length >= 3 &&
+        !/^(mau|ingin|tanya|bertanya|cari|lihat|tertarik|minat|bisa|boleh)\b/.test(lower)
+      ) {
+        return candidate;
+      }
+    }
+  }
+  return '';
+}
+
+function resolveBestWaContactName(params: {
+  waProfileName?: string;
+  messageText?: string;
+  existingName?: string;
+  cleanPhone: string;
+}): string {
+  const introduced = extractIntroducedNameFromText(params.messageText || '');
+  const profileName = (params.waProfileName || '').trim();
+  const existing = (params.existingName || '').trim();
+  const isGeneric = (n: string) => !n || /^prospek\s+wa/i.test(n) || /^\d+$/.test(n);
+
+  // 1. Jika pengirim menyebutkan nama secara eksplisit di dalam chat, gunakan nama tersebut
+  if (introduced) return introduced;
+  // 2. Jika sudah ada nama asli di database (bukan "Prospek WA ..."), pertahankan
+  if (existing && !isGeneric(existing)) return existing;
+  // 3. Jika pengirim TIDAK menyebutkan nama di chat, ambil dari nama profil nomor WhatsApp-nya (pushName)
+  if (profileName && !isGeneric(profileName)) return profileName;
+  // 4. Fallback terakhir jika profil WA juga kosong
+  return existing || profileName || `Prospek WA ${params.cleanPhone.slice(-4)}`;
+}
+
+function detectLeadAttributesFromMessage(
+  text: string,
+  currentLead: Record<string, any> | undefined
+): {
+  unitInterest: string;
+  clusterInterest: string;
+  unitPriceIdr: number;
+  paymentScheme: string;
+  domicile: string;
+} {
+  const lower = (text || '').toLowerCase();
+  let unitInterest = String(
+    currentLead?.unit_interest || 'Nagoya B.02 (LT 63/LB 75 · Gold 3KT)'
+  );
+  let clusterInterest = String(currentLead?.cluster_interest || 'Nagoya');
+  let unitPriceIdr = Number(currentLead?.unit_price_idr || 650000000);
+
+  if (/\btokyo\b/.test(lower)) {
+    unitInterest = 'Tokyo A.01 (LT 72/LB 90 · Signature 3KT)';
+    clusterInterest = 'Tokyo';
+    unitPriceIdr = 950000000;
+  } else if (/\bosaka\b/.test(lower)) {
+    unitInterest = 'Osaka A.01 (LT 66/LB 80 · Titanium 3KT)';
+    clusterInterest = 'Osaka';
+    unitPriceIdr = 775000000;
+  } else if (/\bnagoya\b/.test(lower)) {
+    unitInterest = 'Nagoya B.02 (LT 63/LB 75 · Gold 3KT)';
+    clusterInterest = 'Nagoya';
+    unitPriceIdr = 650000000;
+  }
+
+  let paymentScheme = String(currentLead?.payment_scheme || 'KPR');
+  if (/cash\s*keras|tunai\s*keras/i.test(text)) {
+    paymentScheme = 'CASH_KERAS';
+  } else if (/24\s*bulan|ct\s*24|tempo\s*24|bertahap\s*24/i.test(text)) {
+    paymentScheme = 'CASH_TEMPO_24';
+  } else if (/12\s*bulan|ct\s*12|tempo\s*12|bertahap\s*12|cash\s*tempo|cash\s*bertahap/i.test(text)) {
+    paymentScheme = 'CASH_TEMPO_12';
+  } else if (/\bkpr\b/i.test(text)) {
+    paymentScheme = 'KPR';
+  }
+
+  let domicile = String(currentLead?.domicile || 'Sukoharjo / Solo Raya');
+  const domMatch = text.match(
+    /(?:domisili|tinggal\s+di|asal\s+dari|saya\s+di|saya\s+dari)\s+([A-ZÀ-ÖØ-Ýa-zà-öø-ÿ][A-ZÀ-ÖØ-Ýa-zà-öø-ÿ ,.-]{2,35}?)(?=\s*(?:,|;|\.|\bmau\b|\bingin\b|\btanya\b|\bminat\b|\bcari\b|$))/i
+  );
+  if (domMatch && domMatch[1]) {
+    domicile = domMatch[1].trim();
+  }
+
+  return { unitInterest, clusterInterest, unitPriceIdr, paymentScheme, domicile };
+}
+
+function extractSenderPhoneFromWaKey(key: any): string {
+  if (!key) return '';
+  const candidates = [
+    key.senderPn,
+    key.remoteJidAlt,
+    key.participantPn,
+    key.participant,
+    key.remoteJid,
+  ];
+  for (const cand of candidates) {
+    if (typeof cand === 'string' && cand.endsWith('@s.whatsapp.net')) {
+      const norm = normalizePhoneWa(cand);
+      if (norm) return norm;
+    }
+  }
+  for (const cand of candidates) {
+    if (typeof cand === 'string' && cand.trim()) {
+      const norm = normalizePhoneWa(cand);
+      if (norm) return norm;
+    }
+  }
+  return '';
 }
 
 /**
@@ -124,24 +277,43 @@ export async function processInboundWaMessageForSe(params: {
 
   const currentLead = existingLeads[0];
   const latestCustomerMsg = decryptedMessages[decryptedMessages.length - 1] || params.messageText.trim();
+  const resolvedContactName = resolveBestWaContactName({
+    waProfileName: params.contactName,
+    messageText: latestCustomerMsg,
+    existingName: currentLead?.full_name,
+    cleanPhone,
+  });
+  const detectedAttrs = detectLeadAttributesFromMessage(latestCustomerMsg, currentLead);
   const prevSalesMsg = String(currentLead?.last_sales_message || '').trim();
+  const prevCustomerMsg = String(currentLead?.last_customer_message || '').trim();
   const nextInteractionCount = Number(currentLead?.interaction_count || 0) + 1;
-  const combinedNotes = currentLead
-    ? `${currentLead.sales_notes || ''}\n[Ringkasan Pesan Masuk WA]: ${decryptedMessages.join(' | ')}`.trim()
-    : `Pesan Masuk WhatsApp: ${decryptedMessages.join(' | ')}`;
+
+  // Gabungkan riwayat obrolan sebelumnya dengan pesan baru agar AI memiliki konteks kumulatif
+  const historyLines: string[] = [];
+  if (currentLead?.sales_notes) {
+    historyLines.push(String(currentLead.sales_notes).slice(0, 350));
+  }
+  if (prevCustomerMsg && prevCustomerMsg !== latestCustomerMsg) {
+    historyLines.push(`[Pesan Customer Sebelumnya]: ${prevCustomerMsg}`);
+  }
+  if (prevSalesMsg) {
+    historyLines.push(`[Balasan Sales Sebelumnya]: ${prevSalesMsg}`);
+  }
+  historyLines.push(`[Pesan Masuk Terbaru (${new Date().toLocaleTimeString('id-ID')})]: ${decryptedMessages.join(' | ')}`);
+  const combinedNotes = historyLines.join('\n').slice(-1200);
 
   // 4. Jalankan AI Lead Analyzer berbasis Playbook v1.2 (Jalur B: WA_BAILEYS 2-Arah)
   const aiResult = await analyzeLeadWithAi({
-    fullName: currentLead?.full_name || params.contactName || `Prospek WA ${cleanPhone.slice(-4)}`,
+    fullName: resolvedContactName,
     phoneWa: cleanPhone,
-    domicile: currentLead?.domicile || 'Sukoharjo / Solo Raya',
+    domicile: detectedAttrs.domicile,
     source: currentLead?.source || 'WhatsApp Inbound (Baileys)',
     contentCode: currentLead?.content_code || 'WA-INBOUND',
     stage: currentLead?.stage || 'NEW',
     personaCode: (currentLead?.persona_code || 'P1') as any,
     personaProfile: (currentLead?.persona_profile || {}) as Record<string, string>,
-    unitInterest: currentLead?.unit_interest || 'Nagoya B.02 (LT 63/LB 75 · Gold 3KT)',
-    paymentScheme: currentLead?.payment_scheme || 'KPR',
+    unitInterest: detectedAttrs.unitInterest,
+    paymentScheme: detectedAttrs.paymentScheme,
     bantB: Number(currentLead?.bant_b ?? 1),
     bantA: Number(currentLead?.bant_a ?? 1),
     bantN: Number(currentLead?.bant_n ?? 2),
@@ -157,6 +329,26 @@ export async function processInboundWaMessageForSe(params: {
 
   const recBant = aiResult.recommended_bant;
   const validityStatus = aiResult.clarity_status === 'PERLU_DILENGKAPI' ? 'PERLU_DILENGKAPI' : 'VALID';
+  const finalDomicile = aiResult.extracted_domicile || detectedAttrs.domicile;
+  const finalPaymentScheme = aiResult.extracted_payment_scheme || detectedAttrs.paymentScheme;
+  const finalUnitInterest = detectedAttrs.unitInterest;
+  const finalClusterInterest = detectedAttrs.clusterInterest;
+  const finalUnitPriceIdr = detectedAttrs.unitPriceIdr;
+
+  // Tentukan penyesuaian tahap otomatis jika BANT naik atau prospek minta jadwal survei
+  const wantsAppointment = /\b(survei|survey|lihat\s+lokasi|kunjung|datang|sabtu|minggu|besok|jadwal)\b/i.test(
+    latestCustomerMsg
+  );
+  const currentStage = String(currentLead?.stage || 'NEW');
+  const advancedStages = ['VISITED', 'HOT_NEGOTIATION', 'BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'];
+  let nextStage = currentStage;
+  if (!advancedStages.includes(currentStage)) {
+    if (wantsAppointment && recBant.total >= 7) {
+      nextStage = 'APPOINTMENT';
+    } else if (recBant.total >= 7 && (currentStage === 'NEW' || currentStage === 'CONTACTED')) {
+      nextStage = 'QUALIFIED';
+    }
+  }
 
   let leadId: string;
   if (!currentLead) {
@@ -164,17 +356,17 @@ export async function processInboundWaMessageForSe(params: {
       INSERT INTO sales_os.pipeline_leads (
         owner_se_email, owner_se_name, full_name, phone_wa, domicile, source, content_code,
         stage, validity_status, persona_code, bant_b, bant_a, bant_n, bant_t, bant_total, grade,
-        unit_interest, payment_scheme, sales_notes, next_action,
+        cluster_interest, unit_interest, unit_price_idr, payment_scheme, sales_notes, next_action,
         lead_origin, last_customer_message, last_sales_message, interaction_count, first_inbound_at
       ) VALUES (
         ${seEmail},
         ${params.seName},
-        ${params.contactName || `Prospek WA ${cleanPhone.slice(-4)}`},
+        ${resolvedContactName},
         ${cleanPhone},
-        ${'Sukoharjo / Solo Raya'},
+        ${finalDomicile},
         ${'WhatsApp Inbound (Baileys)'},
         ${'WA-INBOUND'},
-        ${recBant.total >= 7 ? 'QUALIFIED' : 'NEW'},
+        ${nextStage},
         ${validityStatus},
         ${aiResult.recommended_persona},
         ${recBant.b},
@@ -183,9 +375,11 @@ export async function processInboundWaMessageForSe(params: {
         ${recBant.t},
         ${recBant.total},
         ${recBant.grade},
-        ${'Nagoya B.02 (LT 63/LB 75 · Gold 3KT)'},
-        ${'KPR'},
-        ${aiResult.ringkas},
+        ${finalClusterInterest},
+        ${finalUnitInterest},
+        ${finalUnitPriceIdr},
+        ${finalPaymentScheme},
+        ${combinedNotes},
         ${aiResult.rekomendasi[0] || 'Balas <= 5 menit & kualifikasi BANT'},
         ${'WA_BAILEYS'},
         ${latestCustomerMsg},
@@ -200,14 +394,22 @@ export async function processInboundWaMessageForSe(params: {
     leadId = String(currentLead.id);
     await sql`
       UPDATE sales_os.pipeline_leads
-      SET persona_code = ${aiResult.recommended_persona},
+      SET full_name = ${resolvedContactName},
+          domicile = ${finalDomicile},
+          stage = ${nextStage},
+          persona_code = ${aiResult.recommended_persona},
           bant_b = ${recBant.b},
           bant_a = ${recBant.a},
           bant_n = ${recBant.n},
           bant_t = ${recBant.t},
           bant_total = ${recBant.total},
           grade = ${recBant.grade},
+          cluster_interest = ${finalClusterInterest},
+          unit_interest = ${finalUnitInterest},
+          unit_price_idr = ${finalUnitPriceIdr},
+          payment_scheme = ${finalPaymentScheme},
           validity_status = ${validityStatus},
+          sales_notes = ${combinedNotes},
           next_action = ${aiResult.rekomendasi[0] || currentLead.next_action},
           lead_origin = 'WA_BAILEYS',
           last_customer_message = ${latestCustomerMsg},
@@ -293,7 +495,50 @@ export async function recordOutboundWaReplyForSe(params: {
     LIMIT 1
   `;
 
-  if (rows.length === 0) return { responseTimeSeconds: null, slaMet: null };
+  if (rows.length === 0) {
+    const leadRows = await sql`
+      SELECT id, created_at FROM sales_os.pipeline_leads
+      WHERE owner_se_email = ${seEmail} AND phone_wa = ${cleanPhone}
+      LIMIT 1
+    `;
+    const linkedLead = leadRows[0];
+    const baseTime = linkedLead?.created_at ? new Date(String(linkedLead.created_at)) : repliedAt;
+    const diffSeconds = Math.max(1, Math.round((repliedAt.getTime() - baseTime.getTime()) / 1000));
+    const responseTimeSeconds = diffSeconds <= 86400 ? diffSeconds : 180;
+    const slaMet = responseTimeSeconds <= 300;
+
+    await sql`
+      INSERT INTO sales_os.wa_contact_metrics (
+        se_email, contact_phone, contact_name, inbound_count, outbound_count,
+        first_inbound_at, last_inbound_at, first_reply_at, response_time_seconds, sla_met, linked_lead_id
+      ) VALUES (
+        ${seEmail},
+        ${cleanPhone},
+        ${cleanPhone},
+        0,
+        1,
+        ${baseTime.toISOString()},
+        ${baseTime.toISOString()},
+        ${repliedAt.toISOString()},
+        ${responseTimeSeconds},
+        ${slaMet},
+        ${linkedLead?.id || null}
+      )
+    `;
+
+    if (linkedLead?.id) {
+      await sql`
+        UPDATE sales_os.pipeline_leads
+        SET first_reply_at = COALESCE(first_reply_at, ${repliedAt.toISOString()}),
+            response_time_seconds = COALESCE(response_time_seconds, ${responseTimeSeconds}),
+            stage = CASE WHEN stage = 'NEW' THEN 'CONTACTED' ELSE stage END,
+            updated_at = NOW()
+        WHERE id = ${linkedLead.id} AND owner_se_email = ${seEmail}
+      `;
+    }
+
+    return { responseTimeSeconds, slaMet };
+  }
   const metric = rows[0];
 
   let responseTimeSeconds = metric.response_time_seconds as number | null;
@@ -339,22 +584,46 @@ export async function recordOutboundWaReplyForSe(params: {
 /**
  * Memulai sesi koneksi Baileys yang terisolasi per SE (1 nomor WA = 1 akun SE)
  */
-export async function startBaileysForSe(seEmail: string, seName: string): Promise<{
+export async function startBaileysForSe(
+  seEmail: string,
+  seName: string,
+  forceFresh = false
+): Promise<{
   status: string;
   qrDataUrl: string | null;
   phoneNumber: string | null;
 }> {
   const normalizedEmail = seEmail.toLowerCase();
   const existing = instances.get(normalizedEmail);
-  if (existing && (existing.status === 'CONNECTED' || existing.status === 'QR_READY')) {
-    return {
-      status: existing.status,
-      qrDataUrl: existing.qrDataUrl,
-      phoneNumber: existing.phoneNumber,
-    };
+  if (!forceFresh && existing) {
+    if (existing.status === 'CONNECTED' || existing.status === 'QR_READY') {
+      return {
+        status: existing.status,
+        qrDataUrl: existing.qrDataUrl,
+        phoneNumber: existing.phoneNumber,
+      };
+    }
+    if (existing.status === 'CONNECTING') {
+      for (let i = 0; i < 12; i++) {
+        if (existing.qrDataUrl || existing.status === 'CONNECTED') break;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      return {
+        status: existing.status,
+        qrDataUrl: existing.qrDataUrl,
+        phoneNumber: existing.phoneNumber,
+      };
+    }
   }
 
   const sessionDir = getSessionDir(normalizedEmail);
+  if (forceFresh) {
+    try {
+      fs.rmSync(sessionDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  }
   fs.mkdirSync(sessionDir, { recursive: true });
 
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
@@ -501,44 +770,79 @@ export async function startBaileysForSe(seEmail: string, seName: string): Promis
   });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
+    if (type !== 'notify' && type !== 'append') return;
     for (const msg of messages) {
-      const remoteJid = msg.key?.remoteJid || '';
-      // Abaikan grup, broadcast, dan status
-      if (!remoteJid.endsWith('@s.whatsapp.net')) continue;
+      const msgId = msg.key?.id ? String(msg.key.id) : '';
+      if (msgId) {
+        if (processedMessageIds.has(msgId)) continue;
+        processedMessageIds.add(msgId);
+        if (processedMessageIds.size > 2000) {
+          const firstKey = processedMessageIds.values().next().value;
+          if (firstKey) processedMessageIds.delete(firstKey);
+        }
+      }
 
-      const contactPhone = normalizePhoneWa(remoteJid);
+      if (type === 'append') {
+        const tsRaw = Number(msg.messageTimestamp || 0);
+        const msgTimeMs = tsRaw > 1e12 ? tsRaw : tsRaw * 1000;
+        if (!msgTimeMs || Date.now() - msgTimeMs > 10 * 60 * 1000) {
+          continue;
+        }
+      }
+
+      const remoteJid = msg.key?.remoteJid || '';
+      if (!remoteJid) continue;
+      // Abaikan grup, broadcast, status, dan channel newsletter
+      if (
+        remoteJid.endsWith('@g.us') ||
+        remoteJid.endsWith('@broadcast') ||
+        remoteJid === 'status@broadcast' ||
+        remoteJid.endsWith('@newsletter')
+      ) {
+        continue;
+      }
+
+      const contactPhone = extractSenderPhoneFromWaKey(msg.key);
       if (!contactPhone) continue;
 
-      const text =
-        msg.message?.conversation ||
-        msg.message?.extendedTextMessage?.text ||
-        msg.message?.imageMessage?.caption ||
-        '';
+      const text = extractTextFromWaMessage(msg.message);
 
       const isFromMe = Boolean(msg.key?.fromMe);
       if (isFromMe) {
+        if (!text) continue;
+        console.log(`[WA Baileys] Outbound reply from SE ${normalizedEmail} to ${contactPhone}`);
         await recordOutboundWaReplyForSe({
           seEmail: normalizedEmail,
           contactPhone,
           messageText: text,
-        }).catch(() => {});
+        }).catch((err) => {
+          console.error('[WA Baileys] Outbound record error:', err);
+        });
       } else {
-        if (!text.trim()) continue;
+        if (!text) continue;
+        const senderName =
+          msg.pushName ||
+          (msg as any).verifiedBizName ||
+          `Prospek WA ${contactPhone.slice(-4)}`;
+        console.log(
+          `[WA Baileys] Inbound WA message for ${normalizedEmail} from ${senderName} (${contactPhone}): "${text.slice(0, 80)}"`
+        );
 
         await processInboundWaMessageForSe({
           seEmail: normalizedEmail,
           seName,
           contactPhone,
-          contactName: msg.pushName || `Prospek WA ${contactPhone.slice(-4)}`,
+          contactName: senderName,
           messageText: text,
-        }).catch(() => {});
+        }).catch((err) => {
+          console.error('[WA Baileys] Inbound AI process error:', err);
+        });
       }
     }
   });
 
-  // Tunggu sebentar hingga QR siap (maks 2.5 detik) agar respons pertama langsung berisi QR bila tersedia
-  for (let i = 0; i < 10; i++) {
+  // Tunggu sebentar hingga QR siap (maks 4 detik) agar respons pertama langsung berisi QR bila tersedia
+  for (let i = 0; i < 16; i++) {
     if (instance.qrDataUrl || instance.status === 'CONNECTED') break;
     await new Promise((r) => setTimeout(r, 250));
   }
@@ -548,6 +852,30 @@ export async function startBaileysForSe(seEmail: string, seName: string): Promis
     qrDataUrl: instance.qrDataUrl,
     phoneNumber: instance.phoneNumber,
   };
+}
+
+export async function resumeActiveWaSessionsOnStartup(): Promise<void> {
+  try {
+    const rows = await sql`
+      SELECT se_email, se_name, status, phone_number
+      FROM sales_os.se_wa_sessions
+      WHERE status IN ('CONNECTED', 'CONNECTING')
+    `;
+    for (const row of rows) {
+      const seEmail = String(row.se_email || '').toLowerCase();
+      const seName = String(row.se_name || 'Sales Executive');
+      const sessionDir = getSessionDir(seEmail);
+      const credsPath = path.join(sessionDir, 'creds.json');
+      if (fs.existsSync(credsPath)) {
+        console.log(`[WA Baileys] Resuming active WhatsApp session for ${seEmail}...`);
+        startBaileysForSe(seEmail, seName).catch((err) => {
+          console.error(`[WA Baileys] Failed to resume session for ${seEmail}:`, err);
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[WA Baileys] Error checking sessions on startup:', err);
+  }
 }
 
 export async function disconnectBaileysForSe(seEmail: string): Promise<void> {

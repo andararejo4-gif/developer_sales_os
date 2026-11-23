@@ -38,6 +38,10 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+.scroll-mt-header {
+  scroll-margin-top: 6rem;
+}
+
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;

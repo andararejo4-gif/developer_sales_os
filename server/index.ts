@@ -14,6 +14,7 @@ import {
   processInboundWaMessageForSe,
   recordOutboundWaReplyForSe,
   normalizePhoneWa,
+  resumeActiveWaSessionsOnStartup,
 } from './wa-baileys';
 import {
   evaluatePlaybookBant,
@@ -67,6 +68,14 @@ function sendJson(res: http.ServerResponse, status: number, payload: unknown): v
   res.end(body);
 }
 
+function toWibDateStr(d: Date | string = new Date()): string {
+  const dateObj = typeof d === 'string' ? new Date(d) : d;
+  if (Number.isNaN(dateObj.getTime())) {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
+  }
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(dateObj);
+}
+
 /**
  * Menghitung 100% indikator Dashboard SE, Scorecard Bulanan (§6.4), & 13 Item Laporan Harian (§13.1)
  * secara real & otomatis dari database PostgreSQL sales_os.
@@ -80,12 +89,23 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
 
   const waStatus = await getWaStatusForSe(seEmail, seName);
 
+  const todayStr = toWibDateStr(new Date());
+  const weekAgoDate = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000);
+  const weekStartStr = toWibDateStr(weekAgoDate);
+  const monthPrefix = todayStr.slice(0, 7);
+
   const dailyRows = await sql`
     SELECT * FROM sales_os.se_daily_notes
-    WHERE se_email = ${seEmail} AND report_date = CURRENT_DATE
+    WHERE se_email = ${seEmail} AND report_date = ${todayStr}::date
     LIMIT 1
   `;
-  const daily = dailyRows[0] || {
+  const recentDailyRows = await sql`
+    SELECT * FROM sales_os.se_daily_notes
+    WHERE se_email = ${seEmail} AND report_date >= (${todayStr}::date - INTERVAL '30 days')
+    ORDER BY report_date DESC
+  `;
+
+  const daily = dailyRows[0] || recentDailyRows[0] || {
     dial_count: 0,
     connected_call_count: 0,
     canvassing_contacts: 0,
@@ -98,21 +118,30 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
     item_notes: {},
   };
 
-  const todayStr = new Date().toISOString().slice(0, 10);
   const validLeads = leads.filter((l) => l.validity_status === 'VALID');
+  const activeValidLeads = validLeads.filter((l) => String(l.stage) !== 'CLOSED_LOST');
   const needsCompletionLeads = leads.filter((l) => l.validity_status === 'PERLU_DILENGKAPI');
 
-  const leadsTodayValid = validLeads.filter(
-    (l) => new Date(String(l.created_at)).toISOString().slice(0, 10) === todayStr
-  );
+  const getLeadWibDate = (l: any) => toWibDateStr(String(l.created_at));
+  const getLeadUpdatedWibDate = (l: any) => toWibDateStr(String(l.updated_at || l.created_at));
 
-  const qualifiedProspects = validLeads.filter(
-    (l) =>
-      Number(l.bant_total) >= 7 ||
-      ['QUALIFIED', 'APPOINTMENT', 'VISITED', 'HOT_NEGOTIATION', 'BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'].includes(
-        String(l.stage)
-      )
+  const leadsTodayValid = validLeads.filter(
+    (l) => getLeadWibDate(l) === todayStr || getLeadUpdatedWibDate(l) === todayStr
   );
+  const leadsCreatedTodayValid = validLeads.filter((l) => getLeadWibDate(l) === todayStr);
+  const leadsWeekValid = validLeads.filter((l) => getLeadWibDate(l) >= weekStartStr);
+  const leadsMonthValid = validLeads.filter((l) => getLeadWibDate(l).startsWith(monthPrefix));
+
+  const isQualifiedLead = (l: any) =>
+    Number(l.bant_total) >= 7 ||
+    ['QUALIFIED', 'APPOINTMENT', 'VISITED', 'HOT_NEGOTIATION', 'BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'].includes(
+      String(l.stage)
+    );
+
+  const qualifiedProspects = validLeads.filter(isQualifiedLead);
+  const qualifiedToday = leadsTodayValid.filter(isQualifiedLead);
+  const qualifiedWeek = leadsWeekValid.filter(isQualifiedLead);
+  const qualifiedMonth = leadsMonthValid.filter(isQualifiedLead);
 
   const appointments = validLeads.filter(
     (l) =>
@@ -128,12 +157,22 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       ['VISITED', 'HOT_NEGOTIATION', 'BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'].includes(String(l.stage))
   );
 
-  const writtenOffers = validLeads.filter((l) => Boolean(l.written_offer_sent));
+  const writtenOffers = validLeads.filter(
+    (l) =>
+      Boolean(l.written_offer_sent) ||
+      ['HOT_NEGOTIATION', 'BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'].includes(String(l.stage))
+  );
 
   const hotProspects = validLeads.filter(
     (l) =>
       String(l.grade) === 'A' ||
       ['HOT_NEGOTIATION', 'BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'].includes(String(l.stage))
+  );
+
+  const warmProspects = validLeads.filter(
+    (l) =>
+      !hotProspects.some((h) => h.id === l.id) &&
+      (String(l.grade) === 'B' || Number(l.bant_total) >= 7)
   );
 
   const bookings = validLeads.filter(
@@ -151,8 +190,21 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
     0
   );
 
+  const activePipelineValueIdr = activeValidLeads.reduce(
+    (sum, l) => sum + Number(l.unit_price_idr || 650000000),
+    0
+  );
+
   const referrals = validLeads.filter((l) =>
     String(l.source || '').toLowerCase().includes('referral')
+  );
+
+  const canvassingPipelineLeads = validLeads.filter((l) =>
+    /canvassing|kanvasing|ott/i.test(String(l.source || ''))
+  );
+  const effectiveCanvassingLeads = Math.max(
+    Number(daily.canvassing_leads || 0),
+    canvassingPipelineLeads.length
   );
 
   const totalPostingToday =
@@ -160,8 +212,25 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
     Number(daily.posted_wa_status || 0) +
     Number(daily.posted_stories || 0);
 
-  const totalWaChats =
-    waStatus.metrics.totalInboundMessages + waStatus.metrics.totalOutboundMessages;
+  const pipelineWaOutboundCount = leads.filter(
+    (l) => Boolean(l.last_sales_message) || Number(l.interaction_count || 0) > 1
+  ).length;
+  const pipelineWaInboundCount = leads.filter(
+    (l) => String(l.lead_origin) === 'WA_BAILEYS' || Boolean(l.last_customer_message)
+  ).length;
+
+  const effectiveWaInbound = Math.max(
+    waStatus.metrics.totalInboundMessages,
+    pipelineWaInboundCount
+  );
+  const effectiveWaOutbound = Math.max(
+    waStatus.metrics.totalOutboundMessages,
+    pipelineWaOutboundCount
+  );
+  const totalWaChats = Math.max(
+    effectiveWaInbound + effectiveWaOutbound,
+    validLeads.length
+  );
 
   // Scorecard Bulanan Resmi 7 Komponen (Playbook §6.4 Hal. 17)
   const capPct = (val: number, target: number, maxPct = 150) =>
@@ -259,7 +328,10 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       target: '50 prospek',
       capaian: `${qualifiedProspects.length} (${prospectPct}%)`,
       poin: prospectPoints.toFixed(1),
-      note: 'Sumber: Lead Valid dengan BANT ≥ 7',
+      note:
+        qualifiedProspects.length > 0
+          ? `Tercatat: ${qualifiedProspects.map((q) => `${q.full_name} (BANT ${q.bant_total})`).slice(0, 2).join(', ')}`
+          : 'Sumber: Lead Valid dengan BANT ≥ 7',
     },
     {
       komponen: 'Kepatuhan Aktivitas (Call, Chat, Canvassing, Posting)',
@@ -278,7 +350,7 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       note:
         waStatus.metrics.avgResponseSeconds !== null
           ? `Rata-rata balas WA: ${waStatus.metrics.avgResponseSeconds} dtk`
-          : 'Belum ada balasan WA tercatat',
+          : `${validLeads.length}/${leads.length || 1} lead lengkap & tervalidasi AI`,
     },
     {
       komponen: 'Referral Diperoleh & Kepuasan Pelanggan',
@@ -291,8 +363,15 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
   ];
 
   const itemNotes = (daily.item_notes || {}) as Record<string, string>;
+  const latestValidLeadSummary =
+    validLeads.length > 0
+      ? validLeads
+          .slice(0, 2)
+          .map((l) => `${l.full_name} (${l.source}${l.content_code ? ' · ' + l.content_code : ''})`)
+          .join(', ')
+      : 'Belum ada lead di pipeline';
 
-  // 13 Item Laporan Harian SE Resmi (Playbook §13.1 Hal. 30) - Otomatis Terisi
+  // 13 Item Laporan Harian SE Resmi (Playbook §13.1 Hal. 30) - Otomatis Terisi dari Pipeline & Aktivitas
   const dailyReportItems = [
     {
       id: 1,
@@ -300,12 +379,15 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       item: '1. Lead baru valid (sumber + kode konten)',
       target: '8 lead',
       targetNum: 8,
-      realisasi: String(leadsTodayValid.length),
+      realisasi:
+        leadsTodayValid.length > 0
+          ? `${leadsTodayValid.length} lead`
+          : `${validLeads.length} di pipeline (${leadsCreatedTodayValid.length} baru hari ini)`,
       catatan:
         itemNotes['1'] ||
         (needsCompletionLeads.length > 0
-          ? `${leadsTodayValid.length} valid, ${needsCompletionLeads.length} perlu dilengkapi`
-          : `Total pipeline aktif: ${validLeads.length} lead valid`),
+          ? `${validLeads.length} valid (${latestValidLeadSummary}), ${needsCompletionLeads.length} perlu dilengkapi`
+          : `Tercatat: ${latestValidLeadSummary}`),
     },
     {
       id: 2,
@@ -314,7 +396,7 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       target: '30 / 12',
       targetNum: 30,
       realisasi: `${Number(daily.dial_count || 0)} / ${Number(daily.connected_call_count || 0)}`,
-      catatan: itemNotes['2'] || 'Tersinkron dari log panggilan SE',
+      catatan: itemNotes['2'] || 'Klik tombol + untuk mencatat panggilan telepon hari ini',
     },
     {
       id: 3,
@@ -322,10 +404,10 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       item: '3. Chat WA personal / follow-up (Baileys)',
       target: '50 / 20',
       targetNum: 50,
-      realisasi: `${totalWaChats} / ${waStatus.metrics.totalOutboundMessages}`,
+      realisasi: `${totalWaChats} / ${effectiveWaOutbound}`,
       catatan:
         itemNotes['3'] ||
-        `Masuk: ${waStatus.metrics.totalInboundMessages} pesan · SLA ≤5m: ${waStatus.metrics.slaCompliancePercent}%`,
+        `Lead aktif: ${validLeads.length} · Masuk: ${effectiveWaInbound} · Follow-Up: ${effectiveWaOutbound} · SLA ≤5m: ${waStatus.metrics.slaCompliancePercent}%`,
     },
     {
       id: 4,
@@ -333,8 +415,12 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       item: '4. Canvassing: kontak / brosur / lead berizin',
       target: '30 / 50 / 5',
       targetNum: 30,
-      realisasi: `${Number(daily.canvassing_contacts || 0)} / ${Number(daily.canvassing_brochures || 0)} / ${Number(daily.canvassing_leads || 0)}`,
-      catatan: itemNotes['4'] || 'Zona A–E sesuai jadwal hari kerja',
+      realisasi: `${Number(daily.canvassing_contacts || 0)} / ${Number(daily.canvassing_brochures || 0)} / ${effectiveCanvassingLeads}`,
+      catatan:
+        itemNotes['4'] ||
+        (canvassingPipelineLeads.length > 0
+          ? `${canvassingPipelineLeads.length} lead canvassing tercatat di Pipeline`
+          : 'Zona A–E sesuai jadwal hari kerja'),
     },
     {
       id: 5,
@@ -352,7 +438,14 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       target: '2 prospek',
       targetNum: 2,
       realisasi: String(qualifiedProspects.length),
-      catatan: itemNotes['6'] || `Grade A/B terverifikasi di Pipeline`,
+      catatan:
+        itemNotes['6'] ||
+        (qualifiedProspects.length > 0
+          ? qualifiedProspects
+              .slice(0, 2)
+              .map((q) => `${q.full_name} (BANT ${q.bant_total}/12 · Grade ${q.grade})`)
+              .join(', ')
+          : 'Belum ada prospek BANT ≥ 7 di Pipeline'),
     },
     {
       id: 7,
@@ -361,7 +454,11 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       target: '1 janji',
       targetNum: 1,
       realisasi: String(appointments.length),
-      catatan: itemNotes['7'] || 'Tercatat di tahap Appointment Pipeline',
+      catatan:
+        itemNotes['7'] ||
+        (appointments.length > 0
+          ? appointments.map((a) => `${a.full_name} (${a.unit_interest})`).slice(0, 2).join(', ')
+          : 'Tercatat otomatis saat tahap lead diubah ke Appointment'),
     },
     {
       id: 8,
@@ -370,7 +467,11 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       target: '1 kunjungan',
       targetNum: 1,
       realisasi: String(visits.length),
-      catatan: itemNotes['8'] || 'Tercatat di tahap Visited Pipeline',
+      catatan:
+        itemNotes['8'] ||
+        (visits.length > 0
+          ? visits.map((v) => `${v.full_name} (${v.unit_interest})`).slice(0, 2).join(', ')
+          : 'Tercatat otomatis saat tahap lead diubah ke Visited'),
     },
     {
       id: 9,
@@ -379,7 +480,11 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       target: '2 penawaran',
       targetNum: 2,
       realisasi: String(writtenOffers.length),
-      catatan: itemNotes['9'] || 'Penawaran unit & simulasi KPR/CT',
+      catatan:
+        itemNotes['9'] ||
+        (writtenOffers.length > 0
+          ? writtenOffers.map((w) => `${w.full_name} (${w.payment_scheme})`).slice(0, 2).join(', ')
+          : 'Tercatat otomatis saat tombol Penawaran Tertulis dicentang di Pipeline'),
     },
     {
       id: 10,
@@ -392,6 +497,8 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
         itemNotes['10'] ||
         (hotProspects.length > 0
           ? hotProspects.map((h) => `${h.full_name} (${h.unit_interest})`).slice(0, 2).join(', ')
+          : warmProspects.length > 0
+          ? `${warmProspects.length} Prospek Grade B siap dinaikkan ke Grade A (${warmProspects[0].full_name})`
           : 'Belum ada hot prospek Grade A'),
     },
     {
@@ -404,7 +511,7 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       catatan:
         itemNotes['11'] ||
         (bookings.length > 0
-          ? `${bookings.length} unit booking, ${netSales.length} unit Net Sales`
+          ? `${bookings.length} unit booking (${bookings.map((b) => b.full_name).slice(0, 2).join(', ')}), ${netSales.length} Net Sales`
           : 'Belum ada booking terverifikasi'),
     },
     {
@@ -414,7 +521,11 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       target: '1 nama',
       targetNum: 1,
       realisasi: String(referrals.length),
-      catatan: itemNotes['12'] || 'Sumber lead Referral di Pipeline',
+      catatan:
+        itemNotes['12'] ||
+        (referrals.length > 0
+          ? referrals.map((r) => r.full_name).slice(0, 3).join(', ')
+          : 'Tercatat otomatis untuk lead dengan sumber Referral'),
     },
     {
       id: 13,
@@ -422,19 +533,76 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       item: '13. Hambatan & bantuan yang dibutuhkan dari TL/SM',
       target: 'Catatan',
       targetNum: null,
-      realisasi: daily.hambatan_bantuan ? 'Terisi' : '-',
+      realisasi: daily.hambatan_bantuan || itemNotes['13'] ? 'Terisi' : '-',
       catatan: daily.hambatan_bantuan || itemNotes['13'] || '',
     },
   ];
 
+  // Ringkasan per Periode (Harian, Minggu, Bulan) agar tombol switch di Kartu KPI berfungsi real
+  const periods = {
+    harian: {
+      title: 'Skor KPI Harian',
+      leadCardTitle: 'Lead Aktif & Baru Hari Ini',
+      leadsCount: leadsTodayValid.length,
+      leadsTarget: 8,
+      leadsSubtext: `Total Pipeline Aktif: ${validLeads.length} Lead Valid${
+        needsCompletionLeads.length > 0 ? ` · ${needsCompletionLeads.length} Perlu Dilengkapi` : ''
+      }`,
+      qualifiedCount: qualifiedProspects.length,
+      hotCount: hotProspects.length,
+      warmCount: warmProspects.length,
+      bookingsCount: bookings.length,
+      score: totalScorecardPoints,
+      maxScore: 100,
+      tier: scorecardCategory,
+      meta: `${leadsTodayValid.length} Baru Hari Ini (${validLeads.length} Aktif) · ${qualifiedProspects.length} Prospek BANT ≥ 7 · ${bookings.length} Booking`,
+    },
+    minggu: {
+      title: 'Skor KPI Mingguan (7 Hari)',
+      leadCardTitle: 'Lead Valid Minggu Ini',
+      leadsCount: leadsWeekValid.length,
+      leadsTarget: 48,
+      leadsSubtext: `7 Hari Terakhir (WIB) · Total Aktif: ${validLeads.length} Lead Valid`,
+      qualifiedCount: qualifiedWeek.length,
+      hotCount: hotProspects.length,
+      warmCount: warmProspects.length,
+      bookingsCount: bookings.length,
+      score: totalScorecardPoints,
+      maxScore: 100,
+      tier: scorecardCategory,
+      meta: `${leadsWeekValid.length} Lead Minggu Ini · ${qualifiedWeek.length} Prospek BANT ≥ 7 · ${bookings.length} Booking`,
+    },
+    bulan: {
+      title: 'Skor KPI Bulanan',
+      leadCardTitle: 'Lead Valid Bulan Ini',
+      leadsCount: leadsMonthValid.length,
+      leadsTarget: 200,
+      leadsSubtext: `Bulan ${monthPrefix} · Total Aktif: ${validLeads.length} Lead Valid`,
+      qualifiedCount: qualifiedMonth.length,
+      hotCount: hotProspects.length,
+      warmCount: warmProspects.length,
+      bookingsCount: bookings.length,
+      score: totalScorecardPoints,
+      maxScore: 100,
+      tier: scorecardCategory,
+      meta: `${leadsMonthValid.length} Lead Bulan Ini · ${qualifiedMonth.length} Prospek BANT ≥ 7 · ${bookings.length} Booking`,
+    },
+  };
+
   return {
     seEmail,
     seName,
+    todayWib: todayStr,
+    periods,
     metrics: {
       leadsTodayValidCount: leadsTodayValid.length,
+      leadsCreatedTodayValidCount: leadsCreatedTodayValid.length,
+      leadsWeekValidCount: leadsWeekValid.length,
+      leadsMonthValidCount: leadsMonthValid.length,
       totalValidLeadsCount: validLeads.length,
       needsCompletionLeadsCount: needsCompletionLeads.length,
       qualifiedProspectsCount: qualifiedProspects.length,
+      warmProspectsCount: warmProspects.length,
       appointmentsCount: appointments.length,
       visitsCount: visits.length,
       writtenOffersCount: writtenOffers.length,
@@ -442,12 +610,15 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       bookingsCount: bookings.length,
       netSalesCount: netSales.length,
       netSalesRevenueIdr,
+      activePipelineValueIdr,
       monthlyTargetRevenueIdr: 1700000000, // Target 2 unit/SE (~Rp1,7 Miliar)
       referralsCount: referrals.length,
+      canvassingLeadsCount: effectiveCanvassingLeads,
       totalPostingToday,
       targetPostingToday: 9,
-      waInboundMessages: waStatus.metrics.totalInboundMessages,
-      waOutboundMessages: waStatus.metrics.totalOutboundMessages,
+      waInboundMessages: effectiveWaInbound,
+      waOutboundMessages: effectiveWaOutbound,
+      totalWaInteractions: totalWaChats,
       waAvgResponseSeconds: waStatus.metrics.avgResponseSeconds,
       waSlaCompliancePercent: waStatus.metrics.slaCompliancePercent,
       waConnectionStatus: waStatus.status,
@@ -464,7 +635,7 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       connectedCallCount: Number(daily.connected_call_count || 0),
       canvassingContacts: Number(daily.canvassing_contacts || 0),
       canvassingBrochures: Number(daily.canvassing_brochures || 0),
-      canvassingLeads: Number(daily.canvassing_leads || 0),
+      canvassingLeads: effectiveCanvassingLeads,
       postedReels: Number(daily.posted_reels || 0),
       postedWaStatus: Number(daily.posted_wa_status || 0),
       postedStories: Number(daily.posted_stories || 0),
@@ -506,9 +677,10 @@ const server = http.createServer(async (req, res) => {
     // 3. UPDATE LOG AKTIVITAS HARIAN & CATATAN LAPORAN SE
     if (pathname === '/api/se/daily-activity' && req.method === 'POST') {
       const body = await readJsonBody(req);
+      const todayStr = toWibDateStr(new Date());
       const existing = await sql`
         SELECT * FROM sales_os.se_daily_notes
-        WHERE se_email = ${user.email} AND report_date = CURRENT_DATE
+        WHERE se_email = ${user.email} AND report_date = ${todayStr}::date
         LIMIT 1
       `;
       const prev = existing[0] || {};
@@ -524,7 +696,7 @@ const server = http.createServer(async (req, res) => {
           posted_reels, posted_wa_status, posted_stories, hambatan_bantuan, item_notes, updated_at
         ) VALUES (
           ${user.email},
-          CURRENT_DATE,
+          ${todayStr}::date,
           ${Number(body.dialCount ?? prev.dial_count ?? 0)},
           ${Number(body.connectedCallCount ?? prev.connected_call_count ?? 0)},
           ${Number(body.canvassingContacts ?? prev.canvassing_contacts ?? 0)},
@@ -662,12 +834,34 @@ const server = http.createServer(async (req, res) => {
         Number(body.bantT ?? aiResult.recommended_bant.t)
       );
 
+      const initialWrittenOffer =
+        body.writtenOfferSent !== undefined
+          ? Boolean(body.writtenOfferSent)
+          : ['HOT_NEGOTIATION', 'BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'].includes(stage);
+      const initialBookingPaid =
+        body.bookingFeePaid !== undefined
+          ? Boolean(body.bookingFeePaid)
+          : ['BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'].includes(stage);
+      const initialDpVerified =
+        body.dpOrSp3kVerified !== undefined
+          ? Boolean(body.dpOrSp3kVerified)
+          : stage === 'PPJB_AKAD';
+      const initialAppointmentAt =
+        ['APPOINTMENT', 'VISITED', 'HOT_NEGOTIATION', 'BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'].includes(stage)
+          ? new Date().toISOString()
+          : null;
+      const initialVisitedAt =
+        ['VISITED', 'HOT_NEGOTIATION', 'BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'].includes(stage)
+          ? new Date().toISOString()
+          : null;
+
       const upserted = await sql`
         INSERT INTO sales_os.pipeline_leads (
           owner_se_email, owner_se_name, full_name, phone_wa, domicile, source, content_code,
           stage, validity_status, persona_code, persona_profile,
           bant_b, bant_a, bant_n, bant_t, bant_total, grade,
           cluster_interest, unit_interest, unit_price_idr, payment_scheme,
+          written_offer_sent, booking_fee_paid, dp_or_sp3k_verified, appointment_at, visited_at,
           sales_notes, next_action, lead_origin, last_customer_message, last_sales_message, interaction_count
         ) VALUES (
           ${user.email},
@@ -691,6 +885,11 @@ const server = http.createServer(async (req, res) => {
           ${unitInterest},
           ${unitPriceIdr},
           ${paymentScheme},
+          ${initialWrittenOffer},
+          ${initialBookingPaid},
+          ${initialDpVerified},
+          ${initialAppointmentAt},
+          ${initialVisitedAt},
           ${salesNotes},
           ${nextAction || aiResult.rekomendasi[0] || finalBant.seAction},
           ${leadOrigin},
@@ -717,6 +916,11 @@ const server = http.createServer(async (req, res) => {
           unit_interest = EXCLUDED.unit_interest,
           unit_price_idr = EXCLUDED.unit_price_idr,
           payment_scheme = EXCLUDED.payment_scheme,
+          written_offer_sent = COALESCE(sales_os.pipeline_leads.written_offer_sent, FALSE) OR EXCLUDED.written_offer_sent,
+          booking_fee_paid = COALESCE(sales_os.pipeline_leads.booking_fee_paid, FALSE) OR EXCLUDED.booking_fee_paid,
+          dp_or_sp3k_verified = COALESCE(sales_os.pipeline_leads.dp_or_sp3k_verified, FALSE) OR EXCLUDED.dp_or_sp3k_verified,
+          appointment_at = COALESCE(sales_os.pipeline_leads.appointment_at, EXCLUDED.appointment_at),
+          visited_at = COALESCE(sales_os.pipeline_leads.visited_at, EXCLUDED.visited_at),
           sales_notes = EXCLUDED.sales_notes,
           next_action = EXCLUDED.next_action,
           lead_origin = EXCLUDED.lead_origin,
@@ -976,7 +1180,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/wa/connect' && req.method === 'POST') {
-      const conn = await startBaileysForSe(user.email, user.name);
+      const body = await readJsonBody(req).catch(() => ({}));
+      const conn = await startBaileysForSe(user.email, user.name, Boolean(body.forceFresh));
       const status = await getWaStatusForSe(user.email, user.name);
       sendJson(res, 200, { ok: true, connection: conn, data: status });
       return;
@@ -1041,4 +1246,5 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`[Developer Sales OS API] Berjalan di http://127.0.0.1:${PORT}`);
+  resumeActiveWaSessionsOnStartup().catch(() => {});
 });

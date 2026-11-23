@@ -413,6 +413,68 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
     fetchPipelineAndWa();
   }, [fetchPipelineAndWa]);
 
+  // Auto-polling real-time saat menunggu scan QR / sedang sinkronisasi maupun saat WA sudah terhubung
+  useEffect(() => {
+    const status = waStatus?.status;
+    if (!status || status === 'DISCONNECTED') return;
+
+    const intervalMs = status === 'QR_READY' || status === 'CONNECTING' ? 2500 : 6000;
+    const timer = setInterval(async () => {
+      try {
+        const waRes = await fetch('/api/wa/status', { headers: apiHeaders });
+        if (!waRes.ok) return;
+        const wJson = await waRes.json();
+        const nextWa: WaStatusData | null = wJson.data || null;
+        if (!nextWa) return;
+
+        const prevStatus = waStatus?.status;
+        const prevInbound = waStatus?.metrics?.totalInboundMessages ?? 0;
+        setWaStatus(nextWa);
+
+        if (prevStatus !== 'CONNECTED' && nextWa.status === 'CONNECTED') {
+          showToast(
+            `WhatsApp SE berhasil terhubung (${nextWa.phoneNumber || 'Aktif'})! Pesan masuk akan otomatis ditangkap & dianalisis AI.`
+          );
+          const leadsRes = await fetch('/api/pipeline/leads', { headers: apiHeaders });
+          if (leadsRes.ok) {
+            const lJson = await leadsRes.json();
+            setLeads(lJson.leads || []);
+          }
+          if (onDataChanged) onDataChanged();
+        } else if (prevStatus === 'CONNECTED' && nextWa.status === 'DISCONNECTED') {
+          showToast('Peringatan: Koneksi WhatsApp SE terdiskonek! Silakan hubungkan kembali.');
+          if (onDataChanged) onDataChanged();
+        } else if (
+          nextWa.status === 'CONNECTED' &&
+          nextWa.metrics.totalInboundMessages > prevInbound
+        ) {
+          const leadsRes = await fetch('/api/pipeline/leads', { headers: apiHeaders });
+          if (leadsRes.ok) {
+            const lJson = await leadsRes.json();
+            const fetchedLeads: PipelineLeadRecord[] = lJson.leads || [];
+            setLeads(fetchedLeads);
+            // Reset custom draft override pada lead WA terbaru agar draf AI hasil analisa pesan baru langsung tampil
+            if (fetchedLeads[0]?.id) {
+              const latestId = fetchedLeads[0].id;
+              setCustomDrafts((prev) => {
+                if (!(latestId in prev)) return prev;
+                const copy = { ...prev };
+                delete copy[latestId];
+                return copy;
+              });
+            }
+          }
+          if (onDataChanged) onDataChanged();
+          showToast('Pesan WhatsApp baru diterima! AI telah memperbarui analisis, skor BANT & rekomendasi.');
+        }
+      } catch {
+        /* ignore transient polling error */
+      }
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [waStatus, apiHeaders, onDataChanged]);
+
   const toggleLeadDetail = (leadId: string) => {
     setExpandedLeadIds((prev) => ({
       ...prev,
@@ -662,10 +724,16 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
         body: JSON.stringify({ reanalyze: true }),
       });
       if (res.ok) {
+        setCustomDrafts((prev) => {
+          if (!(lead.id in prev)) return prev;
+          const copy = { ...prev };
+          delete copy[lead.id];
+          return copy;
+        });
         await fetchPipelineAndWa();
         setExpandedLeadIds((prev) => ({ ...prev, [lead.id]: true }));
         if (onDataChanged) onDataChanged();
-        showToast(`Analisis AI untuk ${lead.full_name} berhasil diperbarui!`);
+        showToast(`Analisis AI & rekomendasi untuk ${lead.full_name} berhasil diperbarui!`);
       }
     } finally {
       setSubmitting(false);
@@ -684,17 +752,23 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
     }
   };
 
-  const handleConnectWa = async () => {
+  const handleConnectWa = async (forceFresh = false) => {
     setSubmitting(true);
     try {
       const res = await fetch('/api/wa/connect', {
         method: 'POST',
         headers: apiHeaders,
+        body: JSON.stringify({ forceFresh }),
       });
       const data = await res.json();
       if (res.ok && data.ok) {
         setWaStatus(data.data);
-        showToast('Sesi Baileys disiapkan untuk akun Anda. Silakan pindai QR WhatsApp.');
+        if (data.data?.status === 'CONNECTED') {
+          showToast(`WhatsApp SE sudah terhubung (${data.data.phoneNumber || 'Aktif'})!`);
+          if (onDataChanged) onDataChanged();
+        } else {
+          showToast('Sesi Baileys disiapkan untuk akun Anda. Silakan pindai QR WhatsApp.');
+        }
       }
     } finally {
       setSubmitting(false);
@@ -711,7 +785,8 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
       const data = await res.json();
       if (res.ok && data.ok) {
         setWaStatus(data.data);
-        showToast('Sesi WhatsApp berhasil diputuskan');
+        if (onDataChanged) onDataChanged();
+        showToast('Koneksi WhatsApp SE berhasil didiskonek (diputuskan).');
       }
     } finally {
       setSubmitting(false);
@@ -838,19 +913,50 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
             disabled={submitting}
             onClick={() => {
               document.getElementById('wa-integration-section')?.scrollIntoView({ behavior: 'smooth' });
-              if (waStatus?.status !== 'CONNECTED') {
-                handleConnectWa();
+              if (!waStatus || waStatus.status === 'DISCONNECTED') {
+                handleConnectWa(false);
               }
             }}
-            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-lime-100 hover:bg-lime-200 text-olive border border-lime-300 text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+            className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 cursor-pointer border transition-colors ${
+              waStatus?.status === 'CONNECTED'
+                ? 'bg-lime-100 hover:bg-lime-200 text-olive border-lime-300'
+                : waStatus?.status === 'QR_READY' || waStatus?.status === 'CONNECTING'
+                ? 'bg-amber-50 hover:bg-amber-100 text-terracotta border-amber-300'
+                : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+            }`}
           >
+            <span
+              className={`size-2.5 rounded-full shrink-0 ${
+                waStatus?.status === 'CONNECTED'
+                  ? 'bg-olive animate-pulse'
+                  : waStatus?.status === 'QR_READY' || waStatus?.status === 'CONNECTING'
+                  ? 'bg-terracotta animate-ping'
+                  : 'bg-rose-600 animate-pulse'
+              }`}
+            />
             <QrCode className="size-4 shrink-0" />
             <span>
               {waStatus?.status === 'CONNECTED'
                 ? `WA Terhubung (${waStatus.phoneNumber})`
-                : 'Integrasi WhatsApp (QR)'}
+                : waStatus?.status === 'QR_READY'
+                ? 'WA Menunggu Scan QR'
+                : waStatus?.status === 'CONNECTING'
+                ? 'WA Menyambungkan...'
+                : 'WA Terdiskonek · Hubungkan (QR)'}
             </span>
           </button>
+
+          {waStatus && waStatus.status !== 'DISCONNECTED' && (
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={handleDisconnectWa}
+              className="min-h-[44px] px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer shadow-xs"
+            >
+              <X className="size-4 shrink-0" />
+              <span>Diskonek WA</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -904,10 +1010,27 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
       </div>
 
       {/* Panel Integrasi WhatsApp Baileys (Isolasi 1 Nomor = 1 Akun SE, Tanpa Menampilkan Chat Mentah) */}
-      <section id="wa-integration-section" className="bg-white border border-warmborder rounded-2xl p-4 sm:p-5 space-y-4">
+      <section
+        id="wa-integration-section"
+        className={`bg-white border rounded-2xl p-4 sm:p-5 space-y-4 transition-colors ${
+          waStatus?.status === 'CONNECTED'
+            ? 'border-lime-300'
+            : waStatus?.status === 'QR_READY' || waStatus?.status === 'CONNECTING'
+            ? 'border-amber-300'
+            : 'border-rose-200'
+        }`}
+      >
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-start gap-3">
-            <div className="size-10 rounded-xl bg-lime-100 text-olive flex items-center justify-center shrink-0">
+            <div
+              className={`size-10 rounded-xl flex items-center justify-center shrink-0 ${
+                waStatus?.status === 'CONNECTED'
+                  ? 'bg-lime-100 text-olive'
+                  : waStatus?.status === 'QR_READY' || waStatus?.status === 'CONNECTING'
+                  ? 'bg-amber-100 text-terracotta'
+                  : 'bg-rose-100 text-rose-700'
+              }`}
+            >
               <Smartphone className="size-5" />
             </div>
             <div>
@@ -916,19 +1039,32 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                   Integrasi WhatsApp Khusus SE (Baileys Engine)
                 </h3>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold inline-flex items-center gap-1.5 border ${
                     waStatus?.status === 'CONNECTED'
-                      ? 'bg-lime-100 text-olive'
-                      : waStatus?.status === 'QR_READY'
-                      ? 'bg-amber-100 text-terracotta'
-                      : 'bg-sandstone text-warmmuted'
+                      ? 'bg-lime-100 text-olive border-lime-300'
+                      : waStatus?.status === 'QR_READY' || waStatus?.status === 'CONNECTING'
+                      ? 'bg-amber-100 text-terracotta border-amber-300'
+                      : 'bg-rose-100 text-rose-700 border-rose-300'
                   }`}
                 >
-                  {waStatus?.status === 'CONNECTED'
-                    ? `Terhubung (${waStatus.phoneNumber})`
-                    : waStatus?.status === 'QR_READY'
-                    ? 'Menunggu Scan QR'
-                    : 'Belum Terhubung'}
+                  <span
+                    className={`size-2 rounded-full ${
+                      waStatus?.status === 'CONNECTED'
+                        ? 'bg-olive animate-pulse'
+                        : waStatus?.status === 'QR_READY' || waStatus?.status === 'CONNECTING'
+                        ? 'bg-terracotta animate-ping'
+                        : 'bg-rose-600 animate-pulse'
+                    }`}
+                  />
+                  <span>
+                    {waStatus?.status === 'CONNECTED'
+                      ? `Terhubung (${waStatus.phoneNumber})`
+                      : waStatus?.status === 'QR_READY'
+                      ? 'Menunggu Scan QR (Auto-Detect Aktif)'
+                      : waStatus?.status === 'CONNECTING'
+                      ? 'Sedang Menyambungkan ke WhatsApp...'
+                      : `Terdiskonek${waStatus?.phoneNumber ? ` (Terakhir: ${waStatus.phoneNumber})` : ' / Belum Terhubung'}`}
+                  </span>
                 </span>
               </div>
               <p className="text-xs text-warmmuted mt-0.5">
@@ -943,23 +1079,81 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                 type="button"
                 disabled={submitting}
                 onClick={handleDisconnectWa}
-                className="min-h-[40px] px-3.5 py-2 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold cursor-pointer"
+                className="min-h-[40px] px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
-                Putuskan Nomor WA
+                <X className="size-4 shrink-0" />
+                <span>Diskonek / Putuskan WA</span>
               </button>
             ) : (
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={handleConnectWa}
-                className="min-h-[40px] px-3.5 py-2 rounded-xl bg-espresso text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <QrCode className="size-4 text-amber-400" />
-                <span>{submitting ? 'Menyiapkan QR...' : 'Hubungkan WA SE (QR)'}</span>
-              </button>
+              <>
+                {(waStatus?.status === 'QR_READY' || waStatus?.status === 'CONNECTING') && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() => handleConnectWa(true)}
+                      className="min-h-[40px] px-3 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-espresso border border-warmborder text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <RefreshCw className={`size-3.5 ${submitting ? 'animate-spin' : ''}`} />
+                      <span>Buat QR Baru</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={handleDisconnectWa}
+                      className="min-h-[40px] px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <X className="size-3.5 shrink-0" />
+                      <span>Diskonek / Batalkan</span>
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => handleConnectWa(false)}
+                  className="min-h-[40px] px-3.5 py-2 rounded-xl bg-espresso text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <QrCode className="size-4 text-amber-400" />
+                  <span>
+                    {submitting
+                      ? 'Menyiapkan QR...'
+                      : waStatus?.status === 'QR_READY'
+                      ? 'Cek Status Scan'
+                      : 'Hubungkan WA SE (QR)'}
+                  </span>
+                </button>
+              </>
             )}
           </div>
         </div>
+
+        {/* Indikator Peringatan jika WhatsApp sedang Terdiskonek */}
+        {(!waStatus || waStatus.status === 'DISCONNECTED') && (
+          <div className="p-3.5 rounded-2xl bg-rose-50/80 border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="size-5 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-extrabold text-rose-900">
+                  Indikator Status: WhatsApp SE Sedang Terdiskonek (Terputus)
+                </p>
+                <p className="text-rose-700 mt-0.5">
+                  Pesan masuk dari calon pembeli tidak dapat ditangkap otomatis oleh AI selama status Terdiskonek
+                  {waStatus?.phoneNumber ? ` (nomor sebelumnya: ${waStatus.phoneNumber})` : ''}. Klik{' '}
+                  <strong>Hubungkan WA SE (QR)</strong> untuk menautkan kembali.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => handleConnectWa(true)}
+              className="min-h-[36px] px-3.5 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold shrink-0 cursor-pointer"
+            >
+              Tampilkan QR Sekarang
+            </button>
+          </div>
+        )}
 
         {/* Tampilan QR Code Baileys jika sedang pairing */}
         {waStatus?.qrDataUrl && waStatus.status !== 'CONNECTED' && (
@@ -972,17 +1166,36 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
               className="rounded-xl border border-warmborder bg-white p-2"
             />
             <div className="space-y-1.5 text-xs">
-              <p className="font-extrabold text-espresso text-sm">
-                Pindai QR dengan Nomor WhatsApp Khusus SE ({user.name})
+              <div className="flex items-center gap-2">
+                <span className="size-2 rounded-full bg-terracotta animate-ping" />
+                <p className="font-extrabold text-espresso text-sm">
+                  Pindai QR dengan Nomor WhatsApp Khusus SE ({user.name})
+                </p>
+              </div>
+              <p className="text-warmmuted">
+                1. Buka WhatsApp di HP kerja Anda &rarr; <strong>Perangkat Tertaut</strong> &rarr; <strong>Tautkan Perangkat</strong>.
               </p>
               <p className="text-warmmuted">
-                1. Buka WhatsApp di HP kerja Anda &rarr; Perangkat Tertaut &rarr; Tautkan Perangkat.
+                2. Setelah di-scan, tunggu 5–15 detik — halaman ini otomatis mendeteksi status <strong>Terhubung</strong> tanpa perlu klik ulang.
               </p>
               <p className="text-warmmuted">
-                2. Setiap pesan masuk dari calon pembeli akan otomatis dianalisis AI menjadi Lead di bawah ini.
+                3. Setiap pesan masuk dari calon pembeli akan otomatis ditangkap &amp; dianalisis AI menjadi Lead di bawah ini.
               </p>
               <p className="text-terracotta font-semibold">
                 Isolasi Aktif: Nomor yang tertaut hanya berlaku untuk akun {user.email}.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Indikator ketika sedang sinkronisasi setelah scan QR */}
+        {waStatus?.status === 'CONNECTING' && !waStatus?.qrDataUrl && (
+          <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 flex items-center gap-3 text-xs text-espresso">
+            <RefreshCw className="size-5 text-terracotta animate-spin shrink-0" />
+            <div>
+              <p className="font-extrabold">Sedang Menyambungkan &amp; Sinkronisasi Sesi WhatsApp...</p>
+              <p className="text-warmmuted mt-0.5">
+                Mohon tunggu beberapa detik, halaman ini akan otomatis berubah menjadi Terhubung begitu sinkronisasi selesai.
               </p>
             </div>
           </div>
@@ -1787,7 +2000,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                           <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-1">
                             <p className="font-extrabold text-terracotta flex items-center gap-1.5">
                               <Sparkles className="size-3.5" />
-                              <span>Hasil Analisis AI ({analysis.model})</span>
+                              <span>Hasil Analisis AI</span>
                             </p>
                             <p className="text-espresso leading-relaxed">{analysis.ringkas}</p>
                           </div>
@@ -1883,11 +2096,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                                 className="w-full bg-transparent text-xs text-[#111B21] leading-relaxed focus:outline-none resize-y"
                               />
                               <div className="flex items-center justify-between gap-2 mt-1 text-[10px] text-[#667781]">
-                                <span>
-                                  {analysis.prompt_tokens
-                                    ? `${(analysis.prompt_tokens || 0) + (analysis.completion_tokens || 0)} token AI`
-                                    : 'Playbook v1.2'}
-                                </span>
+                                <span>Playbook v1.2</span>
                                 <span className="inline-flex items-center gap-1">
                                   <span>Siap dikirim oleh {user.name.split(' ')[0]}</span>
                                   <CheckCheck className="size-3.5 text-[#53BDEB]" />

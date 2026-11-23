@@ -43,6 +43,10 @@ export interface LeadAiEvaluation {
     total: number;
     grade: 'A' | 'B' | 'C' | 'D';
   };
+  extracted_domicile?: string;
+  extracted_unit_interest?: string;
+  extracted_payment_scheme?: string;
+  recommended_stage?: string;
   followup_draft_message: string;
   model: string;
   prompt_tokens: number;
@@ -234,19 +238,22 @@ export function buildFollowupContextGuidance(input: LeadAnalysisInput): {
   const lastSales = (input.lastSalesMessage || '').trim();
 
   if (isWaOrigin) {
-    if (lastSales && (input.interactionCount || 1) > 1) {
+    if ((input.interactionCount || 1) > 1) {
       return {
         trackType: 'WA_ONGOING_CONVERSATION',
-        trackLabel: 'Balasan Lanjutan Percakapan WA (Turn-Aware + Objection Handling Bab 10)',
+        trackLabel: 'Balasan Lanjutan Percakapan WA (Turn-Aware + Update Analisis & Rekomendasi)',
         guidanceText: [
-          'JALUR B2 - PERCAKAPAN WHATSAPP LANJUTAN (SUDAH ADA OBROLAN SEBELUMNYA):',
-          `- Pesan terakhir dari Sales (${input.seName}): "${lastSales}"`,
-          `- Pesan balasan terakhir dari Customer: "${lastCust || input.salesNotes}"`,
+          'JALUR B2 - PERCAKAPAN WHATSAPP LANJUTAN / PESAN BARU DARI PROSPEK YANG SAMA:',
+          `- Riwayat konteks sebelumnya: "${(input.salesNotes || '').slice(0, 350)}"`,
+          lastSales
+            ? `- Pesan terakhir dari Sales (${input.seName}): "${lastSales}"`
+            : '- Status: Prospek mengirim pesan tambahan/lanjutan sebelum atau sesudah pesan pertama.',
+          `- Pesan TERBARU dari Customer: "${lastCust || input.salesNotes}"`,
           '- ATURAN WAJIB:',
-          '  1. DILARANG mengulang salam perkenalan awal ("Perkenalkan saya...", "Terima kasih sudah menghubungi..."). Langsung sambung obrolan secara natural.',
-          '  2. Jawab langsung pertanyaan atau keberatan di pesan terakhir customer.',
-          '  3. Bila customer menyampaikan keberatan (harga, lokasi Jombor, ukuran tanah 63-72m2, bingung KPR, atau harus diskusi pasangan), gunakan formula Playbook Bab 10 (Empati -> Klarifikasi -> Data Fakta -> Alternatif Unit/Skema -> Pertanyaan Pengunci).',
-          '  4. Tutup dengan 1 pertanyaan lanjutan atau ajakan spesifik (survei lokasi / kirim simulasi PDF / video-call tour).',
+          '  1. Analisis ulang profil BANT, Persona, Poin Kuat, Poin Lemah, dan Rekomendasi Taktis berdasarkan informasi terbaru di pesan customer ini.',
+          '  2. DILARANG mengulang salam perkenalan kaku jika sudah pernah menyapa sebelumnya. Langsung tanggapi isi pesan terbaru customer secara hangat dan natural.',
+          '  3. Jawab langsung pertanyaan, perubahan minat unit/skema bayar, atau keberatan di pesan terbaru customer (gunakan formula Playbook Bab 10: Empati -> Klarifikasi -> Data Fakta -> Alternatif Unit/Skema -> Pertanyaan Pengunci).',
+          '  4. Tutup dengan 1 pertanyaan BANT yang belum terjawab atau ajakan spesifik (jadwal survei lokasi / kirim simulasi PDF / video-call tour).',
         ].join('\n'),
       };
     }
@@ -563,7 +570,8 @@ export async function analyzeLeadWithAi(input: LeadAnalysisInput): Promise<LeadA
     `- Skema pembayaran ditulis "${humanScheme}". Format 3-4 paragraf WhatsApp rapi (boleh bullet • untuk 3-4 keunggulan utama unit).`,
     '',
     'Jika data tidak jelas (nama samar, domisili kosong, catatan <4 kata), set "clarity_status": "PERLU_DILENGKAPI" dan isi "unclear_parts".',
-    'Balas HANYA objek JSON valid dengan key: skor (0-100), label (SANGAT_PROSPECTIF|PROSPECTIF|PERLU_PEMBINAAN|PERLU_DILENGKAPI), clarity_status (JELAS|PERLU_DILENGKAPI), unclear_parts ([{field,issue,example}]), ringkas (1-2 kalimat), poin_kuat ([2-3 string]), poin_lemah ([1-2 string]), perlu_dicek_ulang ([2-3 pertanyaan BANT natural]), rekomendasi ([2-3 saran taktis]), recommended_persona (P1..P6), recommended_bant ({b,a,n,t}), followup_draft_message (string pesan WA lengkap).',
+    'Jika dari pesan terbaru customer terdeteksi informasi baru tentang domisili, unit minat (Cluster Nagoya/Osaka/Tokyo), atau skema bayar (KPR/CASH_KERAS/CASH_TEMPO_12/CASH_TEMPO_24), sertakan di key opsional extracted_domicile, extracted_unit_interest, extracted_payment_scheme.',
+    'Balas HANYA objek JSON valid dengan key: skor (0-100), label (SANGAT_PROSPECTIF|PROSPECTIF|PERLU_PEMBINAAN|PERLU_DILENGKAPI), clarity_status (JELAS|PERLU_DILENGKAPI), unclear_parts ([{field,issue,example}]), ringkas (1-2 kalimat), poin_kuat ([2-3 string]), poin_lemah ([1-2 string]), perlu_dicek_ulang ([2-3 pertanyaan BANT natural]), rekomendasi ([2-3 saran taktis]), recommended_persona (P1..P6), recommended_bant ({b,a,n,t}), extracted_domicile (string opsional), extracted_unit_interest (string opsional), extracted_payment_scheme (string opsional), followup_draft_message (string pesan WA lengkap).',
   ].join('\n');
 
   const modelChain =
@@ -679,6 +687,18 @@ export async function analyzeLeadWithAi(input: LeadAnalysisInput): Promise<LeadA
             total: bantEval.total,
             grade: bantEval.grade,
           },
+          extracted_domicile:
+            typeof parsed.extracted_domicile === 'string' && parsed.extracted_domicile.trim()
+              ? parsed.extracted_domicile.trim()
+              : undefined,
+          extracted_unit_interest:
+            typeof parsed.extracted_unit_interest === 'string' && parsed.extracted_unit_interest.trim()
+              ? parsed.extracted_unit_interest.trim()
+              : undefined,
+          extracted_payment_scheme:
+            typeof parsed.extracted_payment_scheme === 'string' && parsed.extracted_payment_scheme.trim()
+              ? parsed.extracted_payment_scheme.trim()
+              : undefined,
           followup_draft_message: sanitizeFollowupDraft(
             String(parsed.followup_draft_message || ''),
             input

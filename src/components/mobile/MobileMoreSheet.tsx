@@ -25,6 +25,8 @@ import {
   LogOut,
   ArrowLeft,
   ChevronRight,
+  Award,
+  FileCheck,
 } from 'lucide-react';
 import type { RoleKey, UserProfile } from '../../data';
 
@@ -42,6 +44,7 @@ export interface MobileMoreActions {
   onOpenSuperadmin: () => void;
   onGoHomepage: () => void;
   onLogout: () => void;
+  onNavigateDashboardSection?: (sectionId: string) => void;
 }
 
 interface MobileMoreSheetProps {
@@ -89,7 +92,10 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
   };
 
   const roleSectionItems: Record<RoleKey, SheetActionItem[]> = {
-    SE: [],
+    SE: [
+      { label: 'Scorecard Bulanan', subtitle: '7 komponen berbobot Playbook §6.4', href: '#scorecard-bulanan', icon: Award },
+      { label: 'Laporan Harian (13 Item)', subtitle: 'Realisasi harian SE Playbook §13.1', href: '#laporan-harian', icon: FileCheck },
+    ],
     TL: [
       { label: 'Radar SLA <= 5 Menit', href: '#live-sla', icon: Clock },
       { label: 'Aturan Pool 72 Jam', href: '#aturan-72jam', icon: RefreshCw },
@@ -200,12 +206,18 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
               <div className="space-y-2">
                 {roleSectionItems[role].map((item) => {
                   const Icon = item.icon;
+                  const sectionId = (item.href || '').replace(/^#/, '');
                   return (
-                    <a
+                    <button
                       key={item.label}
-                      href={item.href}
-                      onClick={() => onClose()}
-                      className="flex items-center gap-3 min-h-[52px] px-3.5 py-2.5 rounded-2xl bg-sandstone/60 border border-warmborder active:bg-sandstone transition-colors"
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        if (actions.onNavigateDashboardSection && sectionId) {
+                          actions.onNavigateDashboardSection(sectionId);
+                        }
+                      }}
+                      className="w-full flex items-center gap-3 min-h-[52px] px-3.5 py-2.5 rounded-2xl bg-sandstone/60 border border-warmborder active:bg-sandstone text-left transition-colors cursor-pointer"
                     >
                       <div className="size-10 rounded-xl bg-white border border-warmborder flex items-center justify-center text-terracotta shrink-0">
                         <Icon className="size-5" />
@@ -217,7 +229,7 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
                         )}
                       </div>
                       <ChevronRight className="size-4 text-warmmuted shrink-0" />
-                    </a>
+                    </button>
                   );
                 })}
               </div>

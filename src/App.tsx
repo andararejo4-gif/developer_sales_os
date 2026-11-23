@@ -90,7 +90,6 @@ import {
   type UnitProperty,
 } from './data';
 
-const STORAGE_KEY = 'devos_se_report_terracotta_v2';
 const UNITS_STORAGE_KEY = 'devos_units_master_v2';
 
 const today = new Intl.DateTimeFormat('id-ID', {
@@ -106,14 +105,14 @@ const todayShort = new Intl.DateTimeFormat('id-ID', {
   year: 'numeric',
 }).format(new Date());
 
+const EMPTY_SE_ITEMS: ReportItem[] = DEFAULT_ITEMS.map((item) => ({
+  ...item,
+  realisasi: item.targetNum === null ? '-' : item.id === 2 ? '0 / 0' : item.id === 3 ? '0 / 0' : item.id === 4 || item.id === 5 ? '0 / 0 / 0' : '0',
+  catatan: 'Memuat data real dari database...',
+}));
+
 function loadItems(): ReportItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as ReportItem[];
-  } catch {
-    /* ignore fallback */
-  }
-  return structuredClone(DEFAULT_ITEMS);
+  return structuredClone(EMPTY_SE_ITEMS);
 }
 
 function loadUnits(): UnitProperty[] {
@@ -171,12 +170,57 @@ export default function App() {
   const [activeView, setActiveView] = useState<DashboardView>(() =>
     typeof window !== 'undefined' ? getViewFromPathname(window.location.pathname) : 'dashboard'
   );
+  const [activeSection, setActiveSection] = useState<string>(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      return window.location.hash.replace(/^#/, '') || 'top';
+    }
+    return 'top';
+  });
   const [showSuperadminModal, setShowSuperadminModal] = useState<boolean>(false);
 
   // Common UI states
   const [toast, setToast] = useState<string | null>(null);
   const [isMobileMoreOpen, setIsMobileMoreOpen] = useState<boolean>(false);
   const [seRealData, setSeRealData] = useState<any | null>(null);
+
+  const scrollToSectionElement = (sectionId: string) => {
+    const attemptScroll = (triesLeft: number) => {
+      const el = document.getElementById(sectionId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      if (triesLeft > 0) {
+        setTimeout(() => attemptScroll(triesLeft - 1), 60);
+      }
+    };
+    requestAnimationFrame(() => attemptScroll(6));
+  };
+
+  const openDashboardSection = (sectionId = 'top') => {
+    setActiveView('dashboard');
+    setActiveSection(sectionId);
+    setIsMobileMoreOpen(false);
+    navigateToView('dashboard');
+    if (typeof window !== 'undefined') {
+      const hashPart = sectionId && sectionId !== 'top' ? `#${sectionId}` : '';
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `/dashboard${hashPart}`
+      );
+    }
+
+    if (!sectionId || sectionId === 'top') {
+      requestAnimationFrame(() => {
+        const mainEl = document.getElementById('dashboard-scroll-container');
+        if (mainEl) mainEl.scrollTo({ top: 0, behavior: 'smooth' });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    } else {
+      scrollToSectionElement(sectionId);
+    }
+  };
 
   const fetchSeRealDashboard = async () => {
     try {
@@ -207,6 +251,17 @@ export default function App() {
   }, [authSession, user.email, role, activeView]);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hashId = window.location.hash.replace(/^#/, '');
+      if (hashId) {
+        setActiveView('dashboard');
+        setActiveSection(hashId);
+        scrollToSectionElement(hashId);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     savePersistedState('devos_se_filter', filter);
     savePersistedState('devos_se_period', period);
   }, [filter, period]);
@@ -214,14 +269,15 @@ export default function App() {
   useEffect(() => {
     const onPopState = () => {
       setActiveView(getViewFromPathname(window.location.pathname));
+      const hashId = window.location.hash.replace(/^#/, '');
+      setActiveSection(hashId || 'top');
+      if (hashId) {
+        scrollToSectionElement(hashId);
+      }
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  }, [items]);
 
   useEffect(() => {
     localStorage.setItem(UNITS_STORAGE_KEY, JSON.stringify(units));
@@ -237,20 +293,143 @@ export default function App() {
   const realScorecardRows = seRealData?.scorecard?.rows ?? [];
   const realScorecardCategory =
     seRealData?.scorecard?.category ?? 'Belum Ada Aktivitas Tercatat (0.0 Poin)';
+
+  const activePeriodData = seRealData?.periods?.[period] ?? {
+    title: PERIODS[period].label,
+    leadCardTitle:
+      period === 'harian'
+        ? 'Lead Aktif & Baru Hari Ini'
+        : period === 'minggu'
+        ? 'Lead Valid Minggu Ini'
+        : 'Lead Valid Bulan Ini',
+    leadsCount:
+      period === 'harian'
+        ? seRealData?.metrics?.leadsTodayValidCount ?? 0
+        : period === 'minggu'
+        ? seRealData?.metrics?.leadsWeekValidCount ?? seRealData?.metrics?.totalValidLeadsCount ?? 0
+        : seRealData?.metrics?.leadsMonthValidCount ?? seRealData?.metrics?.totalValidLeadsCount ?? 0,
+    leadsTarget: period === 'harian' ? 8 : period === 'minggu' ? 48 : 200,
+    leadsSubtext: `Total Pipeline Aktif: ${seRealData?.metrics?.totalValidLeadsCount ?? 0} Lead Valid`,
+    qualifiedCount: seRealData?.metrics?.qualifiedProspectsCount ?? 0,
+    hotCount: seRealData?.metrics?.hotProspectsCount ?? 0,
+    warmCount: seRealData?.metrics?.warmProspectsCount ?? 0,
+    bookingsCount: seRealData?.metrics?.bookingsCount ?? 0,
+    score: realScorecardTotal,
+    maxScore: 100,
+    tier: realScorecardCategory,
+    meta: `${seRealData?.metrics?.totalValidLeadsCount ?? 0} Lead Valid · ${seRealData?.metrics?.qualifiedProspectsCount ?? 0} Prospek BANT ≥ 7 · ${seRealData?.metrics?.bookingsCount ?? 0} Booking`,
+  };
+
   const realDashOffset = Math.max(
     0,
-    Math.min(314.16, 314.16 - (Math.min(120, realScorecardTotal) / 120) * 314.16)
+    Math.min(314.16, 314.16 - (Math.min(100, Number(activePeriodData.score || 0)) / 100) * 314.16)
   );
 
   const p = {
-    label: PERIODS[period].label,
-    score: realScorecardTotal,
-    tier: realScorecardCategory,
-    meta: `${seRealData?.metrics?.totalValidLeadsCount ?? 0} Lead Valid · ${seRealData?.metrics?.qualifiedProspectsCount ?? 0} Prospek BANT ≥ 7 · ${seRealData?.metrics?.bookingsCount ?? 0} Booking`,
+    label: activePeriodData.title,
+    score: activePeriodData.score,
+    maxScore: activePeriodData.maxScore || 100,
+    tier: activePeriodData.tier,
+    meta: activePeriodData.meta,
     dash: realDashOffset,
   };
   const list = useMemo(() => (filter === 'all' ? items : items.filter((r) => r.cat === filter)), [items, filter]);
   const hits = items.filter((r) => r.targetNum !== null && evalStatus(r) === 'hit').length;
+
+  const adjustDailyCounters = async (updates: Record<string, number>) => {
+    try {
+      const res = await fetch('/api/se/daily-activity', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Email': user.email,
+          'X-User-Role': role,
+        },
+        body: JSON.stringify(updates),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.ok && json.data) {
+          setSeRealData(json.data);
+          if (Array.isArray(json.data.dailyReportItems)) {
+            setItems(json.data.dailyReportItems);
+          }
+          setToast('Realisasi aktivitas harian tersimpan ke database!');
+        }
+      }
+    } catch {
+      setToast('Gagal menyimpan aktivitas harian');
+    }
+  };
+
+  const renderActivityCounterControls = (item: ReportItem) => {
+    const counters = seRealData?.dailyActivityCounters || {
+      dialCount: 0,
+      connectedCallCount: 0,
+      canvassingContacts: 0,
+      canvassingBrochures: 0,
+      canvassingLeads: 0,
+      postedReels: 0,
+      postedWaStatus: 0,
+      postedStories: 0,
+    };
+
+    const makeStepper = (label: string, field: string, currentVal: number, step = 1) => (
+      <div
+        key={field}
+        className="inline-flex items-center gap-1 bg-white border border-warmborder rounded-lg px-1.5 py-0.5 text-[11px]"
+      >
+        <span className="text-warmmuted font-semibold">{label}:</span>
+        <button
+          type="button"
+          onClick={() => adjustDailyCounters({ [field]: Math.max(0, currentVal - step) })}
+          className="size-5 rounded bg-sandstone hover:bg-warmborder text-espresso font-extrabold grid place-items-center cursor-pointer"
+          title={`Kurangi ${label}`}
+        >
+          -
+        </button>
+        <span className="font-extrabold text-espresso tabular-nums min-w-[16px] text-center">
+          {currentVal}
+        </span>
+        <button
+          type="button"
+          onClick={() => adjustDailyCounters({ [field]: currentVal + step })}
+          className="size-5 rounded bg-amber-50 hover:bg-terracotta hover:text-white text-terracotta font-extrabold grid place-items-center cursor-pointer transition-colors"
+          title={`Tambah ${label}`}
+        >
+          +
+        </button>
+      </div>
+    );
+
+    if (item.id === 2) {
+      return (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {makeStepper('Dial', 'dialCount', Number(counters.dialCount || 0), 1)}
+          {makeStepper('Tersambung', 'connectedCallCount', Number(counters.connectedCallCount || 0), 1)}
+        </div>
+      );
+    }
+    if (item.id === 4) {
+      return (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {makeStepper('Kontak', 'canvassingContacts', Number(counters.canvassingContacts || 0), 1)}
+          {makeStepper('Brosur', 'canvassingBrochures', Number(counters.canvassingBrochures || 0), 5)}
+          {makeStepper('Lead', 'canvassingLeads', Number(counters.canvassingLeads || 0), 1)}
+        </div>
+      );
+    }
+    if (item.id === 5) {
+      return (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {makeStepper('Reel', 'postedReels', Number(counters.postedReels || 0), 1)}
+          {makeStepper('WA', 'postedWaStatus', Number(counters.postedWaStatus || 0), 1)}
+          {makeStepper('Story', 'postedStories', Number(counters.postedStories || 0), 1)}
+        </div>
+      );
+    }
+    return null;
+  };
 
   const updateItem = (id: number, field: 'realisasi' | 'catatan', val: string) => {
     setItems((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: val } : r)));
@@ -343,8 +522,13 @@ export default function App() {
 
   const openView = (view: DashboardView, tab?: string) => {
     setActiveView(view);
+    if (view === 'dashboard') {
+      setActiveSection('top');
+    }
     navigateToView(view, tab);
     setIsMobileMoreOpen(false);
+    const mainEl = document.getElementById('dashboard-scroll-container');
+    if (mainEl) mainEl.scrollTo({ top: 0, behavior: 'smooth' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -396,9 +580,9 @@ export default function App() {
       <nav className="space-y-1">
         <button
           type="button"
-          onClick={() => handleItemClick(() => openView('dashboard'))}
+          onClick={() => handleItemClick(() => openDashboardSection('top'))}
           className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
-            activeView === 'dashboard'
+            activeView === 'dashboard' && activeSection === 'top'
               ? 'bg-amber-50 text-terracotta font-bold'
               : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
           }`}
@@ -422,156 +606,164 @@ export default function App() {
 
         {role === 'SE' && (
           <>
-            <a
-              href="#scorecard-bulanan"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('scorecard-bulanan'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'dashboard' && activeSection === 'scorecard-bulanan'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
             >
               <Award className="size-4 shrink-0" />
               <span>Scorecard Bulanan</span>
-            </a>
-            <a
-              href="#laporan-harian"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('laporan-harian'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'dashboard' && activeSection === 'laporan-harian'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
             >
               <FileCheck className="size-4 shrink-0" />
               <span>Laporan Harian (13 Item)</span>
-            </a>
+            </button>
           </>
         )}
 
         {role === 'SM' && (
           <>
-            <a
-              href="#master-unit"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('master-unit'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
               <Home className="size-4 shrink-0" />
               <span>30 Unit The Park</span>
-            </a>
-            <a
-              href="#tim-se"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('tim-se'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
               <Users className="size-4 shrink-0" />
               <span>Pantau Kinerja 3 SE</span>
-            </a>
+            </button>
           </>
         )}
 
         {role === 'DIREKSI' && (
           <>
-            <a
-              href="#portofolio-proyek"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('portofolio-proyek'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
               <Building2 className="size-4 shrink-0" />
               <span>Portofolio Proyek</span>
-            </a>
-            <a
-              href="#eskalasi-persetujuan"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('eskalasi-persetujuan'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
               <ShieldAlert className="size-4 shrink-0" />
               <span>Eskalasi Diskon &amp; Refund</span>
-            </a>
+            </button>
           </>
         )}
 
         {role === 'TL' && (
           <>
-            <a
-              href="#live-sla"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('live-sla'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
               <Clock className="size-4 shrink-0" />
               <span>Radar SLA ≤5 Menit</span>
-            </a>
-            <a
-              href="#aturan-72jam"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('aturan-72jam'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
               <RefreshCw className="size-4 shrink-0" />
               <span>Aturan Pool 72 Jam</span>
-            </a>
+            </button>
           </>
         )}
 
         {role === 'ADMIN' && (
           <>
-            <a
-              href="#booking-pipeline"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('booking-pipeline'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
               <CheckCircle2 className="size-4 shrink-0" />
               <span>Verifikasi Booking H+1</span>
-            </a>
-            <a
-              href="#dokumen-kpr"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('dokumen-kpr'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
               <FileText className="size-4 shrink-0" />
               <span>Checklist KPR &amp; Multi-Bank</span>
-            </a>
+            </button>
           </>
         )}
 
         {role === 'IT' && (
           <>
-            <a
-              href="#db-schema"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('db-schema'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
               <Database className="size-4 shrink-0" />
               <span>Migrasi Schema devos</span>
-            </a>
-            <a
-              href="#audit-log"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('audit-log'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
               <ShieldCheck className="size-4 shrink-0" />
               <span>Audit Trail Log 100%</span>
-            </a>
+            </button>
           </>
         )}
 
         {role === 'DIGITAL_MARKETING' && (
           <>
-            <a
-              href="#ad-campaigns"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('ad-campaigns'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
               <Megaphone className="size-4 shrink-0" />
               <span>Kampanye &amp; CPL Iklan</span>
-            </a>
-            <a
-              href="#se-feedback"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('se-feedback'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
               <MessageSquare className="size-4 shrink-0" />
               <span>Umpan Balik Kualitas Lead</span>
-            </a>
-            <a
-              href="#ai-ad-optimizer"
-              onClick={() => handleItemClick()}
-              className="flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso"
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('ai-ad-optimizer'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
               <Sparkles className="size-4 shrink-0" />
               <span>AI Ad Optimizer (§S18)</span>
-            </a>
+            </button>
           </>
         )}
 
@@ -826,7 +1018,10 @@ export default function App() {
       </aside>
 
       {/* Main Content Area (Separately scrollable in desktop) */}
-      <main className="flex-1 min-w-0 md:h-[100dvh] md:overflow-y-auto pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-12 min-h-0 focus:outline-none">
+      <main
+        id="dashboard-scroll-container"
+        className="flex-1 min-w-0 md:h-[100dvh] md:overflow-y-auto pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-12 min-h-0 focus:outline-none"
+      >
         {/* Header Desktop */}
         <header className="hidden md:flex items-center justify-between px-8 py-5 bg-white border-b border-warmborder sticky top-0 z-20">
           <div>
@@ -843,12 +1038,36 @@ export default function App() {
 
           <div className="flex items-center gap-3">
             {role === 'SE' && (
-              <button
-                onClick={copyWa}
-                className="h-10 px-4 rounded-xl bg-terracotta text-white text-xs font-semibold flex items-center gap-2 hover:bg-terracotta/90 cursor-pointer shadow-sm"
-              >
-                <Share2 className="size-3.5" /> Salin Laporan WA
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => openView('pipeline')}
+                  className={`h-10 px-3.5 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors ${
+                    seRealData?.metrics?.waConnectionStatus === 'CONNECTED'
+                      ? 'bg-lime-100 text-olive border-lime-300'
+                      : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                  }`}
+                >
+                  <span
+                    className={`size-2 rounded-full ${
+                      seRealData?.metrics?.waConnectionStatus === 'CONNECTED'
+                        ? 'bg-olive animate-pulse'
+                        : 'bg-rose-600 animate-pulse'
+                    }`}
+                  />
+                  <span>
+                    {seRealData?.metrics?.waConnectionStatus === 'CONNECTED'
+                      ? `WA Terhubung (${seRealData?.metrics?.waConnectedPhone || 'Aktif'})`
+                      : 'WA Terdiskonek'}
+                  </span>
+                </button>
+                <button
+                  onClick={copyWa}
+                  className="h-10 px-4 rounded-xl bg-terracotta text-white text-xs font-semibold flex items-center gap-2 hover:bg-terracotta/90 cursor-pointer shadow-sm"
+                >
+                  <Share2 className="size-3.5" /> Salin Laporan WA
+                </button>
+              </>
             )}
             <div className="flex items-center gap-2 bg-sandstone px-3 py-1.5 rounded-xl border border-warmborder text-xs">
               <span className="size-2 rounded-full bg-olive animate-pulse"></span>
@@ -1001,7 +1220,7 @@ export default function App() {
                 hits={hits}
                 totalItems={items.length}
                 onJumpToReport={() => {
-                  document.getElementById('laporan-harian')?.scrollIntoView({ behavior: 'smooth' });
+                  openDashboardSection('laporan-harian');
                 }}
                 onCopyWa={copyWa}
               />
@@ -1011,7 +1230,7 @@ export default function App() {
                 <div className="lg:col-span-4 bg-espresso text-white rounded-2xl p-4 sm:p-6 flex flex-col justify-between shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">
-                      Skor KPI Harian
+                      {p.label}
                     </span>
                     <div className="inline-flex rounded-lg bg-white/10 p-0.5">
                       {(['harian', 'minggu', 'bulan'] as PeriodKey[]).map((pr) => (
@@ -1049,7 +1268,7 @@ export default function App() {
                       </svg>
                       <div className="absolute text-center">
                         <p className="text-2xl font-extrabold tabular-nums leading-none">{p.score}</p>
-                        <p className="text-[11px] text-white/60 mt-1">/ 115</p>
+                        <p className="text-[11px] text-white/60 mt-1">/ {p.maxScore}</p>
                       </div>
                     </div>
                     <div>
@@ -1071,41 +1290,73 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => openView('pipeline')}
-                      className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-4 shadow-sm flex sm:block items-center justify-between text-left cursor-pointer transition-colors"
+                      className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-4 shadow-sm flex flex-col justify-between text-left cursor-pointer transition-colors"
                     >
-                      <p className="text-xs text-warmmuted">Lead Valid Hari Ini</p>
-                      <p className="text-xl sm:text-2xl font-extrabold tabular-nums text-espresso sm:mt-1">
-                        {seRealData?.metrics?.leadsTodayValidCount ?? 0}{' '}
-                        <span className="text-xs font-normal text-warmmuted">/ 8 Target</span>
-                      </p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openView('pipeline', 'GRADE_A')}
-                      className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-4 shadow-sm flex sm:block items-center justify-between text-left cursor-pointer transition-colors"
-                    >
-                      <p className="text-xs text-warmmuted">Hot Prospek (Grade A)</p>
-                      <p className="text-xl sm:text-2xl font-extrabold tabular-nums text-terracotta sm:mt-1">
-                        {seRealData?.metrics?.hotProspectsCount ?? 0} Prospek
+                      <div>
+                        <p className="text-xs text-warmmuted">{activePeriodData.leadCardTitle}</p>
+                        <p className="text-xl sm:text-2xl font-extrabold tabular-nums text-espresso mt-1">
+                          {activePeriodData.leadsCount}{' '}
+                          <span className="text-xs font-normal text-warmmuted">
+                            / {activePeriodData.leadsTarget} Target
+                          </span>
+                        </p>
+                      </div>
+                      <p className="text-[11px] font-semibold text-olive mt-2 pt-1.5 border-t border-warmborder/60">
+                        {activePeriodData.leadsSubtext}
                       </p>
                     </button>
                     <button
                       type="button"
                       onClick={() => openView('pipeline')}
-                      className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-4 shadow-sm flex sm:block items-center justify-between text-left cursor-pointer transition-colors"
+                      className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-4 shadow-sm flex flex-col justify-between text-left cursor-pointer transition-colors"
                     >
-                      <p className="text-xs text-warmmuted">Pesan WA Masuk &amp; SLA</p>
-                      <p className="text-xl sm:text-2xl font-extrabold tabular-nums text-espresso sm:mt-1">
-                        {seRealData?.metrics?.waInboundMessages ?? 0}{' '}
-                        <span className="text-xs font-semibold text-olive">
-                          · SLA {seRealData?.metrics?.waSlaCompliancePercent ?? 100}%
+                      <div>
+                        <p className="text-xs text-warmmuted">Prospek BANT ≥ 7 &amp; Hot</p>
+                        <p className="text-xl sm:text-2xl font-extrabold tabular-nums text-terracotta mt-1">
+                          {seRealData?.metrics?.qualifiedProspectsCount ?? 0} Prospek
+                        </p>
+                      </div>
+                      <p className="text-[11px] font-semibold text-warmmuted mt-2 pt-1.5 border-t border-warmborder/60">
+                        {seRealData?.metrics?.hotProspectsCount ?? 0} Grade A (Hot) ·{' '}
+                        {seRealData?.metrics?.warmProspectsCount ?? 0} Grade B (Warm)
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openView('pipeline')}
+                      className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-4 shadow-sm flex flex-col justify-between text-left cursor-pointer transition-colors"
+                    >
+                      <div>
+                        <p className="text-xs text-warmmuted">Interaksi WA &amp; SLA ≤ 5m</p>
+                        <p className="text-xl sm:text-2xl font-extrabold tabular-nums text-espresso mt-1">
+                          {seRealData?.metrics?.totalWaInteractions ?? 0}{' '}
+                          <span className="text-xs font-semibold text-olive">
+                            · SLA {seRealData?.metrics?.waSlaCompliancePercent ?? 100}%
+                          </span>
+                        </p>
+                      </div>
+                      <p className="text-[11px] font-semibold text-warmmuted mt-2 pt-1.5 border-t border-warmborder/60 flex items-center justify-between gap-1">
+                        <span>
+                          {seRealData?.metrics?.waInboundMessages ?? 0} Masuk ·{' '}
+                          {seRealData?.metrics?.waOutboundMessages ?? 0} Follow-Up
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${
+                            seRealData?.metrics?.waConnectionStatus === 'CONNECTED'
+                              ? 'bg-lime-100 text-olive'
+                              : 'bg-rose-100 text-rose-700'
+                          }`}
+                        >
+                          {seRealData?.metrics?.waConnectionStatus === 'CONNECTED'
+                            ? 'WA Aktif'
+                            : 'WA Terdiskonek'}
                         </span>
                       </p>
                     </button>
                   </div>
 
                   <div className="bg-white border border-warmborder rounded-2xl p-5 flex-1 flex flex-col justify-between shadow-sm">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="text-xs font-bold uppercase tracking-wider text-warmmuted">
                           Closing Terverifikasi (Net Sales Real dari Pipeline)
@@ -1114,17 +1365,23 @@ export default function App() {
                           {rupiah(seRealData?.metrics?.netSalesRevenueIdr ?? 0)}
                         </p>
                       </div>
-                      <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-lime-100 text-olive">
-                        {Math.min(
-                          100,
-                          Math.round(
-                            ((seRealData?.metrics?.netSalesRevenueIdr ?? 0) /
-                              (seRealData?.metrics?.monthlyTargetRevenueIdr || 1700000000)) *
-                              100
-                          )
-                        )}
-                        % Target Omzet
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-terracotta border border-amber-200">
+                          Potensi Pipeline Aktif: {rupiah(seRealData?.metrics?.activePipelineValueIdr ?? 0)} (
+                          {seRealData?.metrics?.totalValidLeadsCount ?? 0} Lead)
+                        </span>
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-lime-100 text-olive">
+                          {Math.min(
+                            100,
+                            Math.round(
+                              ((seRealData?.metrics?.netSalesRevenueIdr ?? 0) /
+                                (seRealData?.metrics?.monthlyTargetRevenueIdr || 1700000000)) *
+                                100
+                            )
+                          )}
+                          % Target Omzet
+                        </span>
+                      </div>
                     </div>
                     <div className="mt-4 h-2.5 rounded-full bg-sandstone overflow-hidden">
                       <div
@@ -1143,10 +1400,16 @@ export default function App() {
                     </div>
                     <div className="mt-4 pt-3 border-t border-warmborder flex flex-wrap items-center justify-between gap-2 text-xs text-warmmuted">
                       <span>
-                        {seRealData?.metrics?.netSalesCount ?? 0} unit Net Sales ·{' '}
-                        {seRealData?.metrics?.bookingsCount ?? 0} unit Booking ·{' '}
-                        {seRealData?.metrics?.visitsCount ?? 0} Kunjungan ·{' '}
-                        {seRealData?.metrics?.needsCompletionLeadsCount ?? 0} Lead Perlu Dilengkapi
+                        <strong className="text-espresso">{seRealData?.metrics?.totalValidLeadsCount ?? 0}</strong> Lead Valid ·{' '}
+                        <strong className="text-espresso">{seRealData?.metrics?.qualifiedProspectsCount ?? 0}</strong> Terkualifikasi (BANT ≥ 7) ·{' '}
+                        <strong className="text-espresso">{seRealData?.metrics?.visitsCount ?? 0}</strong> Kunjungan ·{' '}
+                        <strong className="text-espresso">{seRealData?.metrics?.bookingsCount ?? 0}</strong> Booking ·{' '}
+                        <strong className="text-espresso">{seRealData?.metrics?.netSalesCount ?? 0}</strong> Net Sales
+                        {(seRealData?.metrics?.needsCompletionLeadsCount ?? 0) > 0 && (
+                          <span className="text-terracotta font-semibold">
+                            {' '}· {seRealData?.metrics?.needsCompletionLeadsCount} Perlu Dilengkapi
+                          </span>
+                        )}
                       </span>
                       <button
                         type="button"
@@ -1161,7 +1424,10 @@ export default function App() {
               </section>
 
               {/* Scorecard Bulanan */}
-              <section id="scorecard-bulanan" className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
+              <section
+                id="scorecard-bulanan"
+                className="scroll-mt-24 bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm"
+              >
                 <div className="p-5 border-b border-warmborder flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2.5">
@@ -1213,7 +1479,10 @@ export default function App() {
               </section>
 
               {/* Laporan Harian 13 Item */}
-              <section id="laporan-harian" className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
+              <section
+                id="laporan-harian"
+                className="scroll-mt-24 bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm"
+              >
                 <div className="p-5 border-b border-warmborder flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2.5">
@@ -1223,7 +1492,7 @@ export default function App() {
                       </span>
                     </div>
                     <p className="text-xs text-warmmuted mt-0.5">
-                      Kirim sebelum pukul 18.00 WIB. Pukul 18.15 AI SM/TL melakukan audit otomatis &amp; feedback.
+                      Tersinkron otomatis dari Pipeline &amp; aktivitas SE di database PostgreSQL sales_os. Kirim sebelum pukul 18.00 WIB.
                     </p>
                   </div>
 
@@ -1253,6 +1522,7 @@ export default function App() {
                   evalStatus={evalStatus}
                   renderBadge={(status) => <StatusBadge status={status} />}
                   onUpdateItem={updateItem}
+                  renderCustomRealisasi={renderActivityCounterControls}
                 />
 
                 {/* Desktop Table (>= md) */}
@@ -1260,9 +1530,9 @@ export default function App() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-sandstone/70 border-b border-warmborder text-[11px] font-bold uppercase tracking-wider text-warmmuted">
-                        <th className="py-3 px-5 w-[32%]">Item Laporan</th>
-                        <th className="py-3 px-4 w-[12%]">Target</th>
-                        <th className="py-3 px-4 w-[22%]">Realisasi Hari Ini</th>
+                        <th className="py-3 px-5 w-[30%]">Item Laporan</th>
+                        <th className="py-3 px-4 w-[10%]">Target</th>
+                        <th className="py-3 px-4 w-[26%]">Realisasi (Database Real)</th>
                         <th className="py-3 px-4 w-[24%]">Catatan / Progres</th>
                         <th className="py-3 px-4 w-[10%] text-right">Status</th>
                       </tr>
@@ -1273,10 +1543,20 @@ export default function App() {
                           <td className="py-3 px-5 font-medium text-espresso">{r.item}</td>
                           <td className="py-3 px-4 text-xs font-semibold text-warmmuted tabular-nums">{r.target}</td>
                           <td className="py-3 px-4">
-                            <div className="h-9 px-3 rounded-lg border border-warmborder bg-sandstone/60 flex items-center justify-between text-sm font-extrabold text-espresso tabular-nums">
-                              <span>{r.realisasi}</span>
-                              <span className="text-[10px] font-semibold text-warmmuted uppercase">Auto</span>
-                            </div>
+                            {[2, 4, 5].includes(r.id) ? (
+                              <div className="p-2 rounded-lg border border-warmborder bg-sandstone/60 space-y-1.5">
+                                <div className="flex items-center justify-between text-xs font-extrabold text-espresso tabular-nums">
+                                  <span>{r.realisasi}</span>
+                                  <span className="text-[10px] font-semibold text-terracotta uppercase">Input DB</span>
+                                </div>
+                                {renderActivityCounterControls(r)}
+                              </div>
+                            ) : (
+                              <div className="min-h-9 px-3 py-1.5 rounded-lg border border-warmborder bg-sandstone/60 flex items-center justify-between gap-2 text-xs font-extrabold text-espresso tabular-nums">
+                                <span>{r.realisasi}</span>
+                                <span className="text-[10px] font-semibold text-warmmuted uppercase shrink-0">Auto DB</span>
+                              </div>
+                            )}
                           </td>
                           <td className="py-3 px-4">
                             <input
@@ -1297,13 +1577,15 @@ export default function App() {
 
                 <div className="p-4 bg-sandstone/60 border-t border-warmborder flex flex-wrap items-center justify-between gap-3">
                   <button
-                    onClick={() => {
-                      setItems(structuredClone(DEFAULT_ITEMS));
-                      setToast('Laporan harian direset');
+                    type="button"
+                    onClick={async () => {
+                      await fetchSeRealDashboard();
+                      setToast('Data Laporan Harian & Scorecard disinkronkan dari database!');
                     }}
-                    className="text-xs font-medium text-warmmuted hover:text-espresso cursor-pointer"
+                    className="text-xs font-semibold text-terracotta hover:text-espresso flex items-center gap-1.5 cursor-pointer"
                   >
-                    Reset Default
+                    <RefreshCw className="size-3.5" />
+                    <span>Sinkronkan Data Real Database</span>
                   </button>
                   <button
                     onClick={copyWa}
@@ -2534,6 +2816,7 @@ export default function App() {
           onOpenSuperadmin: () => setShowSuperadminModal(true),
           onGoHomepage: () => setViewMode('homepage'),
           onLogout: handleLogout,
+          onNavigateDashboardSection: (secId) => openDashboardSection(secId),
         }}
       />
 

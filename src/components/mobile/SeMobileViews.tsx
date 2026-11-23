@@ -108,6 +108,7 @@ interface SeMobileDailyReportListProps {
   evalStatus: (item: ReportItem) => Status;
   renderBadge: (status: Status) => React.ReactNode;
   onUpdateItem: (id: number, field: 'realisasi' | 'catatan', value: string) => void;
+  renderCustomRealisasi?: (item: ReportItem) => React.ReactNode;
 }
 
 export const SeMobileDailyReportList: React.FC<SeMobileDailyReportListProps> = ({
@@ -115,6 +116,7 @@ export const SeMobileDailyReportList: React.FC<SeMobileDailyReportListProps> = (
   evalStatus,
   renderBadge,
   onUpdateItem,
+  renderCustomRealisasi,
 }) => {
   return (
     <div className="md:hidden divide-y divide-warmborder">
@@ -131,14 +133,23 @@ export const SeMobileDailyReportList: React.FC<SeMobileDailyReportListProps> = (
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-sandstone/60 border border-warmborder">
-                <span className="text-[11px] font-semibold text-warmmuted">
-                  Realisasi Hari Ini (Otomatis)
-                </span>
-                <span className="text-sm font-extrabold text-espresso tabular-nums">
-                  {r.realisasi}
-                </span>
-              </div>
+              {renderCustomRealisasi && [2, 4, 5].includes(r.id) ? (
+                <div className="px-3 py-2.5 rounded-xl bg-sandstone/60 border border-warmborder space-y-1.5">
+                  <span className="block text-[11px] font-semibold text-warmmuted">
+                    Realisasi Hari Ini (Klik + / - untuk Update DB)
+                  </span>
+                  {renderCustomRealisasi(r)}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-sandstone/60 border border-warmborder">
+                  <span className="text-[11px] font-semibold text-warmmuted">
+                    Realisasi Hari Ini (Otomatis dari DB)
+                  </span>
+                  <span className="text-sm font-extrabold text-espresso tabular-nums">
+                    {r.realisasi}
+                  </span>
+                </div>
+              )}
 
               <label className="block">
                 <span className="block text-[11px] font-semibold text-warmmuted mb-1">

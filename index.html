@@ -8,6 +8,26 @@
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Developer Sales OS</title>
+    <script>
+      (function () {
+        try {
+          var CLEAN_KEY = 'devos_sw_clean_20261123_v3';
+          if (localStorage.getItem(CLEAN_KEY) !== '1') {
+            localStorage.setItem(CLEAN_KEY, '1');
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function (regs) {
+                regs.forEach(function (r) { r.unregister(); });
+              });
+            }
+            if ('caches' in window) {
+              caches.keys().then(function (names) {
+                names.forEach(function (n) { caches.delete(n); });
+              });
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body class="bg-sandstone text-espresso font-sans antialiased">
     <div id="root"></div>
