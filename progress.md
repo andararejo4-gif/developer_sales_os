@@ -3,6 +3,14 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-029 | 2026-11-23 | Pembuatan & Push Branch Terisolasi IT-kantor ke Remote
+- Status: selesai
+- Ubah: Branch Git `IT-kantor`
+- Alasan/keputusan: Menyimpan dan mengunggah seluruh pekerjaan (auth multi-tenant, dashboard superadmin eksekutif & IT, impersonasi sesi, dan pembersihan login) ke branch terisolasi `IT-kantor` di GitHub (`origin/IT-kantor`) tanpa menyentuh branch `main` milik tim.
+- Verifikasi: `git push -u origin IT-kantor` (sukses membuat remote branch baru), `bun test` (111 pass)
+- Berikutnya: Review PR di GitHub bila ingin digabungkan ke main
+- Catatan: Branch main tim aman 100% dari overwrite
+
 ## P-028 | 2026-11-23 | Pemisahan Navbar Superadmin Platform vs Proyek Klien Developer
 
 - Status: selesai
