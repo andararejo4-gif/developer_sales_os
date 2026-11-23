@@ -95,6 +95,7 @@ export interface PipelineLeadRecord {
     model: string;
     prompt_tokens?: number;
     completion_tokens?: number;
+    created_at?: string;
   } | null;
 }
 
@@ -167,6 +168,15 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
   const [expandedLeadIds, setExpandedLeadIds] = useState<Record<string, boolean>>(() =>
     loadPersistedState<Record<string, boolean>>(`devos_pl_expanded_${user.email}`, {})
   );
+  // Status buka/tutup ("Lihat selengkapnya") untuk pesan panjang di gelembung WA (default semua singkat)
+  const [expandedMessageKeys, setExpandedMessageKeys] = useState<Record<string, boolean>>({});
+
+  const toggleMessageExpand = (key: string) => {
+    setExpandedMessageKeys((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
 
   // Filter & Search (Disinkronkan ke URL ?tab=... dan localStorage)
   const [activeFilter, setActiveFilter] = useState<string>(() => {
@@ -1829,13 +1839,35 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
             const isWaInboundLead =
               lead.lead_origin === 'WA_BAILEYS' ||
               /whatsapp inbound|baileys/i.test(lead.source || '');
-            const isFollowUpAlreadySent = Boolean(
-              lead.last_sales_message && lead.last_sales_message.trim()
-            );
+            const analysisCreatedMs = analysis?.created_at
+              ? new Date(analysis.created_at).getTime()
+              : 0;
+            const leadUpdatedMs = lead.updated_at ? new Date(lead.updated_at).getTime() : 0;
+            const hasNewUnsentAiDraft =
+              analysisCreatedMs > 0 &&
+              leadUpdatedMs > 0 &&
+              analysisCreatedMs >= leadUpdatedMs - 1500 &&
+              (lead.last_sales_message || '').trim() !==
+                (analysis?.followup_draft_message || '').trim();
+            const isFollowUpAlreadySent =
+              Boolean(lead.last_sales_message && lead.last_sales_message.trim()) &&
+              !hasNewUnsentAiDraft;
             const draftMsg =
               customDrafts[lead.id] ??
               analysis?.followup_draft_message ??
               `Selamat sore ${lead.full_name}, saya ${user.name} dari The Park Townhouse Sukoharjo.`;
+            const isCustMsgLong =
+              Boolean(lead.last_customer_message) &&
+              ((lead.last_customer_message || '').length > 140 ||
+                (lead.last_customer_message || '').split('\n').length > 3);
+            const isCustMsgExpanded = Boolean(expandedMessageKeys[`cust_${lead.id}`]);
+            const isDraftMsgLong = draftMsg.length > 165 || draftMsg.split('\n').length > 3;
+            const isDraftMsgExpanded = Boolean(expandedMessageKeys[`draft_${lead.id}`]);
+            const isSentMsgLong =
+              Boolean(lead.last_sales_message) &&
+              ((lead.last_sales_message || '').length > 165 ||
+                (lead.last_sales_message || '').split('\n').length > 3);
+            const isSentMsgExpanded = Boolean(expandedMessageKeys[`sent_${lead.id}`]);
 
             const initials = lead.full_name
               .split(/\s+/)
@@ -2126,44 +2158,106 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                                   {lead.full_name}:
                                 </p>
                                 <p className="leading-snug whitespace-pre-line">
-                                  {lead.last_customer_message}
+                                  {isCustMsgLong && !isCustMsgExpanded
+                                    ? `${lead.last_customer_message.slice(0, 140).trim()}...`
+                                    : lead.last_customer_message}
                                 </p>
+                                {isCustMsgLong && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleMessageExpand(`cust_${lead.id}`)}
+                                    className="mt-1 text-[11px] font-extrabold text-[#075E54] hover:underline cursor-pointer"
+                                  >
+                                    {isCustMsgExpanded ? 'Tampilkan lebih singkat' : 'Lihat selengkapnya'}
+                                  </button>
+                                )}
                               </div>
                             )}
 
                             {isFollowUpAlreadySent ? (
-                              /* Jika pesan sudah dikirim, sembunyikan kotak draf rekomendasi & tampilkan gelembung chat terkirim */
+                              /* Jika pesan sudah dikirim, sembunyikan kotak draf rekomendasi & tampilkan gelembung chat terkirim secara ringkas */
                               <div className="ml-6 rounded-2xl rounded-tr-xs bg-[#DCF8C6] p-3 shadow-xs border border-[#c7eab0] text-xs text-[#111B21] space-y-1.5">
                                 <p className="text-[10px] font-bold text-[#075E54]">
                                   Anda ({user.name.split(' ')[0]}):
                                 </p>
                                 <p className="leading-relaxed whitespace-pre-line">
-                                  {lead.last_sales_message}
+                                  {isSentMsgLong && !isSentMsgExpanded
+                                    ? `${(lead.last_sales_message || '').slice(0, 165).trim()}...`
+                                    : lead.last_sales_message}
                                 </p>
-                                <div className="flex items-center justify-end gap-1 pt-1 text-[10px] text-[#667781]">
-                                  <span>Terkirim via WhatsApp</span>
-                                  <CheckCheck className="size-3.5 text-[#53BDEB]" />
+                                <div className="flex items-center justify-between gap-2 pt-1 text-[10px] text-[#667781]">
+                                  {isSentMsgLong ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleMessageExpand(`sent_${lead.id}`)}
+                                      className="text-[11px] font-extrabold text-[#075E54] hover:underline cursor-pointer"
+                                    >
+                                      {isSentMsgExpanded ? 'Tampilkan lebih singkat' : 'Lihat selengkapnya'}
+                                    </button>
+                                  ) : (
+                                    <span />
+                                  )}
+                                  <span className="inline-flex items-center gap-1">
+                                    <span>Terkirim via WhatsApp</span>
+                                    <CheckCheck className="size-3.5 text-[#53BDEB]" />
+                                  </span>
                                 </div>
                               </div>
                             ) : (
-                              /* Jika belum dikirim (atau prospek baru saja membalas & AI memberi saran baru), tampilkan rekomendasi AI */
-                              <div className="relative ml-3 rounded-2xl rounded-tr-xs bg-[#DCF8C6] p-3 shadow-xs border border-[#c7eab0]">
-                                <textarea
-                                  rows={7}
-                                  value={draftMsg}
-                                  aria-label="Edit draf pesan WhatsApp"
-                                  onChange={(e) =>
-                                    setCustomDrafts((prev) => ({
-                                      ...prev,
-                                      [lead.id]: e.target.value,
-                                    }))
-                                  }
-                                  className="w-full bg-transparent text-xs text-[#111B21] leading-relaxed focus:outline-none resize-y"
-                                />
-                                <div className="flex items-center justify-between gap-2 mt-1 text-[10px] text-[#667781]">
-                                  <span>Playbook v1.2</span>
+                              /* Jika belum dikirim (atau prospek baru saja membalas & AI memberi saran baru), tampilkan rekomendasi AI singkat default + tombol Lihat selengkapnya */
+                              <div className="relative ml-3 rounded-2xl rounded-tr-xs bg-[#DCF8C6] p-3 shadow-xs border border-[#c7eab0] space-y-1.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[10px] font-bold text-[#075E54]">
+                                    Rekomendasi Balasan AI ({user.name.split(' ')[0]}):
+                                  </span>
+                                  {isDraftMsgLong && (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleMessageExpand(`draft_${lead.id}`)}
+                                      className="text-[11px] font-extrabold text-[#075E54] hover:underline cursor-pointer"
+                                    >
+                                      {isDraftMsgExpanded ? 'Tampilkan lebih singkat' : 'Lihat selengkapnya & Edit'}
+                                    </button>
+                                  )}
+                                </div>
+
+                                {!isDraftMsgLong || isDraftMsgExpanded ? (
+                                  <textarea
+                                    rows={isDraftMsgExpanded ? 7 : 3}
+                                    value={draftMsg}
+                                    aria-label="Edit draf pesan WhatsApp"
+                                    onChange={(e) =>
+                                      setCustomDrafts((prev) => ({
+                                        ...prev,
+                                        [lead.id]: e.target.value,
+                                      }))
+                                    }
+                                    className="w-full bg-transparent text-xs text-[#111B21] leading-relaxed focus:outline-none resize-y"
+                                  />
+                                ) : (
+                                  <div
+                                    onClick={() => toggleMessageExpand(`draft_${lead.id}`)}
+                                    className="text-xs text-[#111B21] leading-relaxed whitespace-pre-line cursor-pointer"
+                                    title="Klik untuk melihat selengkapnya dan mengedit pesan"
+                                  >
+                                    {`${draftMsg.slice(0, 165).trim()}...`}
+                                  </div>
+                                )}
+
+                                <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#c7eab0]/70 text-[10px] text-[#667781]">
+                                  {isDraftMsgLong ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleMessageExpand(`draft_${lead.id}`)}
+                                      className="text-[11px] font-extrabold text-[#075E54] hover:underline cursor-pointer"
+                                    >
+                                      {isDraftMsgExpanded ? 'Tutup tampilan penuh' : 'Lihat selengkapnya'}
+                                    </button>
+                                  ) : (
+                                    <span>Playbook v1.2</span>
+                                  )}
                                   <span className="inline-flex items-center gap-1">
-                                    <span>Rekomendasi AI · Siap dikirim oleh {user.name.split(' ')[0]}</span>
+                                    <span>Siap dikirim oleh {user.name.split(' ')[0]}</span>
                                     <CheckCheck className="size-3.5 text-[#53BDEB]" />
                                   </span>
                                 </div>
