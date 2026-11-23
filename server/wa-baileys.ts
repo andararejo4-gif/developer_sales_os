@@ -582,6 +582,109 @@ export async function recordOutboundWaReplyForSe(params: {
 }
 
 /**
+ * Mengirim pesan WhatsApp secara langsung & otomatis melalui sesi Baileys milik SE yang sedang terhubung.
+ * Jika nomor WA SE belum terhubung (DISCONNECTED), menolak pengiriman dengan kode WA_NOT_CONNECTED
+ * agar UI mengarahkan SE untuk melakukan integrasi (Scan QR) terlebih dahulu.
+ */
+export async function sendOutboundWaMessageForSe(params: {
+  seEmail: string;
+  seName: string;
+  contactPhone: string;
+  messageText: string;
+}): Promise<{
+  sent: boolean;
+  code?: 'WA_NOT_CONNECTED' | 'INVALID_INPUT' | 'SEND_FAILED';
+  error?: string;
+  senderPhone?: string | null;
+  targetPhone?: string;
+  responseTimeSeconds?: number | null;
+  slaMet?: boolean | null;
+}> {
+  const seEmail = params.seEmail.toLowerCase();
+  const cleanPhone = normalizePhoneWa(params.contactPhone);
+  const text = (params.messageText || '').trim();
+
+  if (!cleanPhone || !text) {
+    return {
+      sent: false,
+      code: 'INVALID_INPUT',
+      error: 'Nomor WhatsApp tujuan dan isi pesan tidak boleh kosong.',
+    };
+  }
+
+  let inst = instances.get(seEmail);
+
+  // Jika instance belum ada di memori namun sesi creds.json ada di disk & status DB CONNECTED, coba bangunkan
+  if (!inst || inst.status !== 'CONNECTED' || !inst.socket) {
+    const sessionDir = getSessionDir(seEmail);
+    const credsPath = path.join(sessionDir, 'creds.json');
+    const dbRows = await sql`
+      SELECT status FROM sales_os.se_wa_sessions WHERE se_email = ${seEmail} LIMIT 1
+    `;
+    if (fs.existsSync(credsPath) && dbRows[0]?.status === 'CONNECTED') {
+      await startBaileysForSe(seEmail, params.seName).catch(() => {});
+      for (let i = 0; i < 16; i++) {
+        inst = instances.get(seEmail);
+        if (inst?.status === 'CONNECTED' && inst.socket) break;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+    }
+  }
+
+  if (!inst || inst.status !== 'CONNECTED' || !inst.socket) {
+    return {
+      sent: false,
+      code: 'WA_NOT_CONNECTED',
+      error:
+        'Nomor WhatsApp SE belum terhubung. Silakan hubungkan nomor WhatsApp Anda (Scan QR) terlebih dahulu.',
+    };
+  }
+
+  try {
+    let targetJid = `${cleanPhone}@s.whatsapp.net`;
+    try {
+      const checkRes = await inst.socket.onWhatsApp(cleanPhone);
+      if (Array.isArray(checkRes) && checkRes[0]?.jid) {
+        targetJid = checkRes[0].jid;
+      }
+    } catch {
+      /* gunakan default @s.whatsapp.net bila pengecekan gagal */
+    }
+
+    const sentMsg = await inst.socket.sendMessage(targetJid, { text });
+    if (sentMsg?.key?.id) {
+      processedMessageIds.add(String(sentMsg.key.id));
+    }
+
+    const replyMetrics = await recordOutboundWaReplyForSe({
+      seEmail,
+      contactPhone: cleanPhone,
+      messageText: text,
+    });
+
+    console.log(
+      `[WA Baileys] Direct WA message sent from ${seEmail} (${inst.phoneNumber}) to ${cleanPhone}`
+    );
+
+    return {
+      sent: true,
+      senderPhone: inst.phoneNumber,
+      targetPhone: cleanPhone,
+      responseTimeSeconds: replyMetrics.responseTimeSeconds,
+      slaMet: replyMetrics.slaMet,
+    };
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : 'Gagal mengirim pesan melalui WhatsApp Baileys.';
+    console.error('[WA Baileys] Error sending direct message:', errMsg);
+    return {
+      sent: false,
+      code: 'SEND_FAILED',
+      error: `Gagal mengirim pesan WhatsApp: ${errMsg}`,
+    };
+  }
+}
+
+/**
  * Memulai sesi koneksi Baileys yang terisolasi per SE (1 nomor WA = 1 akun SE)
  */
 export async function startBaileysForSe(

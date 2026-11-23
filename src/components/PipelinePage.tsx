@@ -15,7 +15,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
-  ExternalLink,
   RefreshCw,
   Edit3,
   Trash2,
@@ -161,6 +160,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
   const [waStatus, setWaStatus] = useState<WaStatusData | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [sendingLeadId, setSendingLeadId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   // Daftar ID lead yang sedang dibuka detailnya (default kosong = semua tertutup / list ringkas)
@@ -825,23 +825,65 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
   };
 
   const handleFollowUpWa = async (lead: PipelineLeadRecord) => {
-    const draft =
+    const draft = (
       customDrafts[lead.id] ??
       lead.latest_analysis?.followup_draft_message ??
-      `Selamat sore ${lead.full_name}, saya ${user.name} dari The Park Townhouse Sukoharjo.`;
+      `Selamat sore ${lead.full_name}, saya ${user.name} dari The Park Townhouse Sukoharjo.`
+    ).trim();
 
-    await fetch('/api/wa/record-reply', {
-      method: 'POST',
-      headers: apiHeaders,
-      body: JSON.stringify({ contactPhone: lead.phone_wa, messageText: draft }),
-    }).catch(() => {});
+    if (!draft) {
+      showToast('Isi pesan follow-up tidak boleh kosong.');
+      return;
+    }
 
-    fetchPipelineAndWa();
-    if (onDataChanged) onDataChanged();
+    // Wajib menggunakan nomor WhatsApp SE yang terhubung. Jika belum terhubung, arahkan ke integrasi QR dulu.
+    if (!waStatus || waStatus.status !== 'CONNECTED') {
+      showToast(
+        'Nomor WhatsApp Anda belum terhubung! Silakan scan QR pada panel Integrasi WhatsApp terlebih dahulu.'
+      );
+      document
+        .getElementById('wa-integration-section')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (!waStatus || waStatus.status === 'DISCONNECTED') {
+        handleConnectWa(false);
+      }
+      return;
+    }
 
-    const cleanPhone = lead.phone_wa.replace(/\D/g, '');
-    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(draft)}`;
-    window.open(waUrl, '_blank', 'noopener,noreferrer');
+    setSendingLeadId(lead.id);
+    try {
+      const res = await fetch('/api/wa/send-message', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({ contactPhone: lead.phone_wa, messageText: draft }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        if (data.code === 'WA_NOT_CONNECTED') {
+          showToast(
+            'Sesi WhatsApp belum terhubung. Silakan scan QR pada panel Integrasi WhatsApp di atas.'
+          );
+          document
+            .getElementById('wa-integration-section')
+            ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          handleConnectWa(false);
+          return;
+        }
+        showToast(data.error || 'Gagal mengirim pesan WhatsApp otomatis');
+        return;
+      }
+
+      await fetchPipelineAndWa();
+      if (onDataChanged) onDataChanged();
+      showToast(
+        `Pesan berhasil terkirim otomatis dari WA (${data.senderPhone || waStatus.phoneNumber}) ke ${lead.full_name}!`
+      );
+    } catch {
+      showToast('Terjadi kesalahan jaringan saat mengirim pesan WhatsApp.');
+    } finally {
+      setSendingLeadId(null);
+    }
   };
 
   const filteredLeads = useMemo(() => {
@@ -2082,6 +2124,23 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                               </div>
                             )}
 
+                            {lead.last_sales_message && (
+                              <div className="ml-6 rounded-2xl rounded-tr-xs bg-[#E7FFDB] p-2.5 shadow-2xs border border-[#c7eab0] text-xs text-[#111B21]">
+                                <div className="flex items-center justify-between gap-2 mb-0.5">
+                                  <p className="text-[10px] font-bold text-[#075E54]">
+                                    Terkirim dari WA {user.name.split(' ')[0]}:
+                                  </p>
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-[#075E54]">
+                                    <span>Terkirim</span>
+                                    <CheckCheck className="size-3 text-[#53BDEB]" />
+                                  </span>
+                                </div>
+                                <p className="leading-snug whitespace-pre-line line-clamp-3">
+                                  {lead.last_sales_message}
+                                </p>
+                              </div>
+                            )}
+
                             <div className="relative ml-3 rounded-2xl rounded-tr-xs bg-[#DCF8C6] p-3 shadow-xs border border-[#c7eab0]">
                               <textarea
                                 rows={7}
@@ -2106,15 +2165,25 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({ user, role, onDataCh
                           </div>
 
                           {/* Bottom Composer Bar WhatsApp */}
-                          <div className="p-2.5 bg-[#F0F2F5] border-t border-black/10 flex items-center gap-2">
+                          <div className="p-2.5 bg-[#F0F2F5] border-t border-black/10 flex flex-col gap-1.5">
                             <button
                               type="button"
+                              disabled={sendingLeadId === lead.id}
                               onClick={() => handleFollowUpWa(lead)}
-                              className="w-full min-h-[44px] px-4 rounded-full bg-[#128C7E] hover:bg-[#075E54] text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-colors"
+                              className={`w-full min-h-[44px] px-4 rounded-full text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-colors disabled:opacity-60 ${
+                                waStatus?.status === 'CONNECTED'
+                                  ? 'bg-[#128C7E] hover:bg-[#075E54]'
+                                  : 'bg-terracotta hover:bg-terracotta/90'
+                              }`}
                             >
-                              <Send className="size-4" />
-                              <span>Follow Up · Kirim via WhatsApp</span>
-                              <ExternalLink className="size-3.5" />
+                              <Send className="size-4 shrink-0" />
+                              <span>
+                                {sendingLeadId === lead.id
+                                  ? 'Mengirim Pesan WhatsApp Otomatis...'
+                                  : waStatus?.status === 'CONNECTED'
+                                  ? `Follow Up · Kirim Otomatis via WA (${waStatus.phoneNumber})`
+                                  : 'Follow Up · Hubungkan WA Dulu untuk Kirim Otomatis'}
+                              </span>
                             </button>
                           </div>
                         </div>

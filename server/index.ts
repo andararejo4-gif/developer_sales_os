@@ -13,6 +13,7 @@ import {
   getWaStatusForSe,
   processInboundWaMessageForSe,
   recordOutboundWaReplyForSe,
+  sendOutboundWaMessageForSe,
   normalizePhoneWa,
   resumeActiveWaSessionsOnStartup,
 } from './wa-baileys';
@@ -1222,6 +1223,24 @@ const server = http.createServer(async (req, res) => {
 
       const status = await getWaStatusForSe(user.email, user.name);
       sendJson(res, 200, { ok: true, processedCount: results.length, results, waStatus: status });
+      return;
+    }
+
+    // Kirim Pesan Follow-Up Otomatis Langsung melalui Nomor WA SE yang Terhubung (Baileys)
+    if (pathname === '/api/wa/send-message' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const sendRes = await sendOutboundWaMessageForSe({
+        seEmail: user.email,
+        seName: user.name,
+        contactPhone: String(body.contactPhone || ''),
+        messageText: String(body.messageText || ''),
+      });
+      if (!sendRes.sent) {
+        const statusCode = sendRes.code === 'WA_NOT_CONNECTED' ? 409 : 400;
+        sendJson(res, statusCode, { ok: false, ...sendRes });
+        return;
+      }
+      sendJson(res, 200, { ok: true, ...sendRes });
       return;
     }
 
