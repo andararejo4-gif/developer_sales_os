@@ -3,6 +3,14 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-044 | 2026-11-23 | Redesign Mobile Scorecard Bulanan (Visual KPI Progress) & Laporan Harian SE (On-Demand Notes + Quick Chips)
+- Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
+- Ubah: `src/components/mobile/SeMobileViews.tsx`, `src/App.tsx`
+- Detail Perubahan:
+  - **Mobile Scorecard Bulanan (`SeMobileScorecardList`):** Menambahkan strip ringkasan visual (`Total Poin / 100` + progress bar + jumlah KPI aktif) dan mengubah 7 baris KPI menjadi kartu visual dengan progress bar per komponen, badge bobot, perbandingan `Realisasi / Target`, serta detail rumus expandable saat diklik.
+  - **Mobile Laporan / Catatan Harian (`SeMobileDailyReportList`):** Menghapus 13 kotak `<input>` yang terbuka terus-menerus (hemat ~60% tinggi scroll). Setiap item tampil ringkas 1 kartu dengan tombol **`+ Catatan`** on-demand + **chip preset 1-ketuk** (`Sesuai target hari ini`, `Follow-up lanjut besok pagi`, dll.) serta tombol stepper `+ / -` yang lebih besar (`size-7`) di mobile.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
+
 ## P-043 | 2026-11-23 | Portal Z-Index Notifikasi (Tutupi Bottom Bar), Modal Detail Tengah & Daftar Tugas SE Lengkap
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/components/mobile/MobileBottomNav.tsx`, `src/components/se/SeNotificationCenter.tsx`, `src/App.tsx`

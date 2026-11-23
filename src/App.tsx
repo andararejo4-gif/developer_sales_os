@@ -540,24 +540,24 @@ export default function App() {
     const makeStepper = (label: string, field: string, currentVal: number, step = 1) => (
       <div
         key={field}
-        className="inline-flex items-center gap-1 bg-white border border-warmborder rounded-lg px-1.5 py-0.5 text-[11px]"
+        className="inline-flex items-center gap-1.5 bg-white border border-warmborder rounded-xl px-2 py-1 text-[11px]"
       >
-        <span className="text-warmmuted font-semibold">{label}:</span>
+        <span className="text-warmmuted font-bold">{label}:</span>
         <button
           type="button"
           onClick={() => adjustDailyCounters({ [field]: Math.max(0, currentVal - step) })}
-          className="size-5 rounded bg-sandstone hover:bg-warmborder text-espresso font-extrabold grid place-items-center cursor-pointer"
+          className="size-7 sm:size-5 rounded-lg bg-sandstone hover:bg-warmborder active:scale-95 text-espresso font-extrabold grid place-items-center cursor-pointer"
           title={`Kurangi ${label}`}
         >
           -
         </button>
-        <span className="font-extrabold text-espresso tabular-nums min-w-[16px] text-center">
+        <span className="font-extrabold text-espresso tabular-nums min-w-[18px] text-center">
           {currentVal}
         </span>
         <button
           type="button"
           onClick={() => adjustDailyCounters({ [field]: currentVal + step })}
-          className="size-5 rounded bg-amber-50 hover:bg-terracotta hover:text-white text-terracotta font-extrabold grid place-items-center cursor-pointer transition-colors"
+          className="size-7 sm:size-5 rounded-lg bg-amber-50 hover:bg-terracotta hover:text-white active:scale-95 text-terracotta font-extrabold grid place-items-center cursor-pointer transition-colors"
           title={`Tambah ${label}`}
         >
           +
@@ -2163,24 +2163,26 @@ export default function App() {
                   </table>
                 </div>
 
-                <div className="p-4 bg-sandstone/60 border-t border-warmborder flex flex-wrap items-center justify-between gap-3">
+                <div className="p-3.5 sm:p-4 bg-sandstone/60 border-t border-warmborder grid grid-cols-2 sm:flex sm:flex-wrap items-center justify-between gap-2.5 sm:gap-3">
                   <button
                     type="button"
                     onClick={async () => {
                       await fetchSeRealDashboard();
                       setToast('Data Laporan Harian & Scorecard disinkronkan dari database!');
                     }}
-                    className="text-xs font-semibold text-terracotta hover:text-espresso flex items-center gap-1.5 cursor-pointer"
+                    className="min-h-[44px] sm:min-h-0 px-3 sm:px-0 rounded-xl sm:rounded-none bg-white sm:bg-transparent border sm:border-0 border-warmborder text-xs font-bold text-terracotta hover:text-espresso flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <RefreshCw className="size-3.5" />
-                    <span>Sinkronkan Data Real Database</span>
+                    <RefreshCw className="size-3.5 shrink-0" />
+                    <span className="sm:hidden">Sinkronkan DB</span>
+                    <span className="hidden sm:inline">Sinkronkan Data Real Database</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsExportReportModalOpen(true)}
-                    className="min-h-[40px] px-5 rounded-xl bg-terracotta text-white text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-sm hover:bg-terracotta/90"
+                    className="min-h-[44px] sm:min-h-[40px] px-4 sm:px-5 rounded-xl bg-terracotta text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:bg-terracotta/90"
                   >
-                    <Download className="size-3.5" /> Export Laporan
+                    <Download className="size-3.5 shrink-0" />
+                    <span>Export Laporan</span>
                   </button>
                 </div>
               </section>
