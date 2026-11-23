@@ -51,6 +51,7 @@ export interface GeneratedSlotSpec {
   funnelStage: 'TOFU' | 'MOFU' | 'BOFU';
   platform: 'Instagram' | 'TikTok' | 'Facebook' | 'YouTube Shorts';
   format: 'Carousel Edukasi' | 'Single Image + Visual Quote' | 'Reels / Video Pendek';
+  hook?: string;
   title: string;
   brief: string;
   visualPrompt: string;
@@ -305,22 +306,27 @@ ATURAN WAJIB ANTI-HALUSINASI & KEPATUHAN (BAB 7.11):
 3. Booking fee resmi Rp5.000.000 hanya ke rekening PT Andara Rejo Makmur.
 4. DILARANG memasukkan nama Sales Executive ("${seName}") atau nama orang siapa pun ke dalam visualPrompt atau slideDeck[].visualPrompt. Fasad rumah harus bersih tanpa tulisan/nama (tulisan "The Park Townhouse" hanya boleh di gerbang masuk utama cluster).
 
-BUAT 3 KONTEN HARIAN UNIK SESUAI RUMUS TOFU · MOFU · BOFU:
-1. Slot 1 (09:00 WIB, TOFU — Edukasi & Saveable, format "Carousel Edukasi", platform "Instagram"):
+BUAT 3 KONTEN HARIAN UNIK SESUAI RUMUS ASLI TOFU · MOFU · BOFU (WAJIB SERTAKAN FIELD "hook" YANG KUAT):
+1. Slot 1 (09:00 WIB, TOFU — Awareness, Edukasi & Saveable, format "Carousel Edukasi", platform "Instagram"):
+   - TUJUAN TOFU: Menarik audiens baru & memicu Save/Share TANPA hard-sell atau menyebut harga/booking fee.
+   - "hook" (baris 1 caption, maks 12 kata): Gunakan *Curiosity / Aspirational Pain-Point Hook* yang langsung menyentuh keresahan ${persona.archetype} (contoh pola: "Banyak keluarga baru sadar hal ini setelah pindah rumah...").
    - WAJIB punya "slideDeck" tepat 5 slide yang NYAMBUNG dari Slide 1 s.d. Slide 5 seperti satu cerita majalah:
-     * Slide 1 (Cover Hook): Pertanyaan/aspirasi menyentuh persona ${persona.name}, TANPA harga keras. Visual: perspektif diagonal jalan cluster megah golden hour.
-     * Slide 2 (Problem -> Solusi 1): Menjawab kekhawatiran persona dengan fakta Playbook. Visual: ruang tamu 2 lantai terang & hangat.
+     * Slide 1 (Cover Hook): Pertanyaan/pernyataan scroll-stopper menyentuh aspirasi ${persona.archetype}, TANPA harga keras. Visual: perspektif diagonal jalan cluster megah golden hour.
+     * Slide 2 (Problem -> Solusi 1): Menjawab kekhawatiran utama persona dengan fakta Playbook. Visual: ruang tamu 2 lantai terang & hangat.
      * Slide 3 (Solusi 2): Keunggulan spesifik pilar "${pillar.label}". Visual: sudut arsitektur/garasi dalam/smart door lock.
      * Slide 4 (Solusi 3): Bukti kualitas hidup (Clubhouse / One-gate RFID / lingkungan homogen). Visual: fasilitas clubhouse kolam renang / taman.
      * Slide 5 (Soft CTA): Ajak simpan (Save) & DM untuk konsultasi/denah. Visual: suasana keluarga hangat di gerbang utama bertuliskan "The Park Townhouse".
    - ATURAN TEKS SLIDE (agar Google Flow bebas typo): kicker 2–3 kata, headline 3–5 kata, subheadline 4–7 kata.
-2. Slot 2 (14:00 WIB, MOFU — Pertimbangan & Bukti Nyata, format "${slot2Format}", platform "${slot2Format === 'Carousel Edukasi' ? 'Instagram' : 'TikTok'}", durationSeconds=${slot2Format === 'Carousel Edukasi' ? 0 : reelsDur1}):
-   - Fokus membedah unit ${unitFocus.label} & perbandingan nilai nyata (vs rumah second / bangun sendiri).
-   - ${slot2Format === 'Carousel Edukasi' ? 'WAJIB sertakan "slideDeck" tepat 5 slide yang nyambung (Slide 1 Cover Bedah Unit -> Slide 2 Bukti Lokasi -> Slide 3 Bukti Tata Ruang & Garasi -> Slide 4 Bukti Clubhouse & Smart Living -> Slide 5 CTA Survei Privat), kicker 2-3 kata, headline 3-5 kata, subheadline 4-7 kata.' : 'Sertakan brief skrip per detik + visualPrompt sinematik vertikal 9:16.'}
-3. Slot 3 (19:30 WIB, BOFU — Penawaran & Closing, format "${slot3Format}", platform "Instagram", durationSeconds=${slot3Format === 'Single Image + Visual Quote' ? 0 : reelsDur2}):
-   - Fokus penawaran nyata unit ${unitFocus.label} (Cash ${unitCashLabel} / KPR ${unitKprLabel} / CT12 / CT24, Booking Fee Rp5 Juta, momentum kenaikan harga Desember ±7–8%).
-   - ${slot3Format === 'Single Image + Visual Quote' ? `WAJIB sertakan "slideDeck" berisi tepat 1 objek poster flagship [{"kicker":"2-3 kata","headline":"3-5 kata","subheadline":"4-7 kata","visualPrompt":"sweeping diagonal cluster street at golden hour...","badgePrice":"${unitBadge}"}]` : 'Sertakan brief skrip per detik + visualPrompt sinematik vertikal 9:16.'}
+2. Slot 2 (14:00 WIB, MOFU — Consideration, Pertimbangan & Bukti Nyata, format "${slot2Format}", platform "${slot2Format === 'Carousel Edukasi' ? 'Instagram' : 'TikTok'}", durationSeconds=${slot2Format === 'Carousel Edukasi' ? 0 : reelsDur1}):
+   - TUJUAN MOFU: Membantu audiens membandingkan & percaya pada kualitas ${unitFocus.label} (vs rumah second / bangun sendiri).
+   - "hook" (baris 1 caption, maks 14 kata): Gunakan *Comparison / Myth-Busting / Proof Hook* (contoh pola: "Beli rumah second siap huni vs townhouse Japandi baru: mana yang lebih hemat biaya tak terduga?").
+   - ${slot2Format === 'Carousel Edukasi' ? 'WAJIB sertakan "slideDeck" tepat 5 slide yang nyambung (Slide 1 Cover Bedah Unit -> Slide 2 Bukti Lokasi -> Slide 3 Bukti Tata Ruang & Garasi -> Slide 4 Bukti Clubhouse & Smart Living -> Slide 5 CTA Survei Privat), kicker 2-3 kata, headline 3-5 kata, subheadline 4-7 kata.' : `Sertakan "brief" skrip per detik yang KETAT (0-3d: Visual+Text Hook scroll-stopper | 4-11d: Tur & Bukti spesifikasi ${unitFocus.label} | 12-${reelsDur1}d: CTA Survei Privat) + visualPrompt sinematik vertikal 9:16.`}
+3. Slot 3 (19:30 WIB, BOFU — Conversion, Penawaran & Closing, format "${slot3Format}", platform "Instagram", durationSeconds=${slot3Format === 'Single Image + Visual Quote' ? 0 : reelsDur2}):
+   - TUJUAN BOFU: Mendorong aksi nyata (DM/WA/Survei/Booking) dengan penawaran spesifik unit ${unitFocus.label} (Cash ${unitCashLabel} / KPR ${unitKprLabel} / CT12 / CT24, Booking Fee Rp5 Juta, momentum penyesuaian harga Desember ±7–8%).
+   - "hook" (baris 1 caption, maks 14 kata): Gunakan *Specific Offer / Price-Anchor Hook* (contoh pola: "Mulai ${unitKprLabel} (KPR) — 3 kamar tidur + garasi dalam + akses clubhouse seumur hidup, unit boutique terbatas."). Dilarang sapaan chat kaku seperti "Malam Bapak/Ibu".
+   - ${slot3Format === 'Single Image + Visual Quote' ? `WAJIB sertakan "slideDeck" berisi tepat 1 objek poster flagship [{"kicker":"2-3 kata","headline":"3-5 kata","subheadline":"4-7 kata","visualPrompt":"sweeping diagonal cluster street at golden hour...","badgePrice":"${unitBadge}"}]` : `Sertakan "brief" skrip per detik yang KETAT (0-3d: Offer Hook dengan angka resmi | 4-11d: Skema bayar Cash/KPR/CT24 & keunggulan inti | 12-${reelsDur2}d: CTA WA & Booking Rp5 Juta) + visualPrompt sinematik vertikal 9:16.`}
 
+Setiap objek dalam JSON array WAJIB memiliki field: "hook", "title", "brief", "visualPrompt", "caption", "hashtags", "cta", "platform", "durationSeconds", dan "slideDeck" (bila Carousel/Single Image).
 Balas HANYA JSON array valid berisi 3 objek (tanpa markdown fence).`;
 
       const resp = await fetch(`${baseUrl}/chat/completions`, {
@@ -377,6 +383,13 @@ Balas HANYA JSON array valid berisi 3 objek (tanpa markdown fence).`;
                     }))
                   : undefined;
 
+              const cleanHook = item.hook ? enforcePlaybookCompliance(String(item.hook).trim()) : '';
+              const rawCaption = enforcePlaybookCompliance(String(item.caption || ''));
+              const finalCaption =
+                cleanHook && !rawCaption.toLowerCase().startsWith(cleanHook.slice(0, 20).toLowerCase())
+                  ? `${cleanHook}\n\n${rawCaption}`
+                  : rawCaption;
+
               return {
                 slotOrder: (idx + 1) as 1 | 2 | 3,
                 scheduledTime: idx === 0 ? '09:00 WIB' : idx === 1 ? '14:00 WIB' : '19:30 WIB',
@@ -385,10 +398,11 @@ Balas HANYA JSON array valid berisi 3 objek (tanpa markdown fence).`;
                   item.platform ||
                   (idx === 1 && expectedFormat === 'Reels / Video Pendek' ? 'TikTok' : 'Instagram'),
                 format: expectedFormat,
-                title: enforcePlaybookCompliance(String(item.title || `[${persona.code}] ${pillar.label} (H-${dayNumber})`)),
+                hook: cleanHook || undefined,
+                title: enforcePlaybookCompliance(String(item.title || `${pillar.label} — ${unitFocus.cluster}`)),
                 brief: enforcePlaybookCompliance(String(item.brief || '')),
                 visualPrompt: sanitizeVisualPrompt(String(item.visualPrompt || item.brief || ''), seName),
-                caption: enforcePlaybookCompliance(String(item.caption || '')),
+                caption: finalCaption,
                 hashtags: Array.isArray(item.hashtags) ? item.hashtags : ['#TheParkTownhouse', '#Sukoharjo'],
                 cta: enforcePlaybookCompliance(String(item.cta || 'Hubungi saya via WhatsApp untuk survei privat.')),
                 durationSeconds:
@@ -523,10 +537,11 @@ Balas HANYA JSON array valid berisi 3 objek (tanpa markdown fence).`;
       funnelStage: 'TOFU',
       platform: 'Instagram',
       format: 'Carousel Edukasi',
-      title: `[${persona.code}] ${pillar.label} — Fokus ${unitFocus.cluster} (H-${dayNumber})`,
-      brief: `Carousel 5 slide edukasi Playbook v1.2 untuk ${persona.name}. Motivasi: ${persona.motivasi}. Menjawab kekhawatiran: ${persona.kekhawatiran}.`,
+      hook: `Kenapa banyak ${persona.archetype} memilih hunian 2 lantai ber-clubhouse di Solo Selatan?`,
+      title: `${pillar.label}: Checklist Hunian Ideal ${unitFocus.cluster}`,
+      brief: `Carousel 5 slide edukasi TOFU (tanpa hard-sell) untuk ${persona.archetype}. Motivasi: ${persona.motivasi}. Menjawab kekhawatiran: ${persona.kekhawatiran}.`,
       visualPrompt: tofuDeck[0].visualPrompt,
-      caption: `Untuk ${persona.archetype}: ${persona.openingHook}\n\nDi The Park Townhouse Sukoharjo (${unitFocus.label}), Anda mendapatkan ${pillar.focus} Yuk geser sampai slide terakhir untuk checklist hunian ideal keluarga.`,
+      caption: `Kenapa banyak ${persona.archetype} memilih hunian 2 lantai ber-clubhouse di Solo Selatan?\n\n${persona.openingHook}\n\nDi The Park Townhouse Sukoharjo (${unitFocus.label}), Anda mendapatkan ${pillar.focus} Geser sampai slide terakhir untuk checklist hunian ideal keluarga.`,
       hashtags: ['#TheParkTownhouse', '#TownhouseSukoharjo', '#JapandiModern', '#AndaraRejoMakmur'],
       cta: 'Simpan postingan ini & DM saya untuk info denah lengkap.',
       durationSeconds: 0,
@@ -539,16 +554,17 @@ Balas HANYA JSON array valid berisi 3 objek (tanpa markdown fence).`;
       funnelStage: 'MOFU',
       platform: slot2Format === 'Carousel Edukasi' ? 'Instagram' : 'TikTok',
       format: slot2Format,
-      title: `[Bedah ${unitFocus.label.split('(')[0].trim()}] ${pillar.label} (H-${dayNumber})`,
+      hook: `Beli rumah second lalu renovasi vs unit baru ${unitFocus.label} — cek hitungan nyatanya.`,
+      title: `Bedah ${unitFocus.label.split('(')[0].trim()}: ${pillar.label}`,
       brief:
         slot2Format === 'Carousel Edukasi'
-          ? `Carousel 5 slide MOFU membedah ${unitFocus.label} (${unitCashLabel} cash / ${unitKprLabel} KPR) untuk segmen ${persona.archetype}.`
-          : `Video vertikal ${reelsDur1} detik (0–3d Hook ${persona.archetype}, 4–10d Tur ${unitFocus.label} & ${pillar.label}, 11–${reelsDur1}d CTA survei privat).`,
+          ? `Carousel 5 slide MOFU membedah ${unitFocus.label} (${unitCashLabel} cash / ${unitKprLabel} KPR) vs rumah second untuk segmen ${persona.archetype}.`
+          : `0–3d Hook: Perbandingan rumah second vs ${unitFocus.label} | 4–11d Tur: ${pillar.label} & tata ruang 2 lantai | 12–${reelsDur1}d CTA: Survei privat.`,
       visualPrompt:
         slot2Format === 'Carousel Edukasi'
           ? mofuDeck[0].visualPrompt
           : `Vertical 9:16 real estate Reels video (${reelsDur1}s) showcasing ${unitFocus.label} modern 2-story white tropical Japandi townhouse in Sukoharjo, warm golden daylight, photorealistic`,
-      caption: `Siang ini saya (${seName}) bedah unit ${unitFocus.label} di Cluster ${unitFocus.cluster}. Cocok untuk ${persona.archetype} yang menginginkan ${pillar.focus}`,
+      caption: `Beli rumah second lalu renovasi vs unit baru ${unitFocus.label} — cek hitungan nyatanya.\n\nSiang ini saya bedah unit ${unitFocus.label} di Cluster ${unitFocus.cluster}. Cocok untuk ${persona.archetype} yang menginginkan ${pillar.focus}`,
       hashtags: ['#TourRumahSukoharjo', '#TheParkTownhouse', `#Cluster${unitFocus.cluster}`],
       cta: 'Ketik "SURVEI" di komentar untuk kirim pin lokasi Marketing Gallery & jadwal tur privat.',
       durationSeconds: slot2Format === 'Carousel Edukasi' ? 0 : reelsDur1,
@@ -561,15 +577,19 @@ Balas HANYA JSON array valid berisi 3 objek (tanpa markdown fence).`;
       funnelStage: 'BOFU',
       platform: 'Instagram',
       format: slot3Format,
-      title: `[Penawaran ${unitFocus.label.split('(')[0].trim()}] Cash ${unitCashLabel} · Booking Rp5 Juta (H-${dayNumber})`,
-      brief: `Konten BOFU untuk ${persona.name}: ${persona.pendekatanClosing}. Skema Cash Keras (${unitCashLabel}), CT12, CT24, dan KPR DP 10% (${unitKprLabel}).`,
+      hook: `Mulai ${unitKprLabel} (KPR) atau ${unitCashLabel} (Cash) — 3 KT + garasi dalam + akses clubhouse seumur hidup.`,
+      title: `Penawaran ${unitFocus.label.split('(')[0].trim()}: Cash ${unitCashLabel} · Booking Rp5 Juta`,
+      brief:
+        slot3Format === 'Single Image + Visual Quote'
+          ? `Poster BOFU untuk ${persona.archetype}: ${persona.pendekatanClosing}. Skema Cash Keras (${unitCashLabel}), CT12, CT24, dan KPR DP 10% (${unitKprLabel}).`
+          : `0–3d Offer Hook: Mulai ${unitKprLabel} KPR / ${unitCashLabel} Cash | 4–11d Skema bayar & keunggulan inti | 12–${reelsDur2}d CTA WA & Booking Rp5 Juta.`,
       visualPrompt:
         slot3Format === 'Single Image + Visual Quote'
           ? bofuPosterDeck[0].visualPrompt
           : `Vertical 9:16 evening luxury townhouse walkthrough (${reelsDur2}s) for ${unitFocus.label}, warm architectural lighting, inviting family atmosphere, photorealistic`,
-      caption: `Malam Bapak/Ibu, unit ${unitFocus.label} tersedia dengan harga Cash ${unitCashLabel} atau KPR ${unitKprLabel} (DP 10%, pengajuan paralel 2 bank). Booking Fee resmi Rp5.000.000 melalui rekening PT Andara Rejo Makmur—sebelum penyesuaian harga Desember.`,
+      caption: `Mulai ${unitKprLabel} (KPR) atau ${unitCashLabel} (Cash) — 3 KT + garasi dalam + akses clubhouse seumur hidup.\n\nUnit ${unitFocus.label} tersedia dengan skema Cash Keras, CT12, CT24, atau KPR DP 10% (pengajuan paralel 2 bank). Booking Fee resmi Rp5.000.000 melalui rekening PT Andara Rejo Makmur sebelum penyesuaian harga Desember.`,
       hashtags: ['#KPRSukoharjo', '#TheParkTownhouse', '#BookingFee5Juta', '#AndaraRejoMakmur'],
-      cta: 'Balas DM atau klik link WA saya untuk simulasi cicilan & cek ketersediaan kavling.',
+      cta: 'Klik link WA di bio atau DM sekarang untuk simulasi cicilan & cek kavling tersedia.',
       durationSeconds: slot3Format === 'Single Image + Visual Quote' ? 0 : reelsDur2,
       personaCode,
       slideDeck: slot3Format === 'Single Image + Visual Quote' ? bofuPosterDeck : undefined,

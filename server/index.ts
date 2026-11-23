@@ -645,10 +645,54 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
     },
   };
 
+  // Quick Status Harian SE (Absensi, Rute Canvassing, Slot Konten Hari Ini)
+  const dayNamesId = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const wibNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  const todayDayName = dayNamesId[wibNow.getUTCDay()] || 'Senin';
+
+  const [todayFieldRows, todayRouteRows, todaySlotRows] = await Promise.all([
+    sql`
+      SELECT log_type, created_at
+      FROM sales_os.se_field_logs
+      WHERE se_email = ${seEmail}
+        AND (created_at AT TIME ZONE 'Asia/Jakarta')::date = ${todayStr}::date
+      ORDER BY created_at DESC
+    `.catch(() => [] as any[]),
+    sql`
+      SELECT waypoints
+      FROM sales_os.se_custom_routes
+      WHERE se_email = ${seEmail} AND day_name = ${todayDayName}
+      LIMIT 1
+    `.catch(() => [] as any[]),
+    sql`
+      SELECT status, day_number
+      FROM sales_os.se_content_slots
+      WHERE se_email = ${seEmail}
+        AND (report_date = ${todayStr}::date OR day_number = 1)
+    `.catch(() => [] as any[]),
+  ]);
+
+  const checkInRow = todayFieldRows.find((r: any) => r.log_type === 'CHECK_IN');
+  const checkOutRow = todayFieldRows.find((r: any) => r.log_type === 'CHECK_OUT');
+  const routeWps: any[] = Array.isArray(todayRouteRows[0]?.waypoints) ? todayRouteRows[0].waypoints : [];
+  const routeVisitedCount = routeWps.filter((w) => Boolean(w?.visited)).length;
+  const slotsUploadedToday = todaySlotRows.filter((s: any) => s.status === 'SUDAH_POSTING').length;
+
   return {
     seEmail,
     seName,
     todayWib: todayStr,
+    quickStatus: {
+      checkedIn: Boolean(checkInRow),
+      checkedOut: Boolean(checkOutRow),
+      checkInTime: checkInRow?.created_at || null,
+      routeDayName: todayDayName,
+      routeVisitedCount,
+      routeTotalCount: routeWps.length,
+      slotsUploadedToday,
+      slotsTotalToday: Math.max(3, todaySlotRows.length > 0 ? Math.min(3, todaySlotRows.length) : 3),
+      reportSavedAt: daily.updated_at || null,
+    },
     periods,
     metrics: {
       leadsTodayValidCount: leadsTodayValid.length,

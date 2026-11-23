@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PublicHomepageV3 } from './components/v3/PublicHomepageV3';
 import { MarketResearchViewer } from './components/MarketResearchViewer';
 import { SalesTargetViewer } from './components/SalesTargetViewer';
@@ -338,7 +338,7 @@ export default function App() {
 
   const fetchSeRealDashboard = async () => {
     try {
-      const res = await fetch('/api/se/dashboard', {
+      const res = await fetch(`/api/se/dashboard?projectId=${encodeURIComponent(activeProjectId)}`, {
         headers: {
           'X-User-Email': user.email,
           'X-User-Role': role,
@@ -582,10 +582,44 @@ export default function App() {
     return null;
   };
 
+  const noteSaveTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
   const updateItem = (id: number, field: 'realisasi' | 'catatan', val: string) => {
     setItems((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: val } : r)));
     if (field === 'catatan') {
-      fetch('/api/se/daily-activity', {
+      if (noteSaveTimersRef.current[id]) {
+        clearTimeout(noteSaveTimersRef.current[id]);
+      }
+      noteSaveTimersRef.current[id] = setTimeout(() => {
+        fetch('/api/se/daily-activity', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Email': user.email,
+            'X-User-Role': role,
+          },
+          body: JSON.stringify({
+            itemNotes: { [String(id)]: val },
+            ...(id === 13 ? { hambatanBantuan: val } : {}),
+          }),
+        })
+          .then((r) => {
+            if (!r.ok) setToast('Gagal menyimpan catatan ke database');
+          })
+          .catch(() => setToast('Koneksi terputus saat menyimpan catatan'));
+      }, 500);
+    }
+  };
+
+  const copyWa = async () => {
+    const itemNotesPayload: Record<string, string> = {};
+    items.forEach((r) => {
+      if (r.catatan) itemNotesPayload[String(r.id)] = r.catatan;
+    });
+    const hambatanItem = items.find((r) => r.id === 13);
+
+    try {
+      const res = await fetch('/api/se/daily-activity', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -593,14 +627,21 @@ export default function App() {
           'X-User-Role': role,
         },
         body: JSON.stringify({
-          itemNotes: { [String(id)]: val },
-          ...(id === 13 ? { hambatanBantuan: val } : {}),
+          itemNotes: itemNotesPayload,
+          hambatanBantuan: hambatanItem?.catatan || '',
+          submittedReport: true,
         }),
-      }).catch(() => {});
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.ok && json.data) {
+          setSeRealData(json.data);
+        }
+      }
+    } catch {
+      /* tetap lanjut salin agar SE tidak terblokir */
     }
-  };
 
-  const copyWa = async () => {
     const lines = [
       `*LAPORAN HARIAN SE — DEVELOPER SALES OS*`,
       `${activeProject.nama}`,
@@ -612,9 +653,9 @@ export default function App() {
     );
     try {
       await navigator.clipboard.writeText(lines.join('\n'));
-      setToast('Laporan WA disalin!');
+      setToast('Laporan Harian tersimpan ke database & disalin ke clipboard!');
     } catch {
-      setToast('Gagal menyalin');
+      setToast('Laporan tersimpan ke DB, tetapi gagal menyalin ke clipboard');
     }
   };
 
@@ -1694,12 +1735,80 @@ export default function App() {
               {/* Tindakan Hari Ini (Mobile Priority Card) */}
               <SeMobileActionCard
                 hits={hits}
-                totalItems={items.length}
+                totalItems={items.filter((r) => r.targetNum !== null).length}
                 onJumpToReport={() => {
                   openDashboardSection('laporan-harian');
                 }}
                 onCopyWa={copyWa}
               />
+
+              {/* Strip Status Operasional Harian SE (Absensi, Rute, Konten) */}
+              <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => openView('lapangan')}
+                  className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-3.5 shadow-xs flex items-center justify-between gap-3 text-left cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`size-9 rounded-xl grid place-items-center shrink-0 ${seRealData?.quickStatus?.checkedIn ? 'bg-lime-100 text-olive' : 'bg-amber-50 text-terracotta'}`}>
+                      <PhoneCall className="size-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold uppercase text-warmmuted">Absensi Hari Ini</p>
+                      <p className="text-xs font-extrabold text-espresso truncate">
+                        {seRealData?.quickStatus?.checkedIn
+                          ? seRealData?.quickStatus?.checkedOut
+                            ? 'Selesai Tugas ✓'
+                            : 'Sudah Check-In ✓'
+                          : 'Belum Check-In'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold text-terracotta shrink-0">Buka &rarr;</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => openView('rute')}
+                  className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-3.5 shadow-xs flex items-center justify-between gap-3 text-left cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="size-9 rounded-xl bg-amber-50 text-terracotta grid place-items-center shrink-0">
+                      <MapPin className="size-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold uppercase text-warmmuted">
+                        Rute {seRealData?.quickStatus?.routeDayName || 'Hari Ini'}
+                      </p>
+                      <p className="text-xs font-extrabold text-espresso truncate">
+                        {seRealData?.quickStatus?.routeTotalCount
+                          ? `${seRealData.quickStatus.routeVisitedCount}/${seRealData.quickStatus.routeTotalCount} Titik Dikunjungi`
+                          : 'Lihat Rute Canvassing'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold text-terracotta shrink-0">Buka &rarr;</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => openView('kalender')}
+                  className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-3.5 shadow-xs flex items-center justify-between gap-3 text-left cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="size-9 rounded-xl bg-amber-50 text-terracotta grid place-items-center shrink-0">
+                      <Calendar className="size-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold uppercase text-warmmuted">Konten Hari Ini (TOFU/MOFU/BOFU)</p>
+                      <p className="text-xs font-extrabold text-espresso truncate">
+                        {seRealData?.quickStatus?.slotsUploadedToday ?? 0}/{seRealData?.quickStatus?.slotsTotalToday ?? 3} Slot Terunggah
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold text-terracotta shrink-0">Buka &rarr;</span>
+                </button>
+              </section>
 
               {/* Top Split KPI Card & Monthly Revenue */}
               <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-5">
@@ -1964,7 +2073,7 @@ export default function App() {
                     <div className="flex items-center gap-2.5">
                       <h2 className="text-base font-bold text-espresso">Laporan Harian SE (13 Item Playbook §13.1)</h2>
                       <span className="text-xs font-bold px-2.5 py-0.5 rounded-lg bg-amber-50 text-terracotta">
-                        {hits}/10 Target Hit
+                        {hits}/{items.filter((r) => r.targetNum !== null).length} Target Hit
                       </span>
                     </div>
                     <p className="text-xs text-warmmuted mt-0.5">
