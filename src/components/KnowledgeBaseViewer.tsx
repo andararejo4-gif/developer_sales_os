@@ -8,6 +8,7 @@ import {
   Home,
   ChevronDown,
   CheckCircle2,
+  X,
 } from 'lucide-react';
 import { THE_PARK_KB_FACTS } from '../lib/kb/the-park-facts';
 import type { KbFact } from '../lib/kb/types';
@@ -76,15 +77,32 @@ export const KnowledgeBaseViewer: React.FC<{
   };
 
   const [expandedFactId, setExpandedFactId] = useState<string | null>(null);
+  const [activePicker, setActivePicker] = useState<null | 'category' | 'unit' | 'dp' | 'tenor'>(null);
 
-  // Simulasi KPR & Siteplan State
-  const [simUnitIdx, setSimUnitIdx] = useState(0);
-  const [simDpPercent, setSimDpPercent] = useState(10);
-  const [simTenorYears, setSimTenorYears] = useState(15);
+  // Simulasi KPR & Siteplan State (mendukung opsi Lainnya / Custom)
+  const [simUnitMode, setSimUnitMode] = useState<string>('0');
+  const [customUnitPriceIdr, setCustomUnitPriceIdr] = useState<number>(850_000_000);
+  const [simDpMode, setSimDpMode] = useState<string>('10');
+  const [customDpPercent, setCustomDpPercent] = useState<number>(25);
+  const [simTenorMode, setSimTenorMode] = useState<string>('15');
+  const [customTenorYears, setCustomTenorYears] = useState<number>(12);
   const [simInterestRate, setSimInterestRate] = useState(6.5);
 
-  const selectedSimUnit = PLAYBOOK_UNIT_CATALOG[simUnitIdx] || PLAYBOOK_UNIT_CATALOG[0];
-  const simPrice = selectedSimUnit.priceKprIdr;
+  const isCustomUnit = simUnitMode === 'CUSTOM';
+  const selectedSimUnit = !isCustomUnit
+    ? PLAYBOOK_UNIT_CATALOG[Number(simUnitMode)] || PLAYBOOK_UNIT_CATALOG[0]
+    : null;
+  const simPrice = isCustomUnit
+    ? Math.max(0, Number(customUnitPriceIdr) || 0)
+    : selectedSimUnit!.priceKprIdr;
+  const simDpPercent =
+    simDpMode === 'CUSTOM'
+      ? Math.max(0, Math.min(90, Number(customDpPercent) || 0))
+      : Number(simDpMode);
+  const simTenorYears =
+    simTenorMode === 'CUSTOM'
+      ? Math.max(1, Math.min(35, Number(customTenorYears) || 1))
+      : Number(simTenorMode);
   const simDpAmount = Math.round((simPrice * simDpPercent) / 100);
   const simPlafon = Math.max(0, simPrice - simDpAmount);
   const monthlyRate = simInterestRate / 100 / 12;
@@ -256,44 +274,100 @@ export const KnowledgeBaseViewer: React.FC<{
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
               <div>
                 <label className="block font-bold text-espresso mb-1">Pilih Tipe Unit</label>
-                <select
-                  value={simUnitIdx}
-                  onChange={(e) => setSimUnitIdx(Number(e.target.value))}
-                  className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder bg-white font-semibold"
+                <button
+                  type="button"
+                  onClick={() => setActivePicker('unit')}
+                  className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder bg-white font-semibold text-left flex items-center justify-between gap-2 cursor-pointer hover:border-terracotta"
                 >
-                  {PLAYBOOK_UNIT_CATALOG.map((u, idx) => (
-                    <option key={u.label} value={idx}>
-                      {u.label} ({formatIdr(u.priceKprIdr)})
-                    </option>
-                  ))}
-                </select>
+                  <span className="truncate text-espresso">
+                    {isCustomUnit
+                      ? `Lainnya (${formatIdr(simPrice)})`
+                      : `${selectedSimUnit?.label} (${formatIdr(simPrice)})`}
+                  </span>
+                  <ChevronDown className="size-4 text-warmmuted shrink-0" />
+                </button>
+                {isCustomUnit && (
+                  <div className="mt-2">
+                    <label className="block text-[10px] font-bold text-terracotta mb-1">
+                      Masukkan Harga Properti (Rp)
+                    </label>
+                    <input
+                      type="number"
+                      min={50_000_000}
+                      step={5_000_000}
+                      value={customUnitPriceIdr}
+                      onChange={(e) => setCustomUnitPriceIdr(Number(e.target.value))}
+                      placeholder="Contoh: 850000000"
+                      className="w-full min-h-[44px] px-3 rounded-xl border border-terracotta/60 bg-white font-semibold text-espresso focus:outline-none focus:border-terracotta"
+                    />
+                  </div>
+                )}
               </div>
+
               <div className="grid grid-cols-2 sm:contents gap-2.5">
                 <div>
                   <label className="block font-bold text-espresso mb-1">Uang Muka ({simDpPercent}%)</label>
-                  <select
-                    value={simDpPercent}
-                    onChange={(e) => setSimDpPercent(Number(e.target.value))}
-                    className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder bg-white font-semibold"
+                  <button
+                    type="button"
+                    onClick={() => setActivePicker('dp')}
+                    className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder bg-white font-semibold text-left flex items-center justify-between gap-2 cursor-pointer hover:border-terracotta"
                   >
-                    {[10, 15, 20, 30].map((d) => (
-                      <option key={d} value={d}>{d}% ({formatIdr(Math.round((simPrice * d) / 100))})</option>
-                    ))}
-                  </select>
+                    <span className="truncate text-espresso">
+                      {simDpMode === 'CUSTOM' ? `Lainnya (${simDpPercent}%)` : `${simDpPercent}%`}
+                    </span>
+                    <ChevronDown className="size-4 text-warmmuted shrink-0" />
+                  </button>
+                  {simDpMode === 'CUSTOM' && (
+                    <div className="mt-2">
+                      <label className="block text-[10px] font-bold text-terracotta mb-1">
+                        Persen DP (%)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={90}
+                        step={1}
+                        value={customDpPercent}
+                        onChange={(e) => setCustomDpPercent(Number(e.target.value))}
+                        className="w-full min-h-[44px] px-3 rounded-xl border border-terracotta/60 bg-white font-semibold text-espresso focus:outline-none focus:border-terracotta"
+                      />
+                    </div>
+                  )}
                 </div>
+
                 <div>
                   <label className="block font-bold text-espresso mb-1">Tenor Cicilan</label>
-                  <select
-                    value={simTenorYears}
-                    onChange={(e) => setSimTenorYears(Number(e.target.value))}
-                    className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder bg-white font-semibold"
+                  <button
+                    type="button"
+                    onClick={() => setActivePicker('tenor')}
+                    className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder bg-white font-semibold text-left flex items-center justify-between gap-2 cursor-pointer hover:border-terracotta"
                   >
-                    {[5, 10, 15, 20].map((t) => (
-                      <option key={t} value={t}>{t} Thn ({t * 12} Bln)</option>
-                    ))}
-                  </select>
+                    <span className="truncate text-espresso">
+                      {simTenorMode === 'CUSTOM'
+                        ? `Lainnya (${simTenorYears} Thn)`
+                        : `${simTenorYears} Thn (${simTenorYears * 12} Bln)`}
+                    </span>
+                    <ChevronDown className="size-4 text-warmmuted shrink-0" />
+                  </button>
+                  {simTenorMode === 'CUSTOM' && (
+                    <div className="mt-2">
+                      <label className="block text-[10px] font-bold text-terracotta mb-1">
+                        Tenor (Tahun)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={35}
+                        step={1}
+                        value={customTenorYears}
+                        onChange={(e) => setCustomTenorYears(Number(e.target.value))}
+                        className="w-full min-h-[44px] px-3 rounded-xl border border-terracotta/60 bg-white font-semibold text-espresso focus:outline-none focus:border-terracotta"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
+
               <div>
                 <label className="block font-bold text-espresso mb-1">Estimasi Bunga (% / th)</label>
                 <input
@@ -303,7 +377,7 @@ export const KnowledgeBaseViewer: React.FC<{
                   max={15}
                   value={simInterestRate}
                   onChange={(e) => setSimInterestRate(Number(e.target.value))}
-                  className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder bg-white font-semibold"
+                  className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder bg-white font-semibold text-espresso focus:outline-none focus:border-terracotta"
                 />
               </div>
             </div>
@@ -368,15 +442,14 @@ export const KnowledgeBaseViewer: React.FC<{
                     className="w-full min-h-[44px] pl-9 pr-3 rounded-xl border border-warmborder text-xs focus:border-terracotta focus:outline-none"
                   />
                 </div>
-                <select
-                  value={selectedCategory}
-                  onChange={e => setSelectedCategory(e.target.value)}
-                  className="min-h-[44px] px-3 rounded-xl border border-warmborder text-xs bg-sandstone font-semibold text-espresso cursor-pointer w-full sm:w-auto"
+                <button
+                  type="button"
+                  onClick={() => setActivePicker('category')}
+                  className="min-h-[44px] px-3.5 rounded-xl border border-warmborder text-xs bg-sandstone font-semibold text-espresso cursor-pointer w-full sm:w-56 flex items-center justify-between gap-2 hover:border-terracotta"
                 >
-                  {categories.map(c => (
-                    <option key={c.key} value={c.key}>{c.label}</option>
-                  ))}
-                </select>
+                  <span className="truncate">{categoryLabelMap[selectedCategory] || 'Semua Kategori'}</span>
+                  <ChevronDown className="size-4 text-warmmuted shrink-0" />
+                </button>
               </div>
 
               <div className="border border-warmborder rounded-2xl overflow-hidden divide-y divide-warmborder bg-white">
@@ -449,6 +522,186 @@ export const KnowledgeBaseViewer: React.FC<{
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* Custom Bottom-Sheet / Pop-up Picker (Pengganti Select Bawaan Chrome) */}
+      {activePicker && (
+        <div
+          className="fixed inset-0 z-50 bg-espresso/60 backdrop-blur-[2px] flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setActivePicker(null)}
+        >
+          <div
+            className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl border border-warmborder shadow-2xl overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-3.5 border-b border-warmborder flex items-center justify-between gap-3">
+              <h4 className="text-sm font-extrabold text-espresso">
+                {activePicker === 'category'
+                  ? 'Pilih Kategori Fakta'
+                  : activePicker === 'unit'
+                  ? 'Pilih Tipe Unit KPR'
+                  : activePicker === 'dp'
+                  ? 'Pilih Uang Muka (DP)'
+                  : 'Pilih Tenor Cicilan'}
+              </h4>
+              <button
+                type="button"
+                onClick={() => setActivePicker(null)}
+                className="size-9 rounded-xl bg-sandstone hover:bg-warmborder text-espresso grid place-items-center cursor-pointer"
+                aria-label="Tutup pilihan"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="p-3 sm:p-4 max-h-[65dvh] overflow-y-auto space-y-1.5 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+              {activePicker === 'category' &&
+                categories.map((c) => {
+                  const active = selectedCategory === c.key;
+                  return (
+                    <button
+                      key={c.key}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategory(c.key);
+                        setActivePicker(null);
+                      }}
+                      className={`w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-left text-xs font-bold flex items-center justify-between gap-2 cursor-pointer ${
+                        active
+                          ? 'bg-espresso text-white border-espresso'
+                          : 'bg-sandstone/50 hover:bg-sandstone text-espresso border-warmborder'
+                      }`}
+                    >
+                      <span>{c.label}</span>
+                      {active && <CheckCircle2 className="size-4 text-emerald-400 shrink-0" />}
+                    </button>
+                  );
+                })}
+
+              {activePicker === 'unit' && (
+                <>
+                  {PLAYBOOK_UNIT_CATALOG.map((u, idx) => {
+                    const active = simUnitMode === String(idx);
+                    return (
+                      <button
+                        key={u.label}
+                        type="button"
+                        onClick={() => {
+                          setSimUnitMode(String(idx));
+                          setActivePicker(null);
+                        }}
+                        className={`w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-left text-xs font-bold flex items-center justify-between gap-2 cursor-pointer ${
+                          active
+                            ? 'bg-espresso text-white border-espresso'
+                            : 'bg-sandstone/50 hover:bg-sandstone text-espresso border-warmborder'
+                        }`}
+                      >
+                        <span className="truncate">{u.label} · {formatIdr(u.priceKprIdr)}</span>
+                        {active && <CheckCircle2 className="size-4 text-emerald-400 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSimUnitMode('CUSTOM');
+                      setActivePicker(null);
+                    }}
+                    className={`w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-left text-xs font-bold flex items-center justify-between gap-2 cursor-pointer ${
+                      simUnitMode === 'CUSTOM'
+                        ? 'bg-terracotta text-white border-terracotta'
+                        : 'bg-amber-50 hover:bg-amber-100 text-terracotta border-amber-200'
+                    }`}
+                  >
+                    <span>Lainnya (Isi Harga Properti Sendiri...)</span>
+                    {simUnitMode === 'CUSTOM' && <CheckCircle2 className="size-4 text-white shrink-0" />}
+                  </button>
+                </>
+              )}
+
+              {activePicker === 'dp' && (
+                <>
+                  {[10, 15, 20, 30].map((d) => {
+                    const active = simDpMode === String(d);
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => {
+                          setSimDpMode(String(d));
+                          setActivePicker(null);
+                        }}
+                        className={`w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-left text-xs font-bold flex items-center justify-between gap-2 cursor-pointer ${
+                          active
+                            ? 'bg-espresso text-white border-espresso'
+                            : 'bg-sandstone/50 hover:bg-sandstone text-espresso border-warmborder'
+                        }`}
+                      >
+                        <span>{d}% ({formatIdr(Math.round((simPrice * d) / 100))})</span>
+                        {active && <CheckCircle2 className="size-4 text-emerald-400 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSimDpMode('CUSTOM');
+                      setActivePicker(null);
+                    }}
+                    className={`w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-left text-xs font-bold flex items-center justify-between gap-2 cursor-pointer ${
+                      simDpMode === 'CUSTOM'
+                        ? 'bg-terracotta text-white border-terracotta'
+                        : 'bg-amber-50 hover:bg-amber-100 text-terracotta border-amber-200'
+                    }`}
+                  >
+                    <span>Lainnya (Isi Persentase DP Sendiri...)</span>
+                    {simDpMode === 'CUSTOM' && <CheckCircle2 className="size-4 text-white shrink-0" />}
+                  </button>
+                </>
+              )}
+
+              {activePicker === 'tenor' && (
+                <>
+                  {[5, 10, 15, 20].map((t) => {
+                    const active = simTenorMode === String(t);
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => {
+                          setSimTenorMode(String(t));
+                          setActivePicker(null);
+                        }}
+                        className={`w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-left text-xs font-bold flex items-center justify-between gap-2 cursor-pointer ${
+                          active
+                            ? 'bg-espresso text-white border-espresso'
+                            : 'bg-sandstone/50 hover:bg-sandstone text-espresso border-warmborder'
+                        }`}
+                      >
+                        <span>{t} Tahun ({t * 12} Bulan)</span>
+                        {active && <CheckCircle2 className="size-4 text-emerald-400 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSimTenorMode('CUSTOM');
+                      setActivePicker(null);
+                    }}
+                    className={`w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-left text-xs font-bold flex items-center justify-between gap-2 cursor-pointer ${
+                      simTenorMode === 'CUSTOM'
+                        ? 'bg-terracotta text-white border-terracotta'
+                        : 'bg-amber-50 hover:bg-amber-100 text-terracotta border-amber-200'
+                    }`}
+                  >
+                    <span>Lainnya (Isi Tenor Tahun Sendiri...)</span>
+                    {simTenorMode === 'CUSTOM' && <CheckCircle2 className="size-4 text-white shrink-0" />}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

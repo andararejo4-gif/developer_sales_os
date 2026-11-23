@@ -30,6 +30,11 @@ import {
   SeGuidedTourModal,
 } from './components/se/SeGuidedTour';
 import {
+  SeNotificationBell,
+  type SeNotificationItem,
+  type SeNotifTarget,
+} from './components/se/SeNotificationCenter';
+import {
   exportDailyReportExcel,
   exportDailyReportPdf,
 } from './lib/exporters/daily-report-exporter';
@@ -620,6 +625,7 @@ export default function App() {
 
   const [isExportReportModalOpen, setIsExportReportModalOpen] = useState(false);
   const [pipelineTargetFilter, setPipelineTargetFilter] = useState<string | undefined>(undefined);
+  const [activeH5Reminder, setActiveH5Reminder] = useState<SeNotificationItem | null>(null);
   const [tourSnoozedUntilMs, setTourSnoozedUntilMs] = useState<number>(() =>
     loadPersistedState<number>(`devos_se_tour_snooze_${user.email}`, 0)
   );
@@ -633,6 +639,19 @@ export default function App() {
   const handleOpenUrgentPipeline = () => {
     setPipelineTargetFilter('PERLU_DITANGANI');
     openView('pipeline');
+  };
+
+  const handleSeNotifNavigate = (target: SeNotifTarget) => {
+    setActiveH5Reminder(null);
+    if (target === 'export') {
+      setIsExportReportModalOpen(true);
+      return;
+    }
+    if (target === 'pipeline') {
+      handleOpenUrgentPipeline();
+      return;
+    }
+    openView(target);
   };
 
   const handleExportDailyReport = async (format: 'pdf' | 'excel') => {
@@ -1560,6 +1579,13 @@ export default function App() {
                 <span>Panel Multi-Tenant Core</span>
               </button>
             )}
+            {role === 'SE' && (
+              <SeNotificationBell
+                quickStatus={seRealData?.quickStatus}
+                onNavigateTarget={handleSeNotifNavigate}
+                onH5ReminderTriggered={(item) => setActiveH5Reminder(item)}
+              />
+            )}
             <div className="flex items-center gap-2 bg-sandstone px-3 py-1.5 rounded-xl border border-warmborder text-xs">
               <span className="size-2 rounded-full bg-olive animate-pulse"></span>
               <span className="font-semibold text-espresso">Online</span>
@@ -1583,9 +1609,17 @@ export default function App() {
               </h1>
             </div>
           </div>
-          <span className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-sandstone text-espresso border border-warmborder shrink-0">
-            {user.name.split(' ')[0]}
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            {role === 'SE' && (
+              <SeNotificationBell
+                quickStatus={seRealData?.quickStatus}
+                onNavigateTarget={handleSeNotifNavigate}
+              />
+            )}
+            <span className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-sandstone text-espresso border border-warmborder shrink-0">
+              {user.name.split(' ')[0]}
+            </span>
+          </div>
         </header>
 
         <div id="dashboard-main" className="max-w-6xl mx-auto px-4 pt-4 md:px-8 md:pt-8 space-y-6">
@@ -3548,6 +3582,9 @@ export default function App() {
           activeView={activeView}
           quickStatus={seRealData?.quickStatus}
           snoozedUntilMs={tourSnoozedUntilMs}
+          h5Reminder={activeH5Reminder}
+          onDismissH5={() => setActiveH5Reminder(null)}
+          onNavigateH5={handleSeNotifNavigate}
           onSnooze={handleSnoozeTour}
           onGoToFieldOps={() => openView('lapangan')}
           onGoToUrgentPipeline={handleOpenUrgentPipeline}

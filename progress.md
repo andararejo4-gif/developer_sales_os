@@ -3,6 +3,15 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-042 | 2026-11-23 | Custom Dropdown + Opsi Lainnya Kalkulator KPR & Notifikasi Header Real-Time (H-5 Menit)
+- Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
+- Ubah: `src/components/KnowledgeBaseViewer.tsx`, `src/components/se/SeNotificationCenter.tsx` (baru), `src/components/se/SeGuidedTour.tsx`, `src/App.tsx`
+- Detail Perubahan:
+  - **Custom Dropdown & Opsi Lainnya (`KnowledgeBaseViewer.tsx`):** Menghapus seluruh `<select>` bawaan Chrome (Filter Kategori, Tipe Unit, DP, Tenor) dan menggantinya dengan custom bottom-sheet/modal picker. Menambahkan opsi **Lainnya** pada Tipe Unit (input Harga Properti Rp), DP (input Persen DP %), dan Tenor (input Tahun).
+  - **Notifikasi Header Real-Time & Pengingat H-5 Menit (`SeNotificationCenter.tsx`, `App.tsx`):** Menambahkan ikon lonceng notifikasi di header mobile & desktop dengan badge angka real-time (tick 30 detik). Otomatis mendeteksi **H-5 menit** sebelum jadwal konten (`08:55`, `13:55`, `19:25 WIB`) dan batas Export Laporan (`17:55 WIB`), serta tugas wajib (Check-In GPS, Lead Urgent, Rute). Mobile membuka bottom-sheet dari bawah ke atas; list default hanya menampilkan judul + badge, lalu klik item membuka modal detail ringkas + rekomendasi aksi + CTA langsung.
+  - **Desain Pop-up Pengingat Baru (`SeGuidedTour.tsx`):** Merombak pop-up pengingat wajib & H-5 menit menjadi kartu visual ringkas, bebas paragraf panjang, dengan chip rekomendasi dan CTA cepat.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
+
 ## P-041 | 2026-11-23 | Header Desktop Ringkas & Mobile-First Knowledge Base (2 Tab Horizontal + Expandable Facts)
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/App.tsx`, `src/components/KnowledgeBaseViewer.tsx`

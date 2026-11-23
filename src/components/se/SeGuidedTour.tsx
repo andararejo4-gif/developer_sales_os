@@ -240,6 +240,16 @@ interface SeGuidedTourModalProps {
   activeView: string;
   quickStatus?: SeQuickStatusData;
   snoozedUntilMs: number;
+  h5Reminder?: {
+    title: string;
+    badge: string;
+    summary: string;
+    recommendations: string[];
+    ctaLabel: string;
+    target: 'lapangan' | 'pipeline' | 'kalender' | 'rute' | 'export';
+  } | null;
+  onDismissH5?: () => void;
+  onNavigateH5?: (target: 'lapangan' | 'pipeline' | 'kalender' | 'rute' | 'export') => void;
   onSnooze: () => void;
   onGoToFieldOps: () => void;
   onGoToUrgentPipeline: () => void;
@@ -249,17 +259,85 @@ export const SeGuidedTourModal: React.FC<SeGuidedTourModalProps> = ({
   activeView,
   quickStatus,
   snoozedUntilMs,
+  h5Reminder,
+  onDismissH5,
+  onNavigateH5,
   onSnooze,
   onGoToFieldOps,
   onGoToUrgentPipeline,
 }) => {
+  // Prioritas 0: Pengingat H-5 Menit Real-Time (Konten / Export Laporan)
+  if (h5Reminder) {
+    return (
+      <div className="fixed inset-0 z-60 bg-espresso/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="bg-white rounded-t-3xl sm:rounded-3xl border border-amber-300 w-full sm:max-w-md shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 sm:zoom-in-95">
+          <div className="px-5 py-4 bg-espresso text-white flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="size-9 rounded-xl bg-amber-400 text-espresso grid place-items-center shrink-0">
+                <Clock className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-300">
+                  Pengingat {h5Reminder.badge}
+                </span>
+                <h3 className="text-sm font-extrabold truncate">{h5Reminder.title}</h3>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onDismissH5}
+              aria-label="Tutup pengingat"
+              className="size-9 rounded-xl bg-white/10 hover:bg-white/20 text-white grid place-items-center cursor-pointer shrink-0"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+
+          <div className="p-5 space-y-3.5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+            <p className="text-xs font-semibold text-espresso leading-relaxed">
+              {h5Reminder.summary}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {h5Reminder.recommendations.slice(0, 2).map((r, idx) => (
+                <span
+                  key={idx}
+                  className="px-2.5 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-espresso inline-flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="size-3 text-terracotta shrink-0" />
+                  <span>{r}</span>
+                </span>
+              ))}
+            </div>
+            <div className="grid grid-cols-3 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => onNavigateH5?.(h5Reminder.target)}
+                className="col-span-2 min-h-[44px] px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <span className="truncate">{h5Reminder.ctaLabel}</span>
+                <ArrowRight className="size-4 shrink-0" />
+              </button>
+              <button
+                type="button"
+                onClick={onDismissH5}
+                className="min-h-[44px] px-3 py-2.5 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-xs font-bold cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!quickStatus) return null;
   if (Date.now() < snoozedUntilMs) return null;
 
   const needsAttendance = !quickStatus.checkedIn;
   const urgentCount = Number(quickStatus.urgentLeadsCount ?? 0);
 
-  // Prioritas 1 (Pagi): Belum Absen & Aktivasi GPS (jangan tampil jika sudah di halaman lapangan)
+  // Prioritas 1 (Pagi): Belum Absen & Aktivasi GPS (ringkas & scannable)
   if (needsAttendance && activeView !== 'lapangan') {
     return (
       <div className="fixed inset-0 z-60 bg-espresso/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -271,50 +349,50 @@ export const SeGuidedTourModal: React.FC<SeGuidedTourModalProps> = ({
               </div>
               <div>
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-300">
-                  Panduan Awal Hari · Langkah 1
+                  Wajib Pagi · Langkah 1
                 </span>
-                <h3 className="text-sm font-extrabold">Absen Masuk &amp; Aktifkan GPS</h3>
+                <h3 className="text-sm font-extrabold">Check-In Absensi &amp; GPS</h3>
               </div>
             </div>
             <button
               type="button"
               onClick={onSnooze}
               aria-label="Tutup sementara"
-              className="size-8 rounded-xl bg-white/10 hover:bg-white/20 text-white grid place-items-center cursor-pointer"
+              className="size-9 rounded-xl bg-white/10 hover:bg-white/20 text-white grid place-items-center cursor-pointer"
             >
               <X className="size-4" />
             </button>
           </div>
 
-          <div className="p-5 space-y-4">
-            <p className="text-xs text-espresso leading-relaxed">
-              Anda belum melakukan <strong>Check-In Absensi</strong> hari ini. Aktifkan presensi &amp; GPS Live Radar agar titik kunjungan canvassing tercatat otomatis di Laporan Harian.
+          <div className="p-5 space-y-3.5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+            <p className="text-xs font-semibold text-espresso">
+              Presensi GPS hari ini belum tercatat. Aktifkan sekarang agar kunjungan masuk ke Laporan Harian.
             </p>
-            <div className="p-3 rounded-2xl bg-[#FBF9F5] border border-warmborder space-y-1.5 text-xs">
-              <div className="flex items-center gap-2 font-bold text-espresso">
-                <CheckCircle2 className="size-3.5 text-terracotta shrink-0" />
-                <span>1. Tekan tombol Check-In GPS</span>
-              </div>
-              <div className="flex items-center gap-2 font-bold text-espresso">
-                <CheckCircle2 className="size-3.5 text-terracotta shrink-0" />
-                <span>2. Izinkan akses lokasi (GPS) di browser</span>
-              </div>
+            <div className="flex flex-wrap gap-1.5">
+              <span className="px-2.5 py-1.5 rounded-xl bg-sandstone border border-warmborder text-[11px] font-bold text-espresso inline-flex items-center gap-1.5">
+                <CheckCircle2 className="size-3.5 text-terracotta" />
+                Lampirkan Foto &amp; Check-In
+              </span>
+              <span className="px-2.5 py-1.5 rounded-xl bg-sandstone border border-warmborder text-[11px] font-bold text-espresso inline-flex items-center gap-1.5">
+                <CheckCircle2 className="size-3.5 text-terracotta" />
+                Izinkan Akses GPS
+              </span>
             </div>
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="grid grid-cols-3 gap-2 pt-1">
               <button
                 type="button"
                 onClick={onGoToFieldOps}
-                className="flex-1 min-h-[44px] px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                className="col-span-2 min-h-[44px] px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
               >
-                <span>Absen &amp; Aktifkan GPS Sekarang</span>
-                <ArrowRight className="size-4" />
+                <span>Check-In Sekarang</span>
+                <ArrowRight className="size-4 shrink-0" />
               </button>
               <button
                 type="button"
                 onClick={onSnooze}
-                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-xs font-bold cursor-pointer"
+                className="min-h-[44px] px-3 py-2.5 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-xs font-bold cursor-pointer"
               >
-                Nanti (30 Menit)
+                Nanti 30m
               </button>
             </div>
           </div>
@@ -323,7 +401,7 @@ export const SeGuidedTourModal: React.FC<SeGuidedTourModalProps> = ({
     );
   }
 
-  // Prioritas 2 (CRITICAL URGENT): Lead / WA Belum Ditangani (jangan tampil jika sudah di pipeline)
+  // Prioritas 2 (CRITICAL URGENT): Lead / WA Belum Ditangani
   if (urgentCount > 0 && activeView !== 'pipeline') {
     const previews = quickStatus.urgentLeadPreviews || [];
     return (
@@ -339,7 +417,7 @@ export const SeGuidedTourModal: React.FC<SeGuidedTourModalProps> = ({
                   Prioritas Urgent · SLA ≤ 5 Menit
                 </span>
                 <h3 className="text-sm font-extrabold">
-                  {urgentCount} Lead Menunggu Follow Up!
+                  {urgentCount} Lead Menunggu Follow Up
                 </h3>
               </div>
             </div>
@@ -347,28 +425,23 @@ export const SeGuidedTourModal: React.FC<SeGuidedTourModalProps> = ({
               type="button"
               onClick={onSnooze}
               aria-label="Tutup sementara"
-              className="size-8 rounded-xl bg-white/10 hover:bg-white/20 text-white grid place-items-center cursor-pointer"
+              className="size-9 rounded-xl bg-white/10 hover:bg-white/20 text-white grid place-items-center cursor-pointer"
             >
               <X className="size-4" />
             </button>
           </div>
 
-          <div className="p-5 space-y-4">
-            <p className="text-xs text-espresso leading-relaxed">
-              Terdapat pesan WhatsApp masuk / lead baru yang <strong>belum Anda balas</strong>. Segera tanggapi agar peluang closing tidak hilang:
-            </p>
-            {previews.length > 0 && (
-              <div className="space-y-2">
-                {previews.map((ld) => (
+          <div className="p-5 space-y-3.5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+            {previews.length > 0 ? (
+              <div className="space-y-1.5">
+                {previews.slice(0, 2).map((ld) => (
                   <div
                     key={ld.id}
-                    className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between gap-2 text-xs"
+                    className="px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between gap-2 text-xs"
                   >
                     <div className="min-w-0">
                       <p className="font-extrabold text-rose-900 truncate">{ld.fullName}</p>
-                      <p className="text-[11px] text-rose-700 truncate">
-                        {ld.phoneWa} {ld.unitInterest ? `· ${ld.unitInterest}` : ''}
-                      </p>
+                      <p className="text-[11px] text-rose-700 truncate">{ld.phoneWa}</p>
                     </div>
                     <span className="px-2 py-0.5 rounded bg-rose-600 text-white text-[10px] font-extrabold shrink-0">
                       Belum Dibalas
@@ -376,23 +449,27 @@ export const SeGuidedTourModal: React.FC<SeGuidedTourModalProps> = ({
                   </div>
                 ))}
               </div>
+            ) : (
+              <p className="text-xs font-semibold text-espresso">
+                Ada {urgentCount} prospek baru yang belum dibalas. Segera tanggapi sebelum SLA lewat.
+              </p>
             )}
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="grid grid-cols-3 gap-2 pt-1">
               <button
                 type="button"
                 onClick={onGoToUrgentPipeline}
-                className="flex-1 min-h-[44px] px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                className="col-span-2 min-h-[44px] px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
               >
                 <span>Follow Up Sekarang</span>
-                <ArrowRight className="size-4" />
+                <ArrowRight className="size-4 shrink-0" />
               </button>
               <button
                 type="button"
                 onClick={onSnooze}
-                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-xs font-bold cursor-pointer inline-flex items-center justify-center gap-1"
+                className="min-h-[44px] px-3 py-2.5 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-xs font-bold cursor-pointer inline-flex items-center justify-center gap-1"
               >
                 <Clock className="size-3.5" />
-                <span>Nanti (30m)</span>
+                <span>30m</span>
               </button>
             </div>
           </div>
