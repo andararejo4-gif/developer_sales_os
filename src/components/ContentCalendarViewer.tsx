@@ -27,6 +27,7 @@ import {
   getContentCalendar,
   updateSlotPosting,
   generateContentCalendarSlots,
+  initProjectCalendar,
 } from '../lib/content-calendar/calendar-generator';
 import { generateContentCalendarDocx } from '../lib/exporters/content-calendar-docx';
 import {
@@ -80,13 +81,14 @@ export function ContentCalendarViewer({
       userRole === 'SE' ? 'SALES_IN_HOUSE' : 'OFFICIAL'
     )
   );
-  const [calendar, setCalendar] = useState<ContentCalendarPlan>(() => {
+  const [calendar, setCalendar] = useState<ContentCalendarPlan | null>(() => {
     const saved = loadPersistedState<ContentCalendarPlan | null>(
       `devos_cal_plan_${userScope}`,
       null
     );
     if (saved) return saved;
     const base = getContentCalendar(projectId, 1, isDemoMode);
+    if (!base) return null;
     if (track === 'SALES_IN_HOUSE') {
       const slots = generateContentCalendarSlots('SALES_IN_HOUSE', userEmail);
       return {
@@ -97,6 +99,35 @@ export function ContentCalendarViewer({
     }
     return base;
   });
+
+  useEffect(() => {
+    const saved = loadPersistedState<ContentCalendarPlan | null>(
+      `devos_cal_plan_${projectId}`,
+      null
+    );
+    if (saved) {
+      setCalendar(saved);
+      return;
+    }
+    const base = getContentCalendar(projectId, 1, isDemoMode);
+    if (!base) {
+      setCalendar(null);
+      return;
+    }
+    if (track === 'SALES_IN_HOUSE') {
+      const slots = generateContentCalendarSlots('SALES_IN_HOUSE');
+      setCalendar({ ...base, slots: isDemoMode ? slots.filter((s) => s.dayNumber <= 8) : slots });
+    } else {
+      setCalendar(base);
+    }
+  }, [projectId, track, isDemoMode]);
+
+  const handleInitCalendar = () => {
+    const newPlan = initProjectCalendar(projectId);
+    setCalendar(newPlan);
+    savePersistedState(`devos_cal_plan_${projectId}`, newPlan);
+    setToastMessage(`Kalender konten 30 hari untuk ${projectName} berhasil diaktifkan!`);
+  };
 
   const [viewMode, setViewMode] = useState<CalendarViewTab>(() => {
     const urlTab = variant === 'page' ? getQueryParam('tab') : null;
@@ -175,6 +206,7 @@ export function ContentCalendarViewer({
         }
         setSlotMediaMap((prev) => ({ ...prev, ...nextMedia }));
         setCalendar((prev) => {
+          if (!prev) return null;
           const nextSlots = prev.slots.map((s) => {
             const saved = map.get(s.id);
             if (!saved) return s;
@@ -236,23 +268,26 @@ export function ContentCalendarViewer({
           };
         }
         setSlotMediaMap((prev) => ({ ...prev, ...nextMedia }));
-        setCalendar((prev) => ({
-          ...prev,
-          slots: prev.slots.map((s) => {
-            const r = byId.get(s.id);
-            if (!r) return s;
-            return {
-              ...s,
-              format: (r.format || s.format) as ContentSlot['format'],
-              platform: (r.platform || s.platform) as ContentSlot['platform'],
-              title: r.title || s.title,
-              brief: r.brief || s.brief,
-              caption: r.caption || s.caption,
-              cta: r.cta || s.cta,
-              hashtags: Array.isArray(r.hashtags) && r.hashtags.length > 0 ? r.hashtags : s.hashtags,
-            };
-          }),
-        }));
+        setCalendar((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            slots: prev.slots.map((s) => {
+              const r = byId.get(s.id);
+              if (!r) return s;
+              return {
+                ...s,
+                format: (r.format || s.format) as ContentSlot['format'],
+                platform: (r.platform || s.platform) as ContentSlot['platform'],
+                title: r.title || s.title,
+                brief: r.brief || s.brief,
+                caption: r.caption || s.caption,
+                cta: r.cta || s.cta,
+                hashtags: Array.isArray(r.hashtags) && r.hashtags.length > 0 ? r.hashtags : s.hashtags,
+              };
+            }),
+          };
+        });
       })
       .catch(() => {});
     return () => {
@@ -292,20 +327,26 @@ export function ContentCalendarViewer({
   const handleTrackChange = (newTrack: ContentTrack) => {
     setTrack(newTrack);
     const slots = generateContentCalendarSlots(newTrack, userEmail);
-    setCalendar((prev) => ({
-      ...prev,
-      slots: isDemoMode ? slots.filter((s) => s.dayNumber <= 8) : slots,
-      postedSlotsCount: slots.filter((s) => s.status === 'SUDAH_POSTING').length,
-    }));
+    setCalendar((prev) => {
+      if (!prev) return null;
+      const nextSlots = isDemoMode ? slots.filter((s) => s.dayNumber <= 8) : slots;
+      return {
+        ...prev,
+        slots: nextSlots,
+        postedSlotsCount: nextSlots.filter((s) => s.status === 'SUDAH_POSTING').length,
+      };
+    });
   };
 
   // Filter slots
-  const filteredSlots = calendar.slots.filter((slot) => {
-    if (selectedFunnel !== 'all' && slot.funnelStage !== selectedFunnel) return false;
-    if (selectedPlatform !== 'all' && slot.platform !== selectedPlatform) return false;
-    if (selectedStatus !== 'all' && slot.status !== selectedStatus) return false;
-    return true;
-  });
+  const filteredSlots = calendar
+    ? calendar.slots.filter((slot) => {
+        if (selectedFunnel !== 'all' && slot.funnelStage !== selectedFunnel) return false;
+        if (selectedPlatform !== 'all' && slot.platform !== selectedPlatform) return false;
+        if (selectedStatus !== 'all' && slot.status !== selectedStatus) return false;
+        return true;
+      })
+    : [];
 
   // Week slices (Day 1..7, 8..14, 15..21, 22..28, 29..30)
   const weekStartDay = (selectedWeek - 1) * 7 + 1;
@@ -320,10 +361,11 @@ export function ContentCalendarViewer({
   // Save live posting URL + sync real-time to PostgreSQL sales_os Dashboard SE
   const handleSavePostedUrl = async (slotId: string, overrideUrl?: string) => {
     const cleanUrl = (overrideUrl ?? linkInput).trim();
-    if (!cleanUrl) return;
+    if (!cleanUrl || !calendar) return;
     const targetSlot = calendar.slots.find((s) => s.id === slotId);
     updateSlotPosting(projectId, slotId, cleanUrl, 'SUDAH_POSTING');
     setCalendar((prev) => {
+      if (!prev) return null;
       const nextSlots = prev.slots.map((s) =>
         s.id === slotId ? { ...s, postedUrl: cleanUrl, status: 'SUDAH_POSTING' as const } : s
       );
@@ -373,6 +415,7 @@ export function ContentCalendarViewer({
     const nextUrl = slot.postedUrl || '';
     updateSlotPosting(projectId, slot.id, nextUrl, 'SUDAH_POSTING');
     setCalendar((prev) => {
+      if (!prev) return null;
       const nextSlots = prev.slots.map((s) =>
         s.id === slot.id ? { ...s, status: 'SUDAH_POSTING' as const, postedUrl: nextUrl || s.postedUrl } : s
       );
@@ -513,21 +556,24 @@ export function ContentCalendarViewer({
           };
         }
         setSlotMediaMap((prev) => ({ ...prev, ...nextMedia }));
-        setCalendar((prev) => ({
-          ...prev,
-          slots: prev.slots.map((s) => {
-            const r = byId.get(s.id);
-            return r
-              ? {
-                  ...s,
-                  title: r.title || s.title,
-                  brief: r.brief || s.brief,
-                  caption: r.caption || s.caption,
-                  cta: r.cta || s.cta,
-                }
-              : s;
-          }),
-        }));
+        setCalendar((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            slots: prev.slots.map((s) => {
+              const r = byId.get(s.id);
+              return r
+                ? {
+                    ...s,
+                    title: r.title || s.title,
+                    brief: r.brief || s.brief,
+                    caption: r.caption || s.caption,
+                    cta: r.cta || s.cta,
+                  }
+                : s;
+            }),
+          };
+        });
         setToastMessage(`Kalender AI Minggu ke-${weekNumber} (7 hari) berhasil digenerate!`);
       }
     } catch {
@@ -539,6 +585,7 @@ export function ContentCalendarViewer({
 
   // Export DOCX
   const handleExportDocx = async () => {
+    if (!calendar) return;
     setIsExporting(true);
     try {
       const blob = await generateContentCalendarDocx(calendar);
@@ -567,7 +614,7 @@ export function ContentCalendarViewer({
       ? 'bg-white rounded-2xl border border-warmborder w-full flex flex-col overflow-hidden shadow-xs'
       : 'bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden';
 
-  const selectedDetailSlot = selectedDetailSlotId
+  const selectedDetailSlot = selectedDetailSlotId && calendar
     ? calendar.slots.find((s) => s.id === selectedDetailSlotId) || null
     : null;
 
@@ -617,7 +664,7 @@ export function ContentCalendarViewer({
                 )}
               </div>
               <p className="text-xs text-warmmuted mt-0.5 leading-relaxed">
-                {projectName} · {calendar.slots.length} Slot Terjadwal ({calendar.postedSlotsCount} Sudah Diposting)
+                {projectName} · {calendar ? `${calendar.slots.length} Slot Terjadwal (${calendar.postedSlotsCount} Sudah Diposting)` : 'Belum Ada Jadwal'}
               </p>
             </div>
             {variant === 'modal' && onClose && (
@@ -670,7 +717,7 @@ export function ContentCalendarViewer({
                 Pengingat Jadwal Unggah Hari Ini (Hari ke-{selectedDay}):
               </strong>{' '}
               <span className="text-warmmuted">
-                {calendar.slots.filter((s) => s.dayNumber === selectedDay && s.status !== 'SUDAH_POSTING').length} slot belum diposting · Klik kartu slot untuk salin caption &amp; lapor link postingan ke Dashboard SE.
+                {(calendar?.slots ?? []).filter((s) => s.dayNumber === selectedDay && s.status !== 'SUDAH_POSTING').length} slot belum diposting · Klik kartu slot untuk salin caption &amp; lapor link postingan ke Dashboard SE.
               </span>
             </div>
           </div>
@@ -791,34 +838,56 @@ export function ContentCalendarViewer({
 
         {/* Papan Kerja Kertas Berpin */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-[#F3ECE0] bg-[radial-gradient(#D9CEBE_1px,transparent_1px)] [background-size:18px_18px] space-y-6">
-          {/* VIEW 1: BULANAN (Zoom-out penuh — 1 Kertas = 1 Hari) */}
-          {viewMode === 'month' && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 bg-white/90 backdrop-blur-xs px-4 py-2.5 rounded-2xl border border-warmborder text-xs">
-                <span className="font-extrabold text-espresso">
-                  Papan Bulanan (1 Kertas = 1 Hari · Klik kertas untuk zoom ke Harian)
-                </span>
-                <span className="text-warmmuted font-semibold">
-                  Total {isDemoMode ? 8 : 30} Hari
-                </span>
+          {!calendar ? (
+            <div className="p-12 text-center rounded-3xl bg-white border border-dashed border-warmborder space-y-4 my-4">
+              <div className="size-16 rounded-2xl bg-sandstone text-warmmuted grid place-items-center mx-auto">
+                <CalendarIcon className="size-8 text-warmmuted" />
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-4 pt-2">
-                {Array.from({ length: isDemoMode ? 8 : 30 }).map((_, idx) => {
-                  const dayNum = idx + 1;
-                  const daySlots = filteredSlots.filter((s) => s.dayNumber === dayNum);
-                  const postedCount = daySlots.filter((s) => s.status === 'SUDAH_POSTING').length;
-                  const allDone = daySlots.length > 0 && postedCount === daySlots.length;
-                  const paperThemes = [
-                    'bg-[#FFF8E7] border-amber-300/80',
-                    'bg-[#EEF8F0] border-emerald-300/80',
-                    'bg-[#FFF0E8] border-orange-300/80',
-                    'bg-[#F4F1FD] border-violet-300/80',
-                    'bg-[#FDF6EA] border-stone-300/80',
-                  ];
-                  const paperClass = allDone
-                    ? 'bg-[#EAF8EE] border-emerald-400'
-                    : paperThemes[idx % paperThemes.length];
-                  const pinColors = ['bg-terracotta', 'bg-olive', 'bg-espresso', 'bg-amber-600'];
+              <div>
+                <h3 className="text-base font-extrabold text-espresso">Belum ada kalender konten</h3>
+                <p className="text-xs text-warmmuted mt-1 max-w-md mx-auto leading-relaxed">
+                  Kalender konten 30 hari x 3 slot/hari (TOFU, MOFU, BOFU) belum dibuat untuk <strong>{projectName}</strong>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleInitCalendar}
+                className="px-4 py-2.5 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 cursor-pointer shadow-xs inline-flex items-center gap-2"
+              >
+                <Sparkles className="size-4" />
+                <span>Buat Kalender Konten Proyek Ini</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* VIEW 1: BULANAN (Zoom-out penuh — 1 Kertas = 1 Hari) */}
+              {viewMode === 'month' && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 bg-white/90 backdrop-blur-xs px-4 py-2.5 rounded-2xl border border-warmborder text-xs">
+                    <span className="font-extrabold text-espresso">
+                      Papan Bulanan (1 Kertas = 1 Hari · Klik kertas untuk zoom ke Harian)
+                    </span>
+                    <span className="text-warmmuted font-semibold">
+                      Total {isDemoMode ? 8 : 30} Hari
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-4 pt-2">
+                    {Array.from({ length: isDemoMode ? 8 : 30 }).map((_, idx) => {
+                      const dayNum = idx + 1;
+                      const daySlots = filteredSlots.filter((s) => s.dayNumber === dayNum);
+                      const postedCount = daySlots.filter((s) => s.status === 'SUDAH_POSTING').length;
+                      const allDone = daySlots.length > 0 && postedCount === daySlots.length;
+                      const paperThemes = [
+                        'bg-[#FFF8E7] border-amber-300/80',
+                        'bg-[#EEF8F0] border-emerald-300/80',
+                        'bg-[#FFF0E8] border-orange-300/80',
+                        'bg-[#F4F1FD] border-violet-300/80',
+                        'bg-[#FDF6EA] border-stone-300/80',
+                      ];
+                      const paperClass = allDone
+                        ? 'bg-[#EAF8EE] border-emerald-400'
+                        : paperThemes[idx % paperThemes.length];
+                      const pinColors = ['bg-terracotta', 'bg-olive', 'bg-espresso', 'bg-amber-600'];
 
                   return (
                     <button
@@ -1321,6 +1390,8 @@ export function ContentCalendarViewer({
               </span>
               <span className="font-bold text-terracotta">Tingkatkan Paket untuk 30 Hari &rarr;</span>
             </div>
+          )}
+          </>
           )}
         </div>
 

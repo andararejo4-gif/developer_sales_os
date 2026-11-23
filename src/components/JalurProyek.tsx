@@ -3,7 +3,7 @@
 // Visual sequential roadmap & permission-guarded stage controller
 // ============================================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   FileText,
   Compass,
@@ -15,12 +15,17 @@ import {
   UploadCloud,
   CheckCircle2,
   Clock,
-  Plus,
   RefreshCw,
   Eye,
   AlertCircle,
   X,
+  ShieldCheck,
+  Download,
+  Layers,
+  Plus,
 } from 'lucide-react';
+import { loadPersistedState, savePersistedState } from '../lib/navigation/router';
+import type { CompanyProject } from '../lib/projects/projects-data';
 
 export interface ProjectStageItem {
   key: string;
@@ -127,23 +132,45 @@ export const PIPELINE_STAGES: ProjectStageItem[] = [
 
 interface JalurProyekProps {
   projectName?: string;
+  project?: CompanyProject;
   userRole?: string;
   isDemoMode?: boolean;
   variant?: 'modal' | 'page';
   onOpenStage?: (stageKey: string) => void;
+  onOpenNewProject?: () => void;
   onClose?: () => void;
 }
 
 export function JalurProyek({
   projectName = 'The Park Townhouse Sukoharjo',
+  project,
   userRole = 'DIREKSI',
   isDemoMode = false,
   variant = 'modal',
   onOpenStage,
   onClose,
 }: JalurProyekProps) {
-  const [stages, setStages] = useState<ProjectStageItem[]>(PIPELINE_STAGES);
-  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const projectId = project?.id || 'the-park-sukoharjo';
+
+  // Periksa apakah proyek memiliki data jalur proyek
+  // Hanya The Park Sukoharjo yang memiliki jalur proyek awal terisi lengkap secara bawaan
+  const isPark = projectId === 'the-park-sukoharjo' || projectId === 'proj-the-park-01';
+  const [stages, setStages] = useState<ProjectStageItem[]>(() => {
+    return loadPersistedState<ProjectStageItem[]>(
+      `devos_jalur_stages_${projectId}`,
+      isPark ? PIPELINE_STAGES : []
+    );
+  });
+
+  useEffect(() => {
+    const loaded = loadPersistedState<ProjectStageItem[]>(
+      `devos_jalur_stages_${projectId}`,
+      isPark ? PIPELINE_STAGES : []
+    );
+    setStages(loaded);
+  }, [projectId, isPark]);
+
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Role capability permissions check:
@@ -155,11 +182,29 @@ export function JalurProyek({
       setToastMessage('Tahap ini masih terkunci.');
       return;
     }
+    if (stage.key === 'input') {
+      setShowDocumentModal(true);
+      return;
+    }
     if (onOpenStage) {
       onOpenStage(stage.key);
     } else {
       setToastMessage(`Membuka ${stage.title}`);
     }
+  };
+
+  const handleInisialisasiJalur = () => {
+    if (!canManageProject) {
+      setToastMessage('Akses ditolak: Hanya Direksi dan Sales Manager yang dapat menginisialisasi jalur proyek.');
+      return;
+    }
+    const initialStages = PIPELINE_STAGES.map((s, idx) => ({
+      ...s,
+      status: idx < 4 ? ('COMPLETED' as const) : idx < 6 ? ('READY' as const) : ('LOCKED' as const),
+    }));
+    setStages(initialStages);
+    savePersistedState(`devos_jalur_stages_${projectId}`, initialStages);
+    setToastMessage(`Jalur proyek untuk ${projectName} berhasil diaktifkan!`);
   };
 
   const handleRegenerateStage = (stageKey: string, e: React.MouseEvent) => {
@@ -169,9 +214,11 @@ export function JalurProyek({
       return;
     }
 
-    setStages((prev) =>
-      prev.map((s) => (s.key === stageKey ? { ...s, version: s.version + 1, status: 'COMPLETED' } : s))
-    );
+    setStages((prev) => {
+      const next = prev.map((s) => (s.key === stageKey ? { ...s, version: s.version + 1, status: 'COMPLETED' as const } : s));
+      savePersistedState(`devos_jalur_stages_${projectId}`, next);
+      return next;
+    });
     setToastMessage(`Tahap ${stageKey} berhasil di-regenerate ke versi baru!`);
   };
 
@@ -220,16 +267,6 @@ export function JalurProyek({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {canManageProject && (
-              <button
-                onClick={() => setShowNewProjectModal(true)}
-                className="min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold bg-espresso text-white hover:bg-espresso/90 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm whitespace-nowrap"
-              >
-                <Plus className="size-3.5 text-amber-400" />
-                <span>Tambah Proyek Baru</span>
-              </button>
-            )}
-
             {variant === 'modal' && onClose && (
               <button
                 onClick={onClose}
@@ -252,220 +289,309 @@ export function JalurProyek({
           </div>
         )}
 
-        {/* Gerbang Kesiapan G0-G3 (Blueprint v1.2 Bab 05) */}
-        <div className="bg-sandstone/70 border-b border-warmborder px-6 py-3 shrink-0">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-            <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-espresso/70">
-              Gerbang Kesiapan Operasional (Readiness Gates)
-            </span>
-            <span className="text-[11px] text-warmmuted">
-              Keluaran sebelum gerbang lulus berstatus <strong className="text-espresso">draf &amp; simulasi internal</strong>.
-            </span>
+        {/* Gerbang Kesiapan G0-G3 (Blueprint v1.2 Bab 05) - Hanya muncul jika jalur sudah diinisialisasi */}
+        {stages.length > 0 && (
+          <div className="bg-sandstone/70 border-b border-warmborder px-6 py-3 shrink-0">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-espresso/70">
+                Gerbang Kesiapan Operasional (Readiness Gates)
+              </span>
+              <span className="text-[11px] text-warmmuted">
+                Keluaran sebelum gerbang lulus berstatus <strong className="text-espresso">draf &amp; simulasi internal</strong>.
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
+                <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <div>
+                  <p className="font-bold text-xs text-espresso">G0 · Draft-ready</p>
+                  <p className="text-[10px] text-emerald-700 font-medium">Lolos (6 Draf Aktif)</p>
+                </div>
+              </div>
+              <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
+                <span className="size-2 rounded-full bg-amber-400 shrink-0" />
+                <div>
+                  <p className="font-bold text-xs text-espresso">G1 · Publish-ready</p>
+                  <p className="text-[10px] text-warmmuted">Perlu PIC Approval</p>
+                </div>
+              </div>
+              <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
+                <span className="size-2 rounded-full bg-slate-300 shrink-0" />
+                <div>
+                  <p className="font-bold text-xs text-espresso">G2 · Demand-ready</p>
+                  <p className="text-[10px] text-warmmuted">Iklan &amp; WA Mandat</p>
+                </div>
+              </div>
+              <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
+                <span className="size-2 rounded-full bg-slate-300 shrink-0" />
+                <div>
+                  <p className="font-bold text-xs text-espresso">G3 · Transaction</p>
+                  <p className="text-[10px] text-warmmuted">Whitelist Rekening</p>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
-              <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-              <div>
-                <p className="font-bold text-xs text-espresso">G0 · Draft-ready</p>
-                <p className="text-[10px] text-emerald-700 font-medium">Lolos (6 Draf Aktif)</p>
-              </div>
-            </div>
-            <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
-              <span className="size-2 rounded-full bg-amber-400 shrink-0" />
-              <div>
-                <p className="font-bold text-xs text-espresso">G1 · Publish-ready</p>
-                <p className="text-[10px] text-warmmuted">Perlu PIC Approval</p>
-              </div>
-            </div>
-            <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
-              <span className="size-2 rounded-full bg-slate-300 shrink-0" />
-              <div>
-                <p className="font-bold text-xs text-espresso">G2 · Demand-ready</p>
-                <p className="text-[10px] text-warmmuted">Iklan &amp; WA Mandat</p>
-              </div>
-            </div>
-            <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
-              <span className="size-2 rounded-full bg-slate-300 shrink-0" />
-              <div>
-                <p className="font-bold text-xs text-espresso">G3 · Transaction</p>
-                <p className="text-[10px] text-warmmuted">Whitelist Rekening</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Content Stages Timeline */}
         <div className="p-6 overflow-y-auto flex-1 bg-[#FBF9F5] space-y-4">
-          <div className="grid grid-cols-1 gap-3.5">
-            {stages.map((stage) => {
-              const Icon = stage.icon;
-              const isCompleted = stage.status === 'COMPLETED';
-              const isReady = stage.status === 'READY';
-
-              return (
-                <div
-                  key={stage.key}
-                  onClick={() => handleStageClick(stage)}
-                  className={`p-4 md:p-5 rounded-2xl border transition-all cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4 ${
-                    isCompleted
-                      ? 'bg-white border-warmborder hover:border-terracotta/60 shadow-sm'
-                      : isReady
-                      ? 'bg-white/80 border-dashed border-warmborder hover:bg-white'
-                      : 'bg-sandstone/30 border-warmborder/40 opacity-60 cursor-not-allowed'
-                  }`}
+          {stages.length === 0 ? (
+            <div className="p-12 text-center rounded-3xl bg-white border border-dashed border-warmborder space-y-4 my-4">
+              <div className="size-16 rounded-2xl bg-sandstone text-warmmuted grid place-items-center mx-auto">
+                <Layers className="size-8 text-warmmuted" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-espresso">Belum ada jalur proyek</h3>
+                <p className="text-xs text-warmmuted mt-1 max-w-md mx-auto leading-relaxed">
+                  Jalur 8 tahap kesiapan pemasaran &amp; penjualan belum dibuat untuk <strong>{projectName}</strong>.
+                </p>
+              </div>
+              {canManageProject && (
+                <button
+                  type="button"
+                  onClick={handleInisialisasiJalur}
+                  className="px-4 py-2.5 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 cursor-pointer shadow-xs inline-flex items-center gap-2"
                 >
-                  <div className="flex items-start gap-4">
-                    <div
-                      className={`size-11 rounded-2xl flex items-center justify-center shrink-0 font-extrabold text-sm ${
-                        isCompleted
-                          ? 'bg-terracotta text-white shadow-sm'
-                          : isReady
-                          ? 'bg-sandstone text-espresso border border-warmborder'
-                          : 'bg-warmborder text-warmmuted'
-                      }`}
-                    >
-                      <Icon className="size-5" />
-                    </div>
+                  <Plus className="size-4" /> Inisialisasi Jalur Proyek
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3.5">
+              {stages.map((stage) => {
+                const Icon = stage.icon;
+                const isCompleted = stage.status === 'COMPLETED';
+                const isReady = stage.status === 'READY';
 
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-extrabold text-warmmuted">
-                          Tahap {stage.order}
-                        </span>
-                        <span className="text-[11px] font-bold px-2 py-0.2 rounded-full bg-sandstone text-espresso">
-                          {stage.phase}
-                        </span>
-                        {stage.isFree && (
-                          <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-lime-100 text-olive">
-                            GRATIS
-                          </span>
-                        )}
-                        {isCompleted && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-terracotta border border-amber-200">
-                            v{stage.version}
-                          </span>
-                        )}
+                return (
+                  <div
+                    key={stage.key}
+                    onClick={() => handleStageClick(stage)}
+                    className={`p-4 md:p-5 rounded-2xl border transition-all cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                      isCompleted
+                        ? 'bg-white border-warmborder hover:border-terracotta/60 shadow-sm'
+                        : isReady
+                        ? 'bg-white/80 border-dashed border-warmborder hover:bg-white'
+                        : 'bg-sandstone/30 border-warmborder/40 opacity-60 cursor-not-allowed'
+                    }`}
+                  >
+                    <div className="flex items-start gap-4">
+                      <div
+                        className={`size-11 rounded-2xl flex items-center justify-center shrink-0 font-extrabold text-sm ${
+                          isCompleted
+                            ? 'bg-terracotta text-white shadow-sm'
+                            : isReady
+                            ? 'bg-sandstone text-espresso border border-warmborder'
+                            : 'bg-warmborder text-warmmuted'
+                        }`}
+                      >
+                        <Icon className="size-5" />
                       </div>
 
-                      <h4 className="text-sm font-extrabold text-espresso mt-0.5">
-                        {stage.title}
-                      </h4>
-                      <p className="text-xs text-warmmuted mt-0.5 max-w-xl">
-                        {stage.description}
-                      </p>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-extrabold text-warmmuted">
+                            Tahap {stage.order}
+                          </span>
+                          <span className="text-[11px] font-bold px-2 py-0.2 rounded-full bg-sandstone text-espresso">
+                            {stage.phase}
+                          </span>
+                          {stage.isFree && (
+                            <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-lime-100 text-olive">
+                              GRATIS
+                            </span>
+                          )}
+                          {isCompleted && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-terracotta border border-amber-200">
+                              v{stage.version}
+                            </span>
+                          )}
+                        </div>
+
+                        <h4 className="text-sm font-extrabold text-espresso mt-0.5">
+                          {stage.title}
+                        </h4>
+                        <p className="text-xs text-warmmuted mt-0.5 max-w-xl">
+                          {stage.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+                      {isCompleted ? (
+                        <span className="flex items-center gap-1 text-xs font-bold text-olive bg-lime-50 px-2.5 py-1 rounded-xl border border-lime-200">
+                          <CheckCircle2 className="size-3.5" />
+                          Selesai
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-xs font-bold text-warmmuted bg-sandstone px-2.5 py-1 rounded-xl">
+                          <Clock className="size-3.5" />
+                          Siap Dibuat
+                        </span>
+                      )}
+
+                      {canManageProject && isCompleted && (
+                        <button
+                          onClick={(e) => handleRegenerateStage(stage.key, e)}
+                          title="Regenerate Versi Baru"
+                          className="p-2 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer border border-warmborder"
+                        >
+                          <RefreshCw className="size-3.5" />
+                          <span className="hidden sm:inline">Regen</span>
+                        </button>
+                      )}
+
+                      <button
+                        className="px-3 py-2 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                      >
+                        <Eye className="size-3.5" />
+                        <span>Buka</span>
+                      </button>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-2 self-end md:self-center shrink-0">
-                    {isCompleted ? (
-                      <span className="flex items-center gap-1 text-xs font-bold text-olive bg-lime-50 px-2.5 py-1 rounded-xl border border-lime-200">
-                        <CheckCircle2 className="size-3.5" />
-                        Selesai
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-xs font-bold text-warmmuted bg-sandstone px-2.5 py-1 rounded-xl">
-                        <Clock className="size-3.5" />
-                        Siap Dibuat
-                      </span>
-                    )}
-
-                    {canManageProject && isCompleted && (
-                      <button
-                        onClick={(e) => handleRegenerateStage(stage.key, e)}
-                        title="Regenerate Versi Baru"
-                        className="p-2 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer border border-warmborder"
-                      >
-                        <RefreshCw className="size-3.5" />
-                        <span className="hidden sm:inline">Regen</span>
-                      </button>
-                    )}
-
-                    <button
-                      className="px-3 py-2 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-                    >
-                      <Eye className="size-3.5" />
-                      <span>Buka</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Modal Tambah Proyek Baru (Direksi / SM Only) */}
-        {showNewProjectModal && (
-          <div className="fixed inset-0 z-60 bg-espresso/70 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-6 border border-warmborder max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95">
+        {/* Modal Lihat Dokumen & Parameter Proyek (Tahap 1) */}
+        {showDocumentModal && (
+          <div className="fixed inset-0 z-60 bg-espresso/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+            <div className="bg-white rounded-3xl p-5 sm:p-7 border border-warmborder max-w-xl w-full shadow-2xl space-y-5 animate-in zoom-in-95 my-auto">
               <div className="flex items-center justify-between border-b border-warmborder pb-3">
-                <h3 className="text-base font-extrabold text-espresso">Tambah Proyek Baru</h3>
-                <button onClick={() => setShowNewProjectModal(false)} className="text-warmmuted hover:text-espresso">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2 rounded-xl bg-terracotta/10 text-terracotta">
+                    <UploadCloud className="size-5" />
+                  </span>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-extrabold text-espresso">Dokumen &amp; Parameter Proyek</h3>
+                    <p className="text-[11px] text-warmmuted">
+                      {project?.nama || projectName}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDocumentModal(false)}
+                  className="text-warmmuted hover:text-espresso p-1.5 rounded-xl hover:bg-sandstone cursor-pointer shrink-0"
+                >
                   <X className="size-5" />
                 </button>
               </div>
 
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const fd = new FormData(e.currentTarget);
-                  const name = fd.get('namaProyek') as string;
-                  setToastMessage(`Proyek baru "${name}" berhasil dibuat! Memulai Jalur Proyek...`);
-                  setShowNewProjectModal(false);
-                }}
-                className="space-y-3 text-xs"
-              >
-                <div>
-                  <label className="font-bold text-espresso block mb-1">Nama Proyek Perumahan *</label>
-                  <input
-                    required
-                    name="namaProyek"
-                    placeholder="Contoh: The Park Townhouse Sukoharjo Phase 2"
-                    className="w-full px-3 py-2 rounded-xl border border-warmborder text-espresso focus:outline-none focus:border-terracotta"
-                  />
+              <div className="space-y-4 text-xs">
+                {/* 1. Berkas Brosur / Katalog */}
+                <div className="p-3.5 rounded-2xl bg-sandstone/50 border border-warmborder space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-espresso flex items-center gap-1.5">
+                      <FileText className="size-4 text-terracotta" />
+                      <span>Brosur / Katalog Proyek</span>
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-lime-100 text-olive flex items-center gap-1">
+                      <ShieldCheck className="size-3" /> Terverifikasi
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-warmborder">
+                    <div className="min-w-0 pr-2">
+                      <p className="font-bold text-espresso truncate font-mono text-[11px]">
+                        {project?.katalogFile || 'e-katalog_resmi.pdf'}
+                      </p>
+                      <p className="text-[10px] text-warmmuted mt-0.5">
+                        Denah arsitektur, visual fasad 3D, dan spesifikasi material
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setToastMessage(`Mengunduh berkas ${project?.katalogFile || 'katalog'}...`)}
+                      className="px-2.5 py-1.5 rounded-lg bg-sandstone hover:bg-warmborder text-espresso font-bold text-[10px] flex items-center gap-1 shrink-0 cursor-pointer"
+                    >
+                      <Download className="size-3" /> Unduh
+                    </button>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="font-bold text-espresso block mb-1">Titik Koordinat GPS *</label>
-                  <input
-                    required
-                    name="koordinat"
-                    placeholder="-7.673872, 110.843978"
-                    className="w-full px-3 py-2 rounded-xl border border-warmborder text-espresso focus:outline-none focus:border-terracotta"
-                  />
+                {/* 2. Berkas Pricelist & Skema Bertahap */}
+                <div className="p-3.5 rounded-2xl bg-sandstone/50 border border-warmborder space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-espresso flex items-center gap-1.5">
+                      <TrendingUp className="size-4 text-terracotta" />
+                      <span>Pricelist &amp; Skema Bertahap</span>
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-lime-100 text-olive flex items-center gap-1">
+                      <ShieldCheck className="size-3" /> {project?.totalUnit || 30} Unit Terdaftar
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-warmborder">
+                    <div className="min-w-0 pr-2">
+                      <p className="font-bold text-espresso truncate font-mono text-[11px]">
+                        {project?.pricelistFile || 'pricelist_skema_bertahap.xlsx'}
+                      </p>
+                      <p className="text-[10px] text-warmmuted mt-0.5">
+                        Harga: {project?.kisaranHarga || 'Rp 450 Jt - Rp 1 M'} (Cash Keras, Tempo 6/12/24 Bulan)
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setToastMessage(`Mengunduh berkas ${project?.pricelistFile || 'pricelist'}...`)}
+                      className="px-2.5 py-1.5 rounded-lg bg-sandstone hover:bg-warmborder text-espresso font-bold text-[10px] flex items-center gap-1 shrink-0 cursor-pointer"
+                    >
+                      <Download className="size-3" /> Unduh
+                    </button>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="font-bold text-espresso block mb-1">Unggah Brosur / Katalog (PDF/Gambar)</label>
-                  <input
-                    type="file"
-                    className="w-full px-3 py-2 rounded-xl border border-warmborder text-warmmuted focus:outline-none"
-                  />
+                {/* 3. Parameter Geospatial & Akses */}
+                <div className="p-3.5 rounded-2xl bg-sandstone/50 border border-warmborder space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-espresso flex items-center gap-1.5">
+                      <MapPin className="size-4 text-terracotta" />
+                      <span>Titik Koordinat GPS &amp; Radius Spasial</span>
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-terracotta">
+                      Radius {project?.radiusKm || 25} km
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-white rounded-xl border border-warmborder space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-warmmuted text-[11px]">Koordinat Gerbang:</span>
+                      <span className="font-mono font-bold text-espresso text-[11px]">
+                        {project?.koordinatGps || '-7.673872, 110.843978'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-warmmuted text-[11px]">Lokasi Wilayah:</span>
+                      <span className="font-bold text-espresso text-[11px]">
+                        {project?.lokasi || 'Sukoharjo, Jawa Tengah'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-warmmuted text-[11px]">Tipe Hunian:</span>
+                      <span className="font-bold text-terracotta text-[11px]">
+                        {project?.tipe || 'Mewah'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="font-bold text-espresso block mb-1">Unggah Pricelist (Excel/PDF)</label>
-                  <input
-                    type="file"
-                    className="w-full px-3 py-2 rounded-xl border border-warmborder text-warmmuted focus:outline-none"
-                  />
+                {/* 4. Readiness Summary */}
+                <div className="p-3 rounded-xl bg-lime-50 border border-lime-200 text-olive flex items-start gap-2 text-[11px]">
+                  <CheckCircle2 className="size-4 shrink-0 mt-0.5" />
+                  <span>
+                    Seluruh dokumen proyek telah memenuhi <strong>Gerbang G0 (Draft-ready)</strong> dan <strong>G1 (Publish-ready)</strong>. Siap dilanjutkan ke tahap Surat Cinta, Riset Pasar, dan Target Penjualan.
+                  </span>
                 </div>
+              </div>
 
-                <div className="pt-2 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowNewProjectModal(false)}
-                    className="px-4 py-2 rounded-xl bg-sandstone hover:bg-warmborder font-semibold text-espresso"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded-xl bg-terracotta hover:bg-terracotta/90 font-bold text-white shadow-sm"
-                  >
-                    Buat Proyek & Mulai Jalur
-                  </button>
-                </div>
-              </form>
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowDocumentModal(false)}
+                  className="px-4 py-2 rounded-xl bg-espresso hover:bg-espresso/90 text-white font-bold text-xs cursor-pointer shadow-sm"
+                >
+                  Tutup Dokumen
+                </button>
+              </div>
             </div>
           </div>
         )}

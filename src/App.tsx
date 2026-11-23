@@ -12,10 +12,14 @@ import { ProjectWebsitePreview } from './components/ProjectWebsitePreview';
 import { CrmPipelineView } from './components/CrmPipelineView';
 import { CommissionSettingsModal } from './components/CommissionSettingsModal';
 import { SuperadminPanel } from './components/SuperadminPanel';
+import { PlatformExecutiveDashboard } from './components/superadmin/PlatformExecutiveDashboard';
+import { ItCommandCenterDashboard } from './components/superadmin/ItCommandCenterDashboard';
 import { FieldOpsModal } from './components/FieldOpsModal';
 import { PipelinePage } from './components/PipelinePage';
 import { MobileBottomNav, type MobileNavTab } from './components/mobile/MobileBottomNav';
 import { MobileMoreSheet } from './components/mobile/MobileMoreSheet';
+import { calculateSalesTargetPlan } from './lib/sales-target/calculator';
+import type { ScenarioType } from './lib/sales-target/types';
 import {
   SeMobileActionCard,
   SeMobileScorecardList,
@@ -24,6 +28,11 @@ import {
 import {
   clearAuthSession,
   loadAuthSession,
+  saveAuthSession,
+  saveImpersonatorBackup,
+  loadImpersonatorBackup,
+  clearImpersonatorBackup,
+  isImpersonating,
   type AuthSession,
 } from './lib/auth/dummy-accounts';
 import {
@@ -34,11 +43,23 @@ import {
   savePersistedState,
 } from './lib/navigation/router';
 import {
+  getProjectById,
+  loadSavedProjectId,
+  saveSelectedProjectId,
+  loadUnitsForProject,
+  saveUnitsForProject,
+  loadAllProjects,
+  saveNewProject,
+  type CompanyProject,
+} from './lib/projects/projects-data';
+import {
+  ArrowRight,
   Award,
   BookOpen,
   Building2,
   Calendar,
   CheckCircle2,
+  ChevronDown,
   Clock,
   Compass,
   Database,
@@ -65,6 +86,7 @@ import {
   Sparkles,
   TrendingUp,
   Users,
+  X,
 } from 'lucide-react';
 import {
   AD_CAMPAIGNS,
@@ -72,7 +94,6 @@ import {
   DEFAULT_ITEMS,
   DIREKSI_PROJECTS,
   ESCALATION_DATA,
-  INITIAL_UNITS,
   IT_AUDIT_LOGS,
   LIVE_SLA_LEADS,
   PERIODS,
@@ -89,8 +110,6 @@ import {
   type Status,
   type UnitProperty,
 } from './data';
-
-const UNITS_STORAGE_KEY = 'devos_units_master_v2';
 
 const today = new Intl.DateTimeFormat('id-ID', {
   weekday: 'long',
@@ -115,16 +134,6 @@ function loadItems(): ReportItem[] {
   return structuredClone(EMPTY_SE_ITEMS);
 }
 
-function loadUnits(): UnitProperty[] {
-  try {
-    const raw = localStorage.getItem(UNITS_STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as UnitProperty[];
-  } catch {
-    /* ignore fallback */
-  }
-  return structuredClone(INITIAL_UNITS);
-}
-
 const BADGES: Record<Status, { cls: string; text: string }> = {
   hit: { cls: 'bg-lime-100 text-olive', text: 'HIT' },
   near: { cls: 'bg-amber-50 text-terracotta', text: 'PROSES' },
@@ -145,6 +154,108 @@ export default function App() {
   );
   const [role, setRole] = useState<RoleKey>(() => loadAuthSession()?.role ?? 'SE');
   const user = USERS_BY_ROLE[role];
+  const isPlatformSuperadmin = role === 'SUPERADMIN' || role === 'SUPERADMIN_IT';
+
+  // Multi-Project State (Universal untuk seluruh role: SE, TL, SM, DM, ADMIN, DIREKSI, IT)
+  const [projects, setProjects] = useState<CompanyProject[]>(() => loadAllProjects());
+  const [activeProjectId, setActiveProjectId] = useState<string>(() => loadSavedProjectId());
+  const [showNewProjectModal, setShowNewProjectModal] = useState<boolean>(false);
+  const activeProject = getProjectById(activeProjectId);
+
+  // Active Sales Target Scenario per Project (Dikendalikan oleh SM)
+  const [activeScenario, setActiveScenario] = useState<ScenarioType>(() =>
+    loadPersistedState<ScenarioType>(`devos_target_scenario_${loadSavedProjectId()}`, 'realistis')
+  );
+
+  useEffect(() => {
+    setActiveScenario(
+      loadPersistedState<ScenarioType>(`devos_target_scenario_${activeProjectId}`, 'realistis')
+    );
+  }, [activeProjectId]);
+
+  // Target reverse-funnel dinamis yang dihitung dari skenario SM
+  const currentTargetPlan = useMemo(() => {
+    const avgPrice =
+      activeProject.id === 'andara-village'
+        ? 550000000
+        : activeProject.id === 'griya-andara-asri'
+        ? 185000000
+        : 900000000;
+    return calculateSalesTargetPlan(
+      {
+        projectId: activeProject.id,
+        projectName: activeProject.nama,
+        totalUnits: activeProject.totalUnit,
+        avgPriceIdr: avgPrice,
+        seHeadcount: 3,
+      },
+      activeScenario
+    );
+  }, [activeProject, activeScenario]);
+
+  // Kuota ritme harian/mingguan/bulanan per SE sesuai skenario SM
+  const seTargetAllocation = currentTargetPlan.seAllocations[0] || {
+    monthlyUnitTarget: 2,
+    weeklySiteVisitTarget: 3,
+    dailyContactTarget: 8,
+  };
+
+  const handleSelectProject = (projectId: string) => {
+    setActiveProjectId(projectId);
+    saveSelectedProjectId(projectId);
+    const newProject = getProjectById(projectId);
+    setUnits(loadUnitsForProject(projectId));
+    setClusterFilter('all');
+    setStatusFilter('all');
+    setToast(`Proyek aktif: ${newProject.nama}`);
+  };
+
+  const handleCreateNewProject = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const nama = (fd.get('namaProyek') as string)?.trim();
+    if (!nama) return;
+
+    const kode = (fd.get('kodeProyek') as string)?.trim();
+    const tipe = (fd.get('tipeProyek') as 'Mewah' | 'Menengah' | 'Subsidi') || 'Menengah';
+    const lokasi = (fd.get('lokasiProyek') as string)?.trim() || 'Sukoharjo';
+    const koordinatGps = (fd.get('koordinatGps') as string)?.trim() || '-7.673872, 110.843978';
+    const radiusKm = Number(fd.get('radiusKm')) || 25;
+    const totalUnit = Number(fd.get('totalUnit')) || 30;
+    const kisaranHarga = (fd.get('kisaranHarga') as string)?.trim() || 'Rp 500 Jt - Rp 800 Jt';
+    const deskripsi = (fd.get('deskripsi') as string)?.trim();
+    const katalogFileObj = fd.get('katalogFile') as File | null;
+    const pricelistFileObj = fd.get('pricelistFile') as File | null;
+
+    const created = saveNewProject({
+      nama,
+      kode,
+      tipe,
+      lokasi,
+      koordinatGps,
+      radiusKm,
+      totalUnit,
+      kisaranHarga,
+      deskripsi,
+      katalogFile: katalogFileObj && katalogFileObj.name ? katalogFileObj.name : 'e-katalog_resmi.pdf',
+      pricelistFile: pricelistFileObj && pricelistFileObj.name ? pricelistFileObj.name : 'pricelist_skema_bertahap.xlsx',
+      generatedOutputs: {
+        suratCinta: true,
+        risetPasar: true,
+        targetPenjualan: true,
+        kalenderKonten: true,
+        playbook: true,
+        ruteHarian: true,
+      },
+    });
+
+    const updatedProjects = loadAllProjects();
+    setProjects(updatedProjects);
+    handleSelectProject(created.id);
+    setShowNewProjectModal(false);
+    openView('jalur');
+    setToast(`Proyek "${created.nama}" berhasil dibuat! 6 Mesin Output (Surat Cinta, Riset 25km, Target, Kalender, Playbook 5 Role, Rute) langsung aktif.`);
+  };
 
   // SE States (tersimpan di localStorage agar tidak hilang saat reload)
   const [items, setItems] = useState<ReportItem[]>(loadItems);
@@ -156,7 +267,10 @@ export default function App() {
   );
 
   // SM States (CRUD Units & SE monitoring)
-  const [units, setUnits] = useState<UnitProperty[]>(loadUnits);
+  const [units, setUnits] = useState<UnitProperty[]>(() =>
+    loadUnitsForProject(loadSavedProjectId())
+  );
+  const projectClusters = useMemo(() => Array.from(new Set(units.map((u) => u.cluster))), [units]);
   const [clusterFilter, setClusterFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showUnitModal, setShowUnitModal] = useState<boolean>(false);
@@ -280,8 +394,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(UNITS_STORAGE_KEY, JSON.stringify(units));
-  }, [units]);
+    saveUnitsForProject(activeProjectId, units);
+  }, [units, activeProjectId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -308,7 +422,12 @@ export default function App() {
         : period === 'minggu'
         ? seRealData?.metrics?.leadsWeekValidCount ?? seRealData?.metrics?.totalValidLeadsCount ?? 0
         : seRealData?.metrics?.leadsMonthValidCount ?? seRealData?.metrics?.totalValidLeadsCount ?? 0,
-    leadsTarget: period === 'harian' ? 8 : period === 'minggu' ? 48 : 200,
+    leadsTarget:
+      period === 'harian'
+        ? seTargetAllocation.dailyContactTarget
+        : period === 'minggu'
+        ? seTargetAllocation.dailyContactTarget * 6
+        : seTargetAllocation.dailyContactTarget * 26,
     leadsSubtext: `Total Pipeline Aktif: ${seRealData?.metrics?.totalValidLeadsCount ?? 0} Lead Valid`,
     qualifiedCount: seRealData?.metrics?.qualifiedProspectsCount ?? 0,
     hotCount: seRealData?.metrics?.hotProspectsCount ?? 0,
@@ -333,7 +452,39 @@ export default function App() {
     meta: activePeriodData.meta,
     dash: realDashOffset,
   };
-  const list = useMemo(() => (filter === 'all' ? items : items.filter((r) => r.cat === filter)), [items, filter]);
+  const list = useMemo(() => {
+    // Sesuaikan targetNum item laporan harian SE berdasarkan target skenario yang dipilih SM
+    const mapped = items.map((r) => {
+      if (r.id === 1) {
+        // Lead baru harian
+        return { ...r, target: `${seTargetAllocation.dailyContactTarget}`, targetNum: seTargetAllocation.dailyContactTarget };
+      }
+      if (r.id === 2) {
+        // Dial / percakapan telepon
+        const dialTarget = Math.max(15, seTargetAllocation.dailyContactTarget * 3);
+        const talkTarget = Math.max(6, Math.round(dialTarget * 0.4));
+        return { ...r, target: `${dialTarget} / ${talkTarget}`, targetNum: dialTarget };
+      }
+      if (r.id === 3) {
+        // Chat WA personal
+        const chatTarget = Math.max(25, seTargetAllocation.dailyContactTarget * 4);
+        const respTarget = Math.max(10, Math.round(chatTarget * 0.4));
+        return { ...r, target: `${chatTarget} / ${respTarget}`, targetNum: chatTarget };
+      }
+      if (r.id === 4) {
+        // Canvassing
+        const canTarget = Math.max(15, seTargetAllocation.dailyContactTarget * 2);
+        return { ...r, target: `${canTarget} / ${canTarget * 2} / ${Math.max(2, Math.round(canTarget * 0.15))}`, targetNum: canTarget };
+      }
+      if (r.id === 8) {
+        // Kunjungan / survei harian
+        const visitTarget = Math.max(1, Math.round(seTargetAllocation.weeklySiteVisitTarget / 6));
+        return { ...r, target: `${visitTarget}`, targetNum: visitTarget };
+      }
+      return r;
+    });
+    return filter === 'all' ? mapped : mapped.filter((r) => r.cat === filter);
+  }, [items, filter, seTargetAllocation]);
   const hits = items.filter((r) => r.targetNum !== null && evalStatus(r) === 'hit').length;
 
   const adjustDailyCounters = async (updates: Record<string, number>) => {
@@ -452,7 +603,7 @@ export default function App() {
   const copyWa = async () => {
     const lines = [
       `*LAPORAN HARIAN SE — DEVELOPER SALES OS*`,
-      `PT Andara Rejo Makmur · The Park Townhouse Sukoharjo`,
+      `${activeProject.nama}`,
       `${todayShort} | ${user.name} | Scorecard Real: ${realScorecardTotal} Poin`,
       '',
     ];
@@ -532,8 +683,37 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleExitImpersonation = () => {
+    const backupSession = loadImpersonatorBackup();
+    clearImpersonatorBackup();
+    if (backupSession) {
+      saveAuthSession(backupSession);
+      setAuthSession(backupSession);
+      setRole(backupSession.role);
+    } else {
+      const defaultItSession: AuthSession = {
+        role: 'SUPERADMIN_IT',
+        email: USERS_BY_ROLE.SUPERADMIN_IT.email,
+        name: USERS_BY_ROLE.SUPERADMIN_IT.name,
+        loggedInAt: new Date().toISOString(),
+      };
+      saveAuthSession(defaultItSession);
+      setAuthSession(defaultItSession);
+      setRole('SUPERADMIN_IT');
+    }
+    setActiveView('dashboard');
+    navigateToView('dashboard');
+    setViewMode('dashboard');
+    setToast('Kembali ke Dashboard IT Superadmin');
+  };
+
   const handleLogout = () => {
+    if (isImpersonating()) {
+      handleExitImpersonation();
+      return;
+    }
     clearAuthSession();
+    clearImpersonatorBackup();
     setAuthSession(null);
     setIsMobileMoreOpen(false);
     setActiveView('dashboard');
@@ -593,18 +773,20 @@ export default function App() {
           <span>Dashboard {role}</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => handleItemClick(() => openView('pipeline'))}
-          className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
-            activeView === 'pipeline'
-              ? 'bg-amber-50 text-terracotta font-bold'
-              : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
-          }`}
-        >
-          <Users className="size-4 shrink-0" />
-          <span>{role === 'SE' ? 'Pipeline' : 'Pipeline & WA AI'}</span>
-        </button>
+        {!isPlatformSuperadmin && role !== 'DIREKSI' && (
+          <button
+            type="button"
+            onClick={() => handleItemClick(() => openView('pipeline'))}
+            className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+              activeView === 'pipeline'
+                ? 'bg-amber-50 text-terracotta font-bold'
+                : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+            }`}
+          >
+            <Users className="size-4 shrink-0" />
+            <span>{role === 'SE' ? 'Pipeline' : 'Pipeline & WA AI'}</span>
+          </button>
+        )}
 
         {role === 'SE' && (
           <>
@@ -639,16 +821,24 @@ export default function App() {
           <>
             <button
               type="button"
-              onClick={() => handleItemClick(() => openDashboardSection('master-unit'))}
-              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
+              onClick={() => handleItemClick(() => openView('unit_park'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'unit_park'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
             >
               <Home className="size-4 shrink-0" />
-              <span>30 Unit The Park</span>
+              <span>{activeProject.totalUnit} Unit {activeProject.nama.split(' ')[0]} {activeProject.nama.split(' ')[1] || ''}</span>
             </button>
             <button
               type="button"
-              onClick={() => handleItemClick(() => openDashboardSection('tim-se'))}
-              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
+              onClick={() => handleItemClick(() => openView('kinerja_se'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'kinerja_se'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
             >
               <Users className="size-4 shrink-0" />
               <span>Pantau Kinerja 3 SE</span>
@@ -769,150 +959,237 @@ export default function App() {
           </>
         )}
 
-        {/* Project Workflow & Market Intelligence (Disesuaikan per Role) */}
-        <div className="pt-4 mt-3 border-t border-warmborder">
-          <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-warmmuted mb-1.5">
-            {role === 'SE' ? 'Alat Kerja Sales' : 'Pemasaran Proyek'}
-          </p>
-
-          {role !== 'SE' && (
-            <>
-              <button
-                onClick={() => handleItemClick(() => openView('jalur'))}
-                className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-                  activeView === 'jalur' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-                }`}
-              >
-                <Layers className="size-4 text-terracotta shrink-0" />
-                <span>Jalur Proyek (8 Tahap)</span>
-              </button>
-
-              <button
-                onClick={() => handleItemClick(() => openView('riset'))}
-                className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-                  activeView === 'riset' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-                }`}
-              >
-                <Compass className="size-4 text-terracotta shrink-0" />
-                <span>Riset Pasar (Radius 25km)</span>
-              </button>
-
-              <button
-                onClick={() => handleItemClick(() => openView('target'))}
-                className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-                  activeView === 'target' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-                }`}
-              >
-                <TrendingUp className="size-4 text-terracotta shrink-0" />
-                <span>Target Penjualan 100%</span>
-              </button>
-            </>
-          )}
-
-          <button
-            onClick={() => handleItemClick(() => openView('kalender'))}
-            className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-              activeView === 'kalender' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-            }`}
-          >
-            <Calendar className="size-4 text-terracotta shrink-0" />
-            <span>{role === 'SE' ? 'Kalender Konten' : 'Kalender Konten (30 Hari)'}</span>
-          </button>
-
-          <button
-            onClick={() => handleItemClick(() => openView('playbook'))}
-            className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-              activeView === 'playbook' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-            }`}
-          >
-            <BookOpen className="size-4 text-terracotta shrink-0" />
-            <span>{role === 'SE' ? 'Playbook' : 'Playbook Sales (SE/TL/SM)'}</span>
-          </button>
-
-          <button
-            onClick={() => handleItemClick(() => openView('rute'))}
-            className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-              activeView === 'rute' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-            }`}
-          >
-            <MapPin className="size-4 text-terracotta shrink-0" />
-            <span>{role === 'SE' ? 'Rute Harian Canvassing' : 'Rute Harian Kanvasing'}</span>
-          </button>
-
-          <button
-            onClick={() => handleItemClick(() => openView('lapangan'))}
-            className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-              activeView === 'lapangan' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-            }`}
-          >
-            <PhoneCall className="size-4 text-olive shrink-0" />
-            <span>{role === 'SE' ? 'Absen, GPS, Call' : 'Absen, GPS, Call & AI Guide'}</span>
-          </button>
-
-          {role !== 'SE' && (
-            <>
-              <button
-                onClick={() => handleItemClick(() => openView('website'))}
-                className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-                  activeView === 'website' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-                }`}
-              >
-                <Globe className="size-4 text-terracotta shrink-0" />
-                <span>Website Landing Page</span>
-              </button>
-
-              <button
-                onClick={() => handleItemClick(() => openView('crm'))}
-                className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-                  activeView === 'crm' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-                }`}
-              >
-                <Users className="size-4 text-terracotta shrink-0" />
-                <span>CRM &amp; Pipeline (7 Stage)</span>
-              </button>
-
-              <button
-                onClick={() => handleItemClick(() => openView('komisi'))}
-                className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-                  activeView === 'komisi' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-                }`}
-              >
-                <Percent className="size-4 text-olive shrink-0" />
-                <span>Aturan Komisi Penjualan</span>
-              </button>
-            </>
-          )}
-
-          <button
-            onClick={() => handleItemClick(() => openView('kb'))}
-            className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-              activeView === 'kb' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-            }`}
-          >
-            <Database className="size-4 text-olive shrink-0" />
-            <span>Knowledge Base Produk</span>
-          </button>
-
-          <button
-            onClick={() => handleItemClick(() => openView('surat_cinta'))}
-            className={`w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-left transition-colors cursor-pointer ${
-              activeView === 'surat_cinta' ? 'bg-amber-50 text-terracotta' : 'text-espresso hover:bg-sandstone'
-            }`}
-          >
-            <HeartHandshake className="size-4 text-terracotta shrink-0" />
-            <span>Surat Cinta 99 Keunggulan</span>
-          </button>
-
-          {(role === 'IT' || role === 'DIREKSI') && (
+        {/* Alat Kerja Khusus Role SE (Ringkas & Terfokus) */}
+        {role === 'SE' && (
+          <div className="pt-4 mt-3 border-t border-warmborder">
+            <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-warmmuted mb-1.5">
+              Alat Kerja Sales
+            </p>
             <button
-              onClick={() => handleItemClick(() => setShowSuperadminModal(true))}
-              className="w-full flex items-center gap-3 h-9 px-3 rounded-xl text-xs font-semibold text-espresso hover:bg-sandstone text-left transition-colors cursor-pointer"
+              type="button"
+              onClick={() => handleItemClick(() => openView('kalender'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'kalender'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
             >
-              <ShieldCheck className="size-4 text-amber-600 shrink-0" />
+              <Calendar className="size-4 shrink-0" />
+              <span>Kalender Konten</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('playbook'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'playbook'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <BookOpen className="size-4 shrink-0" />
+              <span>Playbook</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('rute'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'rute'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <MapPin className="size-4 shrink-0" />
+              <span>Rute Harian Canvassing</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('lapangan'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'lapangan'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <PhoneCall className="size-4 shrink-0" />
+              <span>Absen, GPS, Call</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('kb'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'kb'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Database className="size-4 shrink-0" />
+              <span>Knowledge Base Produk</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('surat_cinta'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'surat_cinta'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <HeartHandshake className="size-4 shrink-0" />
+              <span>Surat Cinta 99 Keunggulan</span>
+            </button>
+          </div>
+        )}
+
+        {/* Unified Project & Workflow Navigation Items (Role Non-SE, Disembunyikan untuk Direksi & Platform Superadmin) */}
+        {role !== 'SE' && !isPlatformSuperadmin && role !== 'DIREKSI' && (
+          <>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('jalur'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'jalur'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Layers className="size-4 shrink-0" />
+              <span>Jalur Proyek (8 Tahap)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('riset'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'riset'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Compass className="size-4 shrink-0" />
+              <span>Riset Pasar (Radius 25km)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('target'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'target'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <TrendingUp className="size-4 shrink-0" />
+              <span>Target Penjualan 100%</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('kalender'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'kalender'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Calendar className="size-4 shrink-0" />
+              <span>Kalender Konten (30 Hari)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('playbook'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'playbook'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <BookOpen className="size-4 shrink-0" />
+              <span>Playbook Sales (SE/TL/SM)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('lapangan'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'lapangan'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <PhoneCall className="size-4 shrink-0" />
+              <span>Absen, GPS, Call &amp; AI Guide</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('website'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'website'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Globe className="size-4 shrink-0" />
+              <span>Website Landing Page</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('komisi'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'komisi'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Percent className="size-4 shrink-0" />
+              <span>Aturan Komisi Penjualan</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('kb'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'kb'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Database className="size-4 shrink-0" />
+              <span>Knowledge Base Produk</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('surat_cinta'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'surat_cinta'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <HeartHandshake className="size-4 shrink-0" />
+              <span>Surat Cinta 99 Keunggulan</span>
+            </button>
+          </>
+        )}
+
+        {isPlatformSuperadmin && (
+          <div className="pt-2 border-t border-warmborder space-y-1">
+            <span className="block px-3.5 py-1 text-[10px] font-black uppercase tracking-wider text-terracotta">
+              Platform Internal Developer Sales OS
+            </span>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => setShowSuperadminModal(true))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer bg-amber-500/10 text-terracotta font-extrabold border border-amber-300/60"
+            >
+              <ShieldCheck className="size-4 shrink-0 text-terracotta" />
               <span>Panel Superadmin Multi-Tenant</span>
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </nav>
     );
   };
@@ -941,8 +1218,60 @@ export default function App() {
             </div>
             <div className="min-w-0">
               <p className="font-extrabold text-sm tracking-tight text-espresso truncate">Developer Sales OS</p>
-              <p className="text-[10px] text-warmmuted truncate">PT Andara Rejo Makmur</p>
+              <p className="text-[10px] text-warmmuted truncate">Multi-Tenant Ecosystem</p>
             </div>
+          </div>
+
+          {/* Universal Project Switcher untuk Akun Developer Klien vs Badge Platform untuk Superadmin */}
+          <div className="mt-3">
+            {!isPlatformSuperadmin ? (
+              <>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-warmmuted">
+                    Proyek Aktif
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewProjectModal(true)}
+                    className="text-[10px] font-bold text-terracotta hover:underline flex items-center gap-0.5 cursor-pointer"
+                    title="Tambah Proyek Baru"
+                  >
+                    <Plus className="size-3" /> Tambah
+                  </button>
+                </div>
+                <div className="relative">
+                  <select
+                    aria-label="Pilih Proyek Aktif di Sidebar"
+                    value={activeProjectId}
+                    onChange={(e) => handleSelectProject(e.target.value)}
+                    className="w-full h-9 pl-8 pr-7 rounded-xl border border-warmborder bg-sandstone hover:bg-sandstone/80 text-xs font-bold text-espresso appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-terracotta transition-colors"
+                  >
+                    {projects.map((proj) => (
+                      <option key={proj.id} value={proj.id}>
+                        {proj.nama} ({proj.tipe})
+                      </option>
+                    ))}
+                  </select>
+                  <Building2 className="size-3.5 text-terracotta absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <ChevronDown className="size-3.5 text-warmmuted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </>
+            ) : (
+              <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/80 shadow-2xs">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-terracotta">
+                    Cakupan Akses
+                  </span>
+                  <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-terracotta text-white">
+                    Global Core
+                  </span>
+                </div>
+                <p className="text-[11px] font-bold text-espresso flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <span className="truncate">Lintas Semua Developer</span>
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Quick Action Button */}
@@ -988,6 +1317,16 @@ export default function App() {
               <span>Proyeksi Akhir Bulan</span>
             </button>
           )}
+
+          {isPlatformSuperadmin && (
+            <button
+              onClick={() => setShowSuperadminModal(true)}
+              className="mt-3 w-full h-9 rounded-xl bg-terracotta text-white text-xs font-bold flex items-center justify-center gap-2 hover:bg-terracotta/90 cursor-pointer shadow-sm"
+            >
+              <Sparkles className="size-3.5 text-white" />
+              <span>Superadmin Multi-Tenant</span>
+            </button>
+          )}
         </div>
 
         {/* Scrollable Navigation List (scrollbar disembunyikan agar rapi) */}
@@ -1013,15 +1352,30 @@ export default function App() {
             </div>
             <div className="mt-2 pt-2 border-t border-warmborder flex items-center justify-between text-[10px] text-warmmuted">
               <span className="font-semibold text-terracotta">{user.role}</span>
-              <span className="truncate max-w-[120px]">{user.proyek || 'Andara Rejo Makmur'}</span>
+              <span className="truncate max-w-[120px] font-semibold text-espresso">
+                {isPlatformSuperadmin ? 'Developer Sales OS' : activeProject.nama}
+              </span>
             </div>
             <button
               type="button"
               onClick={handleLogout}
-              className="mt-2.5 w-full h-8 rounded-xl bg-white hover:bg-rose-50 text-espresso hover:text-rose-700 border border-warmborder hover:border-rose-200 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              className={`mt-2.5 w-full h-8 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border ${
+                isImpersonating()
+                  ? 'bg-amber-400 hover:bg-amber-300 text-espresso border-amber-500 font-black shadow-xs'
+                  : 'bg-white hover:bg-rose-50 text-espresso hover:text-rose-700 border-warmborder hover:border-rose-200'
+              }`}
             >
-              <LogOut className="size-3.5" />
-              <span>Keluar</span>
+              {isImpersonating() ? (
+                <>
+                  <ArrowRight className="size-3.5 rotate-180" />
+                  <span>Kembali ke IT Superadmin</span>
+                </>
+              ) : (
+                <>
+                  <LogOut className="size-3.5" />
+                  <span>Keluar</span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -1032,6 +1386,27 @@ export default function App() {
         id="dashboard-scroll-container"
         className="flex-1 min-w-0 md:h-[100dvh] md:overflow-y-auto pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-12 min-h-0 focus:outline-none"
       >
+        {/* Sticky Impersonation Banner untuk Bantuan IT */}
+        {isImpersonating() && (
+          <div className="bg-espresso text-white px-4 py-2.5 border-b-2 border-amber-400 flex items-center justify-between z-30 sticky top-0 shadow-md">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="size-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+              <strong className="text-amber-300 uppercase tracking-wider">Mode Bantuan IT Aktif:</strong>
+              <span className="text-stone-300 hidden sm:inline">
+                Mengakses dashboard sebagai <strong>{user.name}</strong> ({user.roleLabel}) &middot; Proyek: {activeProject.nama}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleExitImpersonation}
+              className="px-3 py-1 rounded-xl bg-amber-400 hover:bg-amber-300 text-espresso font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors shrink-0"
+            >
+              <ArrowRight className="size-3.5 rotate-180" />
+              <span>Kembali ke IT Superadmin</span>
+            </button>
+          </div>
+        )}
+
         {/* Header Desktop */}
         <header className="hidden md:flex items-center justify-between px-8 py-5 bg-white border-b border-warmborder sticky top-0 z-20">
           <div>
@@ -1042,11 +1417,61 @@ export default function App() {
               </span>
             </div>
             <p className="text-xs text-warmmuted mt-0.5">
-              {today} · PT Andara Rejo Makmur · The Park Townhouse Sukoharjo
+              {today} ·{' '}
+              {isPlatformSuperadmin ? (
+                <span className="font-semibold text-terracotta">
+                  Cakupan Seluruh Developer &amp; Proyek Platform
+                </span>
+              ) : (
+                <>
+                  <span className="font-semibold text-espresso">{activeProject.nama}</span> ({activeProject.tipe})
+                </>
+              )}
             </p>
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Universal Project Pill Dropdown & Tambah Proyek Button persis di sebelahnya (Klien Developer) vs Panel Superadmin (Superadmin) */}
+            {!isPlatformSuperadmin ? (
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <select
+                    aria-label="Pilih Proyek Aktif"
+                    value={activeProjectId}
+                    onChange={(e) => handleSelectProject(e.target.value)}
+                    className="h-10 pl-8 pr-8 rounded-xl border border-warmborder bg-sandstone hover:bg-sandstone/80 text-xs font-bold text-espresso appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-terracotta transition-colors shadow-sm"
+                  >
+                    {projects.map((proj) => (
+                      <option key={proj.id} value={proj.id}>
+                        {proj.nama} ({proj.tipe})
+                      </option>
+                    ))}
+                  </select>
+                  <Building2 className="size-4 text-terracotta absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <ChevronDown className="size-4 text-warmmuted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowNewProjectModal(true)}
+                  className="h-10 px-3.5 rounded-xl bg-terracotta text-white hover:bg-terracotta/90 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer shrink-0"
+                  title="Tambah Proyek Baru"
+                >
+                  <Plus className="size-4" />
+                  <span>Tambah Proyek</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowSuperadminModal(true)}
+                className="h-10 px-3.5 rounded-xl bg-amber-500/10 border border-amber-300/80 hover:bg-amber-500/20 text-terracotta text-xs font-extrabold flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
+                title="Buka Panel Superadmin Multi-Tenant"
+              >
+                <ShieldCheck className="size-4 text-terracotta" />
+                <span>Panel Multi-Tenant Core</span>
+              </button>
+            )}
             {role === 'SE' && (
               <>
                 <button
@@ -1095,7 +1520,7 @@ export default function App() {
             </div>
             <div className="min-w-0">
               <p className="text-[10px] font-extrabold uppercase tracking-wider text-terracotta leading-none truncate">
-                The Park Townhouse
+                {isPlatformSuperadmin ? 'Developer Sales OS Platform' : activeProject.nama}
               </p>
               <h1 className="text-sm font-extrabold text-espresso leading-tight truncate">
                 Dashboard {role}
@@ -1120,10 +1545,12 @@ export default function App() {
           {activeView === 'jalur' && (
             <JalurProyek
               variant="page"
-              projectName="The Park Townhouse Sukoharjo"
+              projectName={activeProject.nama}
+              project={activeProject}
               userRole={role}
               onOpenStage={(stageKey) => {
-                if (stageKey === 'riset_pasar') openView('riset');
+                if (stageKey === 'surat_cinta_99') openView('surat_cinta');
+                else if (stageKey === 'riset_pasar') openView('riset');
                 else if (stageKey === 'target_penjualan') openView('target');
                 else if (stageKey === 'kalender_konten') openView('kalender');
                 else if (stageKey === 'playbook') openView('playbook');
@@ -1137,7 +1564,8 @@ export default function App() {
           {activeView === 'riset' && (
             <MarketResearchViewer
               variant="page"
-              projectName="The Park Townhouse Sukoharjo"
+              projectId={activeProject.id}
+              projectName={activeProject.nama}
               userRole={role}
             />
           )}
@@ -1145,17 +1573,30 @@ export default function App() {
           {activeView === 'target' && (
             <SalesTargetViewer
               variant="page"
-              projectName="The Park Townhouse Sukoharjo"
-              totalUnits={30}
-              avgPriceIdr={900000000}
+              projectId={activeProject.id}
+              projectName={activeProject.nama}
+              totalUnits={activeProject.totalUnit}
+              avgPriceIdr={
+                activeProject.id === 'andara-village'
+                  ? 550000000
+                  : activeProject.id === 'griya-andara-asri'
+                  ? 185000000
+                  : 900000000
+              }
               seHeadcount={3}
+              userRole={role}
+              onScenarioChange={(newScenario) => {
+                setActiveScenario(newScenario);
+                setToast(`Skenario target proyek diperbarui ke "${newScenario.toUpperCase()}". Ritme kerja SE telah disesuaikan.`);
+              }}
             />
           )}
 
           {activeView === 'kalender' && (
             <ContentCalendarViewer
               variant="page"
-              projectName="The Park Townhouse Sukoharjo"
+              projectId={activeProject.id}
+              projectName={activeProject.nama}
               userEmail={user.email}
               userRole={role}
               onDataChanged={fetchSeRealDashboard}
@@ -1165,14 +1606,16 @@ export default function App() {
           {activeView === 'playbook' && (
             <PlaybookViewer
               variant="page"
-              projectName="The Park Townhouse Sukoharjo"
+              projectId={activeProject.id}
+              projectName={activeProject.nama}
             />
           )}
 
           {activeView === 'rute' && (
             <DailyRouteViewer
               variant="page"
-              projectName="The Park Townhouse Sukoharjo"
+              projectId={activeProject.id}
+              projectName={activeProject.nama}
               userEmail={user.email}
               userRole={role}
             />
@@ -1181,10 +1624,13 @@ export default function App() {
           {activeView === 'lapangan' && (
             <FieldOpsModal
               variant="page"
-              projectName="The Park Townhouse Sukoharjo"
-              currentSeName={role === 'SE' ? user.name : 'SE 001 Budi Santoso'}
+              projectId={activeProject.id}
+              project={activeProject}
+              projectName={activeProject.nama}
+              currentSeName={user.name}
               userEmail={user.email}
               userRole={role}
+              userProfile={user}
               hideAiGuide={role === 'SE'}
               planCode="platinum"
               onDataChanged={fetchSeRealDashboard}
@@ -1198,6 +1644,9 @@ export default function App() {
           {activeView === 'website' && (
             <ProjectWebsitePreview
               variant="page"
+              projectId={activeProject.id}
+              projectName={activeProject.nama}
+              project={activeProject}
               onLeadCaptured={() => {
                 setToast('Lead baru berhasil tersimpan ke CRM Proyek!');
               }}
@@ -1207,7 +1656,8 @@ export default function App() {
           {activeView === 'crm' && (
             <CrmPipelineView
               variant="page"
-              projectName="The Park Townhouse Sukoharjo"
+              projectId={activeProject.id}
+              projectName={activeProject.nama}
               userRole={role}
             />
           )}
@@ -1219,12 +1669,19 @@ export default function App() {
             />
           )}
 
-          {activeView === 'kb' && <KnowledgeBaseViewer />}
+          {activeView === 'kb' && (
+            <KnowledgeBaseViewer
+              projectId={activeProject.id}
+              projectName={activeProject.nama}
+            />
+          )}
 
           {activeView === 'surat_cinta' && (
             <LoveLetterViewerModal
               variant="page"
               isOpen={true}
+              projectId={activeProject.id}
+              projectName={activeProject.nama}
               onClose={() => openView('dashboard')}
             />
           )}
@@ -1745,7 +2202,7 @@ export default function App() {
           )}
 
           {/* ========================================================================= */}
-          {/* ROLE 3: SALES MANAGER (SM) DASHBOARD (SEMI-AI: CRUD PROYEK & MONITOR SE) */}
+          {/* ROLE 3: SALES MANAGER (SM) DASHBOARD (EXECUTIVE OVERVIEW) */}
           {/* ========================================================================= */}
           {activeView === 'dashboard' && role === 'SM' && (
             <div className="space-y-6">
@@ -1756,13 +2213,127 @@ export default function App() {
                     <span className="text-xs font-bold px-2 py-0.5 rounded bg-terracotta text-white">
                       SM Semi-AI
                     </span>
-                    <h2 className="text-lg font-bold text-espresso">Manajemen Proyek &amp; Supervisi SE</h2>
+                    <h2 className="text-lg font-bold text-espresso">Dashboard Sales Manager</h2>
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-50 text-terracotta border border-amber-200">
-                      Tipe: Perumahan Mewah
+                      {isPlatformSuperadmin ? 'Developer Sales OS Platform' : activeProject.nama} Sukoharjo
                     </span>
                   </div>
                   <p className="text-xs text-warmmuted mt-1">
-                    Kelola data 30 unit (Nagoya, Osaka, Tokyo), tipe proyek (Mewah, Subsidi, Menengah), LT, LB, skema cash keras &amp; tempo 6/12/24 bulan.
+                    Ringkasan eksekutif penjualan 30 unit (Nagoya, Osaka, Tokyo), supervisi kinerja tim SE binaan, dan monitoring pipeline WhatsApp AI.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openView('unit_park')}
+                    className="px-4 py-2.5 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center gap-2 hover:bg-espresso/90 cursor-pointer shrink-0 shadow-sm"
+                  >
+                    <Home className="size-4 text-amber-400" /> Buka 30 Unit Proyek
+                  </button>
+                  <button
+                    onClick={() => openView('kinerja_se')}
+                    className="px-4 py-2.5 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-xs font-semibold flex items-center gap-2 cursor-pointer shrink-0"
+                  >
+                    <Users className="size-4 text-terracotta" /> Pantau 3 SE
+                  </button>
+                </div>
+              </div>
+
+              {/* KPI Cards Ringkasan Eksekutif SM */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+                  <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Total Inventori</p>
+                  <p className="text-2xl font-extrabold text-espresso mt-1">30 Unit</p>
+                  <p className="text-[11px] text-warmmuted mt-1">
+                    {units.filter((u) => u.status === 'tersedia').length} Tersedia · {units.filter((u) => u.status === 'booking').length} Booking · {units.filter((u) => u.status === 'terjual').length} Terjual
+                  </p>
+                </div>
+
+                <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+                  <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Tim SE Binaan</p>
+                  <p className="text-2xl font-extrabold text-espresso mt-1">3 Orang Aktif</p>
+                  <p className="text-[11px] text-olive font-semibold mt-1">Zona A, C, dan D</p>
+                </div>
+
+                <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+                  <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Rata Respon Pesan</p>
+                  <p className="text-2xl font-extrabold text-olive mt-1">5.2 Menit</p>
+                  <p className="text-[11px] text-warmmuted mt-1">Target SLA Playbook &le; 5 Menit</p>
+                </div>
+
+                <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
+                  <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Pencapaian Net Sales</p>
+                  <p className="text-2xl font-extrabold text-terracotta mt-1">5 Unit</p>
+                  <p className="text-[11px] text-warmmuted mt-1">Dari target 9 unit bulan ini</p>
+                </div>
+              </div>
+
+              {/* Quick Navigation Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-50 text-terracotta">
+                        Halaman Khusus
+                      </span>
+                      <Home className="size-5 text-terracotta" />
+                    </div>
+                    <h3 className="text-base font-bold text-espresso mt-3">
+                      {activeProject.totalUnit} Unit {activeProject.nama} (Inventori &amp; Skema)
+                    </h3>
+                    <p className="text-xs text-warmmuted mt-1">
+                      Manajemen inventori lengkap: cluster {projectClusters.join(', ')}, skema cash keras dan tempo bertahap 6, 12, hingga 24 bulan, status unit, serta penambahan unit baru.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => openView('unit_park')}
+                    className="mt-5 w-full py-2.5 rounded-xl bg-sandstone hover:bg-warmborder text-espresso font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <span>Buka Halaman {activeProject.totalUnit} Unit {activeProject.nama.split(' ')[0]}</span>
+                    <ArrowRight className="size-4" />
+                  </button>
+                </div>
+
+                <div className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded bg-lime-50 text-olive">
+                        Halaman Khusus
+                      </span>
+                      <Users className="size-5 text-olive" />
+                    </div>
+                    <h3 className="text-base font-bold text-espresso mt-3">Pantau Kinerja 3 SE Binaan</h3>
+                    <p className="text-xs text-warmmuted mt-1">
+                      Supervisi real-time personil SE: kepatuhan SLA respons pesan, jumlah lead &amp; prospek, jadwal kunjungan, rekap laporan harian 18.00, serta total poin scorecard.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => openView('kinerja_se')}
+                    className="mt-5 w-full py-2.5 rounded-xl bg-sandstone hover:bg-warmborder text-espresso font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <span>Buka Halaman Pantau Kinerja 3 SE</span>
+                    <ArrowRight className="size-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* HALAMAN MANDIRI: INVENTORI UNIT PROYEK AKTIF */}
+          {/* ========================================================================= */}
+          {activeView === 'unit_park' && (
+            <div className="space-y-6">
+              {/* Header Halaman */}
+              <div className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-terracotta text-white">
+                      Inventori Proyek
+                    </span>
+                    <h2 className="text-lg font-bold text-espresso">{activeProject.totalUnit} Unit {activeProject.nama}</h2>
+                  </div>
+                  <p className="text-xs text-warmmuted mt-1">
+                    Master inventori unit: cluster {projectClusters.join(', ')}, luas tanah, luas bangunan, skema pembayaran tunai &amp; tempo 6/12/24 bulan, status ketersediaan, serta pengeditan data unit.
                   </p>
                 </div>
                 <button
@@ -1770,19 +2341,19 @@ export default function App() {
                     setEditingUnit(null);
                     setShowUnitModal(true);
                   }}
-                  className="px-4 py-2.5 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center gap-2 hover:bg-espresso/90 cursor-pointer shrink-0"
+                  className="px-4 py-2.5 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center gap-2 hover:bg-espresso/90 cursor-pointer shrink-0 shadow-sm"
                 >
                   <Plus className="size-4 text-amber-400" /> Tambah Unit Properti
                 </button>
               </div>
 
-              {/* Master Inventori 30 Unit CRUD */}
+              {/* Master Inventori Unit CRUD */}
               <section id="master-unit" className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
                 <div className="p-5 border-b border-warmborder flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-base font-bold text-espresso">Inventori 30 Unit — The Park Townhouse Sukoharjo</h3>
+                    <h3 className="text-base font-bold text-espresso">Daftar Inventori {activeProject.totalUnit} Unit</h3>
                     <p className="text-xs text-warmmuted mt-0.5">
-                      Termasuk LT, LB, harga cash keras, cash tempo 6, 12, 24 bulan, status unit &amp; keterangan.
+                      Pilih filter cluster atau status untuk menyortir ketersediaan unit properti {activeProject.nama}.
                     </p>
                   </div>
 
@@ -1793,10 +2364,15 @@ export default function App() {
                       onChange={(e) => setClusterFilter(e.target.value)}
                       className="h-9 px-3 rounded-xl border border-warmborder bg-sandstone text-xs font-semibold text-espresso focus:outline-none"
                     >
-                      <option value="all">Semua Cluster (30)</option>
-                      <option value="Nagoya">Nagoya (14 Unit)</option>
-                      <option value="Osaka">Osaka (9 Unit)</option>
-                      <option value="Tokyo">Tokyo (7 Unit)</option>
+                      <option value="all">Semua Cluster ({units.length})</option>
+                      {projectClusters.map((cl) => {
+                        const count = units.filter((u) => u.cluster === cl).length;
+                        return (
+                          <option key={cl} value={cl}>
+                            {cl} ({count} Unit)
+                          </option>
+                        );
+                      })}
                     </select>
 
                     <select
@@ -1879,12 +2455,40 @@ export default function App() {
                   </table>
                 </div>
               </section>
+            </div>
+          )}
 
-              {/* SM Pantau Tim SE Dibawahnya */}
+          {/* ========================================================================= */}
+          {/* HALAMAN MANDIRI: PANTAU KINERJA 3 SE */}
+          {/* ========================================================================= */}
+          {activeView === 'kinerja_se' && (
+            <div className="space-y-6">
+              {/* Header Halaman */}
+              <div className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-olive text-white">
+                      Supervisi Tim
+                    </span>
+                    <h2 className="text-lg font-bold text-espresso">Pemantauan Kinerja Tim SE Binaan SM</h2>
+                  </div>
+                  <p className="text-xs text-warmmuted mt-1">
+                    Supervisi real-time 3 Sales Executive: SLA respons pesan (≤5 menit), pipeline lead, kunjungan lapangan, closing booking, dan rekap scorecard Playbook §6.4.
+                  </p>
+                </div>
+                <button
+                  onClick={() => openView('pipeline')}
+                  className="px-4 py-2.5 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center gap-2 hover:bg-espresso/90 cursor-pointer shrink-0 shadow-sm"
+                >
+                  <Users className="size-4 text-amber-400" /> Buka Pipeline &amp; WA AI
+                </button>
+              </div>
+
+              {/* SM Pantau Tim SE Table Section */}
               <section id="tim-se" className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
                 <div className="p-5 border-b border-warmborder flex items-center justify-between">
                   <div>
-                    <h3 className="text-base font-bold text-espresso">Pemantauan Kinerja Tim SE Binaan SM</h3>
+                    <h3 className="text-base font-bold text-espresso">Performa Real-Time &amp; Kepatuhan SLA</h3>
                     <p className="text-xs text-warmmuted mt-0.5">
                       Data real-time SE: Waktu respons, lead terancam 72 jam, status laporan cut-off 18.00, dan scorecard.
                     </p>
@@ -2192,7 +2796,7 @@ export default function App() {
                 <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
                   <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Konfirmasi Booking H+1</p>
                   <p className="text-2xl font-extrabold text-espresso mt-1">3 Transaksi</p>
-                  <p className="text-[11px] text-olive font-semibold mt-1">Wajib Rekening PT Andara Rejo Makmur</p>
+                  <p className="text-[11px] text-olive font-semibold mt-1">Wajib Rekening Resmi Developer</p>
                 </div>
                 <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
                   <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Pemberkasan KPR H+7</p>
@@ -2627,6 +3231,38 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {/* ========================================================================= */}
+          {/* ROLE 7: PLATFORM INTERNAL SUPERADMIN (DIREKSI & IT DEVELOPER SALES OS) */}
+          {/* ========================================================================= */}
+          {activeView === 'dashboard' && role === 'SUPERADMIN' && (
+            <PlatformExecutiveDashboard
+              onOpenSuperadminModal={() => setShowSuperadminModal(true)}
+            />
+          )}
+
+          {activeView === 'dashboard' && role === 'SUPERADMIN_IT' && (
+            <ItCommandCenterDashboard
+              onOpenSuperadminModal={() => setShowSuperadminModal(true)}
+              onImpersonateUser={(u, pId) => {
+                if (authSession) saveImpersonatorBackup(authSession);
+                const supportSession: AuthSession = {
+                  role: u.role,
+                  email: u.email,
+                  name: `${u.name} (Bantuan IT)`,
+                  loggedInAt: new Date().toISOString(),
+                };
+                saveAuthSession(supportSession);
+                setAuthSession(supportSession);
+                setRole(u.role);
+                if (pId) {
+                  saveSelectedProjectId(pId);
+                  setActiveProjectId(pId);
+                }
+                setToast(`Mode Bantuan Aktif: Masuk sebagai ${u.name} (${u.roleLabel})`);
+              }}
+            />
+          )}
         </div>
       </main>
 
@@ -2636,7 +3272,7 @@ export default function App() {
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto space-y-4 shadow-xl border border-warmborder">
             <div className="flex items-center justify-between pb-3 border-b border-warmborder">
               <h3 className="text-base font-bold text-espresso">
-                {editingUnit ? `Edit Unit ${editingUnit.namaUnit}` : 'Tambah Unit Baru — The Park'}
+                {editingUnit ? `Edit Unit ${editingUnit.namaUnit}` : `Tambah Unit Baru — ${activeProject.nama}`}
               </h3>
               <button
                 onClick={() => setShowUnitModal(false)}
@@ -2834,6 +3470,9 @@ export default function App() {
         onClose={() => setIsMobileMoreOpen(false)}
         role={role}
         user={user}
+        activeProjectId={activeProjectId}
+        projects={projects}
+        onSelectProject={handleSelectProject}
         actions={{
           onOpenTarget: () => openView('target'),
           onOpenCalendar: () => openView('kalender'),
@@ -2845,12 +3484,225 @@ export default function App() {
           onOpenCommission: () => openView('komisi'),
           onOpenKb: () => openView('kb'),
           onOpenLoveLetter: () => openView('surat_cinta'),
+          onOpenUnitPark: () => openView('unit_park'),
+          onOpenKinerjaSe: () => openView('kinerja_se'),
           onOpenSuperadmin: () => setShowSuperadminModal(true),
           onGoHomepage: () => setViewMode('homepage'),
           onLogout: handleLogout,
           onNavigateDashboardSection: (secId) => openDashboardSection(secId),
         }}
       />
+
+      {/* MODAL TAMBAH PROYEK BARU DENGAN 6 OUTPUT GENERATOR */}
+      {showNewProjectModal && (
+        <div className="fixed inset-0 z-60 bg-espresso/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-5 sm:p-7 border border-warmborder max-w-2xl w-full shadow-2xl space-y-5 animate-in zoom-in-95 my-auto max-h-[94vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-warmborder pb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-xl bg-terracotta/10 text-terracotta">
+                  <Building2 className="size-5" />
+                </span>
+                <div>
+                  <h3 className="text-base sm:text-lg font-extrabold text-espresso">Tambah Proyek Baru &amp; Jalankan 6 Output</h3>
+                  <p className="text-[11px] text-warmmuted">
+                    Input koordinat GPS, katalog, &amp; pricelist untuk menghasilkan riset 25km, surat cinta, target, kalender, playbook 5 role, dan rute harian.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNewProjectModal(false)}
+                className="text-warmmuted hover:text-espresso p-1.5 rounded-xl hover:bg-sandstone cursor-pointer shrink-0"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateNewProject} className="space-y-4 text-xs">
+              {/* Bagian 1: Identitas & Tipe Proyek */}
+              <div className="space-y-3">
+                <p className="font-extrabold text-espresso uppercase tracking-wider text-[10px] text-terracotta">
+                  1. Identitas &amp; Klasifikasi Proyek
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                  <div className="sm:col-span-8">
+                    <label className="font-bold text-espresso block mb-1">Nama Proyek Perumahan *</label>
+                    <input
+                      required
+                      name="namaProyek"
+                      placeholder="Contoh: Griya Melati Asri Sukoharjo"
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder text-espresso focus:outline-none focus:border-terracotta"
+                    />
+                  </div>
+                  <div className="sm:col-span-4">
+                    <label className="font-bold text-espresso block mb-1">Kode Proyek</label>
+                    <input
+                      name="kodeProyek"
+                      placeholder="Contoh: GMA"
+                      maxLength={5}
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder text-espresso focus:outline-none focus:border-terracotta uppercase"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="font-bold text-espresso block mb-1">Tipe Proyek *</label>
+                    <select
+                      name="tipeProyek"
+                      defaultValue="Menengah"
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder text-espresso focus:outline-none focus:border-terracotta bg-white"
+                    >
+                      <option value="Mewah">Mewah (Townhouse)</option>
+                      <option value="Menengah">Menengah (Komersil)</option>
+                      <option value="Subsidi">Subsidi (FLPP)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-bold text-espresso block mb-1">Total Unit *</label>
+                    <input
+                      required
+                      type="number"
+                      name="totalUnit"
+                      defaultValue={35}
+                      min={1}
+                      max={500}
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder text-espresso focus:outline-none focus:border-terracotta"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-espresso block mb-1">Kisaran Harga</label>
+                    <input
+                      name="kisaranHarga"
+                      placeholder="Rp 450 Jt - Rp 750 Jt"
+                      defaultValue="Rp 450 Jt - Rp 750 Jt"
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder text-espresso focus:outline-none focus:border-terracotta"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bagian 2: Titik Koordinat GPS & Dokumen Acuan */}
+              <div className="space-y-3 pt-3 border-t border-warmborder">
+                <p className="font-extrabold text-espresso uppercase tracking-wider text-[10px] text-terracotta">
+                  2. Parameter Acuan (Koordinat GPS, Radius 25km, Katalog, Pricelist)
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                  <div className="sm:col-span-8">
+                    <label className="font-bold text-espresso block mb-1">
+                      Titik Koordinat GPS Gerbang Proyek (Lat, Lng) *
+                    </label>
+                    <div className="relative">
+                      <input
+                        required
+                        name="koordinatGps"
+                        defaultValue="-7.673872, 110.843978"
+                        placeholder="-7.673872, 110.843978"
+                        className="w-full pl-8 pr-3 py-2 rounded-xl border border-warmborder text-espresso focus:outline-none focus:border-terracotta font-mono text-[11px]"
+                      />
+                      <MapPin className="size-4 text-terracotta absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+                  <div className="sm:col-span-4">
+                    <label className="font-bold text-espresso block mb-1">Radius Riset Pasar</label>
+                    <input
+                      name="radiusKm"
+                      type="number"
+                      defaultValue={25}
+                      readOnly
+                      className="w-full px-3 py-2 rounded-xl border border-warmborder bg-sandstone/70 text-espresso font-semibold"
+                    />
+                    <span className="text-[10px] text-warmmuted">Standar cincin radius 25km</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-espresso block mb-1">Unggah Brosur / Katalog (PDF/Gambar)</label>
+                    <input
+                      type="file"
+                      name="katalogFile"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      className="w-full px-3 py-1.5 rounded-xl border border-warmborder text-warmmuted file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-sandstone file:text-espresso"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-espresso block mb-1">Unggah Pricelist &amp; Skema Bertahap (Excel/PDF)</label>
+                    <input
+                      type="file"
+                      name="pricelistFile"
+                      accept=".xlsx,.xls,.pdf,.csv"
+                      className="w-full px-3 py-1.5 rounded-xl border border-warmborder text-warmmuted file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-sandstone file:text-espresso"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-espresso block mb-1">Lokasi Wilayah &amp; Akses</label>
+                  <input
+                    required
+                    name="lokasiProyek"
+                    placeholder="Contoh: Sukoharjo (Koridor Solo Baru)"
+                    defaultValue="Mandan, Sukoharjo"
+                    className="w-full px-3 py-2 rounded-xl border border-warmborder text-espresso focus:outline-none focus:border-terracotta"
+                  />
+                </div>
+              </div>
+
+              {/* Bagian 3: Ringkasan 6 Mesin Output yang Langsung Aktif */}
+              <div className="p-3.5 bg-sandstone/60 border border-warmborder rounded-2xl space-y-2">
+                <p className="font-extrabold text-espresso text-[11px] flex items-center gap-1.5">
+                  <Sparkles className="size-3.5 text-terracotta" />
+                  <span>Otomatisasi 6 Output yang Langsung Dihasilkan:</span>
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-espresso">
+                  <div className="flex items-center gap-2 p-2 bg-white rounded-xl border border-warmborder/80">
+                    <CheckCircle2 className="size-4 text-olive shrink-0" />
+                    <span><strong>Surat Cinta 99 Keunggulan</strong> (narasi kurasi)</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-white rounded-xl border border-warmborder/80">
+                    <CheckCircle2 className="size-4 text-olive shrink-0" />
+                    <span><strong>Riset Pasar Radius 25km</strong> (titik GPS)</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-white rounded-xl border border-warmborder/80">
+                    <CheckCircle2 className="size-4 text-olive shrink-0" />
+                    <span><strong>Target Penjualan 100%</strong> (reverse funnel)</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-white rounded-xl border border-warmborder/80">
+                    <CheckCircle2 className="size-4 text-olive shrink-0" />
+                    <span><strong>Kalender Konten 30 Hari</strong> (Akun Official &amp; SE)</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-white rounded-xl border border-warmborder/80">
+                    <CheckCircle2 className="size-4 text-olive shrink-0" />
+                    <span><strong>Playbook Sales (5 Role)</strong> (SE, TL, SM, DM, Admin)</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-white rounded-xl border border-warmborder/80">
+                    <CheckCircle2 className="size-4 text-olive shrink-0" />
+                    <span><strong>Rute Harian Kanvasing SE</strong> (GPS gerbang)</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2 border-t border-warmborder">
+                <button
+                  type="button"
+                  onClick={() => setShowNewProjectModal(false)}
+                  className="px-4 py-2.5 rounded-xl border border-warmborder text-warmmuted hover:bg-sandstone font-bold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white font-extrabold flex items-center gap-2 cursor-pointer shadow-md shadow-terracotta/20"
+                >
+                  <Plus className="size-4" />
+                  <span>Buat Proyek &amp; Jalankan 6 Output</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Floating Toast Notification */}
       {toast && (

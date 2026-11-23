@@ -337,18 +337,21 @@ export function createDefaultContentCalendar(
 // In-memory calendar store
 const calendarStore = new Map<string, Map<number, ContentCalendarPlan>>();
 calendarStore.set('proj-the-park-01', new Map([[1, createDefaultContentCalendar()]]));
+calendarStore.set('the-park-sukoharjo', new Map([[1, createDefaultContentCalendar()]]));
 
 export function getContentCalendar(
   projectId: string,
   version?: number,
   isDemoMode: boolean = false
-): ContentCalendarPlan {
+): ContentCalendarPlan | null {
   const projMap = calendarStore.get(projectId);
-  let plan: ContentCalendarPlan;
-
   if (!projMap || projMap.size === 0) {
-    plan = createDefaultContentCalendar(projectId);
-  } else if (version && projMap.has(version)) {
+    // Proyek belum memiliki kalender konten
+    return null;
+  }
+
+  let plan: ContentCalendarPlan;
+  if (version && projMap.has(version)) {
     plan = structuredClone(projMap.get(version)!);
   } else {
     const maxVer = Math.max(...Array.from(projMap.keys()));
@@ -360,6 +363,12 @@ export function getContentCalendar(
   }
 
   return plan;
+}
+
+export function initProjectCalendar(projectId: string): ContentCalendarPlan {
+  const newPlan = createDefaultContentCalendar(projectId);
+  calendarStore.set(projectId, new Map([[1, newPlan]]));
+  return newPlan;
 }
 
 /**

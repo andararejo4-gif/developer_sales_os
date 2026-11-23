@@ -14,14 +14,21 @@ import {
   CheckCircle2,
   Send,
   MessageCircle,
+  Sparkles,
 } from 'lucide-react';
 import {
-  THE_PARK_DEFAULT_WEBSITE_CONFIG,
   calculateMortgageInstallment,
   generateStandaloneHtml,
 } from '../lib/website-generator/the-park-landing-data';
+import {
+  getProjectWebsiteConfig,
+  initProjectWebsiteConfig,
+} from '../lib/website-generator/website-engine';
+import { getLoveLetterPoints } from '../lib/love-letter/love-letter-engine';
+import { type LoveLetterPoint } from '../lib/love-letter/points-data';
+import type { ProjectWebsiteConfig } from '../lib/website-generator/types';
+import type { CompanyProject } from '../lib/projects/projects-data';
 import { formatRupiah } from '../lib/sales-target/calculator';
-import { LOVE_LETTER_POINTS, type LoveLetterPoint } from '../lib/love-letter/points-data';
 import {
   getQueryParam,
   setQueryParam,
@@ -31,12 +38,18 @@ import {
 
 interface ProjectWebsitePreviewProps {
   variant?: 'modal' | 'page';
+  projectId?: string;
+  projectName?: string;
+  project?: CompanyProject;
   onClose?: () => void;
   onLeadCaptured?: (lead: { name: string; phone: string; unit: string; utmSource: string }) => void;
 }
 
 export function ProjectWebsitePreview({
   variant = 'modal',
+  projectId = 'the-park-sukoharjo',
+  projectName = 'The Park Townhouse Sukoharjo',
+  project,
   onClose,
   onLeadCaptured,
 }: ProjectWebsitePreviewProps) {
@@ -45,34 +58,50 @@ export function ProjectWebsitePreview({
     if (urlTab === 'desktop' || urlTab === 'mobile') return urlTab;
     return loadPersistedState<'desktop' | 'mobile'>('devos_web_device', 'desktop');
   });
-  const [config] = useState(THE_PARK_DEFAULT_WEBSITE_CONFIG);
+
+  const [config, setConfig] = useState<ProjectWebsiteConfig | null>(() =>
+    getProjectWebsiteConfig(projectId)
+  );
+
+  useEffect(() => {
+    setConfig(getProjectWebsiteConfig(projectId));
+  }, [projectId]);
+
+  const handleInitWebsite = () => {
+    const newConfig = initProjectWebsiteConfig(projectId, projectName, project);
+    setConfig(newConfig);
+  };
+
   const [selectedUnitIndex, setSelectedUnitIndex] = useState(() =>
-    loadPersistedState<number>('devos_web_unit_idx', 0)
+    loadPersistedState<number>(`devos_web_unit_idx_${projectId}`, 0)
   );
 
   // Mortgage Calculator States
   const [selectedPrice, setSelectedPrice] = useState(() =>
-    loadPersistedState<number>('devos_web_price', config.units[0].startingPriceIdr)
+    loadPersistedState<number>(
+      `devos_web_price_${projectId}`,
+      config?.units?.[0]?.startingPriceIdr || 500000000
+    )
   );
   const [dpPercent, setDpPercent] = useState(() =>
-    loadPersistedState<number>('devos_web_dp', 10)
+    loadPersistedState<number>(`devos_web_dp_${projectId}`, config?.simulationDefaults?.defaultDpPercent || 10)
   );
   const [tenorYears, setTenorYears] = useState(() =>
-    loadPersistedState<number>('devos_web_tenor', 15)
+    loadPersistedState<number>(`devos_web_tenor_${projectId}`, 15)
   );
-  const interestRate = 4.75;
+  const interestRate = config?.simulationDefaults?.interestRatePercent || 4.75;
 
   // 99 Points explorer filter
   const [activeCategory, setActiveCategory] = useState<string>(() =>
-    loadPersistedState<string>('devos_web_cat', 'all')
+    loadPersistedState<string>(`devos_web_cat_${projectId}`, 'all')
   );
 
   // Lead Form
   const [leadName, setLeadName] = useState(() =>
-    loadPersistedState<string>('devos_web_lead_name', '')
+    loadPersistedState<string>(`devos_web_lead_name_${projectId}`, '')
   );
   const [leadPhone, setLeadPhone] = useState(() =>
-    loadPersistedState<string>('devos_web_lead_phone', '')
+    loadPersistedState<string>(`devos_web_lead_phone_${projectId}`, '')
   );
   const [leadSubmitted, setLeadSubmitted] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -85,14 +114,14 @@ export function ProjectWebsitePreview({
   }, [deviceMode, variant]);
 
   useEffect(() => {
-    savePersistedState('devos_web_unit_idx', selectedUnitIndex);
-    savePersistedState('devos_web_price', selectedPrice);
-    savePersistedState('devos_web_dp', dpPercent);
-    savePersistedState('devos_web_tenor', tenorYears);
-    savePersistedState('devos_web_cat', activeCategory);
-    savePersistedState('devos_web_lead_name', leadName);
-    savePersistedState('devos_web_lead_phone', leadPhone);
-  }, [selectedUnitIndex, selectedPrice, dpPercent, tenorYears, activeCategory, leadName, leadPhone]);
+    savePersistedState(`devos_web_unit_idx_${projectId}`, selectedUnitIndex);
+    savePersistedState(`devos_web_price_${projectId}`, selectedPrice);
+    savePersistedState(`devos_web_dp_${projectId}`, dpPercent);
+    savePersistedState(`devos_web_tenor_${projectId}`, tenorYears);
+    savePersistedState(`devos_web_cat_${projectId}`, activeCategory);
+    savePersistedState(`devos_web_lead_name_${projectId}`, leadName);
+    savePersistedState(`devos_web_lead_phone_${projectId}`, leadPhone);
+  }, [selectedUnitIndex, selectedPrice, dpPercent, tenorYears, activeCategory, leadName, leadPhone, projectId]);
 
   const simulation = calculateMortgageInstallment({
     propertyPriceIdr: selectedPrice,
@@ -101,12 +130,14 @@ export function ProjectWebsitePreview({
     tenorYears,
   });
 
-  const categories: string[] = Array.from(new Set(LOVE_LETTER_POINTS.map((p: LoveLetterPoint) => p.category)));
+  const projectPoints = getLoveLetterPoints(projectId) || [];
+  const categories: string[] = Array.from(new Set(projectPoints.map((p: LoveLetterPoint) => p.category)));
   const filteredPoints = activeCategory === 'all'
-    ? LOVE_LETTER_POINTS.slice(0, 12)
-    : LOVE_LETTER_POINTS.filter((p: LoveLetterPoint) => p.category === activeCategory).slice(0, 12);
+    ? projectPoints.slice(0, 12)
+    : projectPoints.filter((p: LoveLetterPoint) => p.category === activeCategory).slice(0, 12);
 
   const handleDownloadHtml = () => {
+    if (!config) return;
     const htmlContent = generateStandaloneHtml(config);
     const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -122,14 +153,14 @@ export function ProjectWebsitePreview({
 
   const handleLeadSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!leadName || !leadPhone) return;
+    if (!leadName || !leadPhone || !config) return;
 
     if (onLeadCaptured) {
       onLeadCaptured({
         name: leadName,
         phone: leadPhone,
-        unit: config.units[selectedUnitIndex].name,
-        utmSource: 'Website Landing Page (thepark)',
+        unit: config.units[selectedUnitIndex]?.name || 'Unit Properti',
+        utmSource: `Website Landing Page (${config.subdomain})`,
       });
     }
 
@@ -158,7 +189,7 @@ export function ProjectWebsitePreview({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono font-bold text-terracotta bg-terracotta/10 px-2 py-0.5 rounded-full border border-terracotta/20">
-                  {config.subdomain}.developerproperti.giivepro.com
+                  {config ? `${config.subdomain}.developerproperti.glivepro.com` : `${(project?.kode || projectName).toLowerCase().replace(/[^a-z0-9]/g, '')}.developerproperti.glivepro.com`}
                 </span>
                 <span className="text-xs font-bold text-olive bg-lime-100 px-2 py-0.5 rounded-full">
                   Live Preview
@@ -193,13 +224,15 @@ export function ProjectWebsitePreview({
               </button>
             </div>
 
-            <button
-              onClick={handleDownloadHtml}
-              className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-espresso text-white hover:bg-espresso/90 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-            >
-              <Download className="size-3.5 text-amber-400" />
-              <span>Unduh HTML Mandiri</span>
-            </button>
+            {config && (
+              <button
+                onClick={handleDownloadHtml}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-espresso text-white hover:bg-espresso/90 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+              >
+                <Download className="size-3.5 text-amber-400" />
+                <span>Unduh HTML Mandiri</span>
+              </button>
+            )}
 
             {onClose && (
               <button
@@ -214,123 +247,144 @@ export function ProjectWebsitePreview({
 
         {/* Website Frame Canvas */}
         <div className="flex-1 overflow-y-auto bg-[#F4EFEA] p-4 md:p-8 flex justify-center">
-          <div
-            className={`transition-all duration-300 bg-white rounded-3xl shadow-xl border border-warmborder overflow-hidden ${
-              deviceMode === 'mobile' ? 'w-[375px] max-w-full' : 'w-full max-w-5xl'
-            }`}
-          >
-            {/* Website Header */}
-            <div className="px-6 py-4 bg-white border-b border-warmborder/80 flex items-center justify-between sticky top-0 z-10 backdrop-blur-md bg-white/95">
-              <div className="flex items-center gap-2">
-                <span className="size-7 rounded-lg bg-terracotta text-white font-black text-xs grid place-items-center">
-                  TP
-                </span>
-                <span className="font-extrabold text-sm text-espresso">The Park Townhouse</span>
+          {!config ? (
+            <div className="p-12 text-center rounded-3xl bg-white border border-dashed border-warmborder space-y-4 my-8 max-w-lg mx-auto shadow-sm self-center">
+              <div className="size-16 rounded-2xl bg-sandstone text-warmmuted grid place-items-center mx-auto shadow-2xs">
+                <Globe className="size-8 text-warmmuted" />
               </div>
-              <a
-                href={`https://wa.me/${config.whatsappNumber}`}
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-1.5 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 flex items-center gap-1.5 transition-colors"
-              >
-                <MessageCircle className="size-3.5" />
-                <span>WhatsApp</span>
-              </a>
-            </div>
-
-            {/* Hero Section */}
-            <div className="px-6 py-12 md:py-16 text-center bg-gradient-to-b from-sandstone/60 to-white">
-              <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-terracotta/10 text-terracotta border border-terracotta/20 uppercase tracking-wider">
-                Eksklusif Hanya 30 Unit Butik
-              </span>
-              <h1 className="text-2xl md:text-4xl font-black text-espresso mt-4 max-w-2xl mx-auto leading-tight">
-                {config.heroHeadline}
-              </h1>
-              <p className="text-xs md:text-sm text-warmmuted mt-3 max-w-xl mx-auto leading-relaxed">
-                {config.heroSubheadline}
-              </p>
-              <div className="mt-6 flex flex-wrap justify-center gap-3">
-                <a
-                  href="#unit-section"
-                  className="px-5 py-2.5 rounded-xl bg-terracotta text-white text-xs font-extrabold hover:bg-terracotta/90 transition-all shadow-md shadow-terracotta/20"
-                >
-                  Jelajahi Pilihan Unit
-                </a>
-                <a
-                  href="#simulasi-cicilan"
-                  className="px-5 py-2.5 rounded-xl bg-white border border-warmborder text-espresso text-xs font-bold hover:bg-sandstone transition-all"
-                >
-                  Simulasi Cicilan KPR
-                </a>
-              </div>
-            </div>
-
-            {/* Interactive 99 Points Explorer */}
-            <div className="p-6 md:p-8 border-t border-warmborder">
-              <div className="text-center max-w-xl mx-auto mb-6">
-                <span className="text-xs font-bold text-terracotta uppercase">Dokumen Faktual</span>
-                <h2 className="text-lg md:text-xl font-extrabold text-espresso mt-0.5">
-                  99 Keunggulan Kurasi Nilai Kehidupan
-                </h2>
-                <p className="text-xs text-warmmuted mt-1">
-                  Dikelompokkan berdasarkan kategori spasial, kenyamanan termal, dan kepastian hukum
+              <div>
+                <h3 className="text-base font-extrabold text-espresso">Belum ada website landing page</h3>
+                <p className="text-xs text-warmmuted mt-1 max-w-md mx-auto leading-relaxed">
+                  Website landing page belum dibuat untuk <strong>{projectName}</strong>. Dihasilkan otomatis dari titik koordinat GPS, katalog unit, dan pricelist proyek.
                 </p>
               </div>
-
-              {/* Category Pills */}
-              <div className="flex gap-1.5 overflow-x-auto pb-3 mb-4">
-                <button
-                  onClick={() => setActiveCategory('all')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                    activeCategory === 'all'
-                      ? 'bg-espresso text-white'
-                      : 'bg-sandstone text-warmmuted hover:text-espresso'
-                  }`}
+              <button
+                type="button"
+                onClick={handleInitWebsite}
+                className="px-4 py-2.5 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 cursor-pointer shadow-xs inline-flex items-center gap-2"
+              >
+                <Sparkles className="size-4" />
+                <span>Generate Website Landing Page</span>
+              </button>
+            </div>
+          ) : (
+            <div
+              className={`transition-all duration-300 bg-white rounded-3xl shadow-xl border border-warmborder overflow-hidden ${
+                deviceMode === 'mobile' ? 'w-[375px] max-w-full' : 'w-full max-w-5xl'
+              }`}
+            >
+              {/* Website Header */}
+              <div className="px-6 py-4 bg-white border-b border-warmborder/80 flex items-center justify-between sticky top-0 z-10 backdrop-blur-md bg-white/95">
+                <div className="flex items-center gap-2">
+                  <span className="size-7 rounded-lg bg-terracotta text-white font-black text-xs grid place-items-center">
+                    {projectName.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                  </span>
+                  <span className="font-extrabold text-sm text-espresso">{projectName}</span>
+                </div>
+                <a
+                  href={`https://wa.me/${config.whatsappNumber}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 flex items-center gap-1.5 transition-colors"
                 >
-                  Semua ({LOVE_LETTER_POINTS.length})
-                </button>
-                {categories.map((cat) => (
+                  <MessageCircle className="size-3.5" />
+                  <span>WhatsApp</span>
+                </a>
+              </div>
+
+              {/* Hero Section */}
+              <div className="px-6 py-12 md:py-16 text-center bg-gradient-to-b from-sandstone/60 to-white">
+                <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-terracotta/10 text-terracotta border border-terracotta/20 uppercase tracking-wider">
+                  Eksklusif {project?.totalUnit || config.units.length} Unit {project?.tipe || 'Pilihan'}
+                </span>
+                <h1 className="text-2xl md:text-4xl font-black text-espresso mt-4 max-w-2xl mx-auto leading-tight">
+                  {config.heroHeadline}
+                </h1>
+                <p className="text-xs md:text-sm text-warmmuted mt-3 max-w-xl mx-auto leading-relaxed">
+                  {config.heroSubheadline}
+                </p>
+                <div className="mt-6 flex flex-wrap justify-center gap-3">
+                  <a
+                    href="#unit-section"
+                    className="px-5 py-2.5 rounded-xl bg-terracotta text-white text-xs font-extrabold hover:bg-terracotta/90 transition-all shadow-md shadow-terracotta/20"
+                  >
+                    Jelajahi Pilihan Unit
+                  </a>
+                  <a
+                    href="#simulasi-cicilan"
+                    className="px-5 py-2.5 rounded-xl bg-white border border-warmborder text-espresso text-xs font-bold hover:bg-sandstone transition-all"
+                  >
+                    Simulasi Cicilan KPR
+                  </a>
+                </div>
+              </div>
+
+              {/* Interactive 99 Points Explorer */}
+              <div className="p-6 md:p-8 border-t border-warmborder">
+                <div className="text-center max-w-xl mx-auto mb-6">
+                  <span className="text-xs font-bold text-terracotta uppercase">Dokumen Faktual</span>
+                  <h2 className="text-lg md:text-xl font-extrabold text-espresso mt-0.5">
+                    99 Keunggulan Kurasi Nilai Kehidupan
+                  </h2>
+                  <p className="text-xs text-warmmuted mt-1">
+                    Dikelompokkan berdasarkan kategori spasial, kenyamanan termal, dan kepastian hukum
+                  </p>
+                </div>
+
+                {/* Category Pills */}
+                <div className="flex gap-1.5 overflow-x-auto pb-3 mb-4">
                   <button
-                    key={cat}
-                    onClick={() => setActiveCategory(cat)}
+                    onClick={() => setActiveCategory('all')}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                      activeCategory === cat
-                        ? 'bg-terracotta text-white'
+                      activeCategory === 'all'
+                        ? 'bg-espresso text-white'
                         : 'bg-sandstone text-warmmuted hover:text-espresso'
                     }`}
                   >
-                    {cat}
+                    Semua ({projectPoints.length})
                   </button>
-                ))}
-              </div>
+                  {categories.map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setActiveCategory(cat)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                        activeCategory === cat
+                          ? 'bg-terracotta text-white'
+                          : 'bg-sandstone text-warmmuted hover:text-espresso'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
 
-              {/* Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {filteredPoints.map((p) => (
-                  <div key={p.number} className="p-3.5 rounded-2xl bg-sandstone/30 border border-warmborder/70 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between text-[10px] font-bold text-terracotta mb-1">
-                        <span>#{p.number}</span>
-                        <span className="text-warmmuted">{p.category}</span>
+                {/* Cards Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {filteredPoints.map((p) => (
+                    <div key={p.number} className="p-3.5 rounded-2xl bg-sandstone/30 border border-warmborder/70 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between text-[10px] font-bold text-terracotta mb-1">
+                          <span>#{p.number}</span>
+                          <span className="text-warmmuted">{p.category}</span>
+                        </div>
+                        <h4 className="text-xs font-bold text-espresso leading-snug">{p.title}</h4>
+                        <p className="text-[11px] text-warmmuted mt-1 leading-relaxed line-clamp-3">
+                          {p.narrative}
+                        </p>
                       </div>
-                      <h4 className="text-xs font-bold text-espresso leading-snug">{p.title}</h4>
-                      <p className="text-[11px] text-warmmuted mt-1 leading-relaxed line-clamp-3">
-                        {p.narrative}
-                      </p>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {/* Units Showcase */}
-            <div id="unit-section" className="p-6 md:p-8 bg-sandstone/30 border-t border-warmborder">
-              <div className="text-center max-w-xl mx-auto mb-6">
-                <span className="text-xs font-bold text-terracotta uppercase">Klaster Hunian</span>
-                <h2 className="text-lg md:text-xl font-extrabold text-espresso mt-0.5">
-                  Tipe Unit The Park Townhouse
-                </h2>
-              </div>
+              {/* Units Showcase */}
+              <div id="unit-section" className="p-6 md:p-8 bg-sandstone/30 border-t border-warmborder">
+                <div className="text-center max-w-xl mx-auto mb-6">
+                  <span className="text-xs font-bold text-terracotta uppercase">Klaster Hunian</span>
+                  <h2 className="text-lg md:text-xl font-extrabold text-espresso mt-0.5">
+                    Tipe Unit {projectName}
+                  </h2>
+                </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {config.units.map((unit, idx) => (
@@ -515,6 +569,7 @@ export function ProjectWebsitePreview({
               )}
             </div>
           </div>
+          )}
         </div>
 
         {/* Toast */}

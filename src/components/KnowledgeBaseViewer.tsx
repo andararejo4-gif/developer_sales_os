@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BookOpen, Send, Sparkles, Printer, Search, Calculator, Home } from 'lucide-react';
 import { THE_PARK_KB_FACTS } from '../lib/kb/the-park-facts';
+import type { KbFact } from '../lib/kb/types';
 import { askProductKnowledge } from '../lib/kb/qa-engine';
 import { PRODUCT_QUIZ_QUESTIONS, gradeQuiz } from '../lib/kb/quiz-engine';
 import { generateProductCardHtml } from '../lib/kb/product-card';
@@ -15,27 +16,64 @@ import {
 type KbTab = 'facts' | 'unit_sim' | 'tanya' | 'kuis';
 const VALID_KB_TABS: KbTab[] = ['facts', 'unit_sim', 'tanya', 'kuis'];
 
-export const KnowledgeBaseViewer: React.FC<{ syncUrlTab?: boolean }> = ({ syncUrlTab = true }) => {
+export const KnowledgeBaseViewer: React.FC<{
+  syncUrlTab?: boolean;
+  projectId?: string;
+  projectName?: string;
+}> = ({
+  syncUrlTab = true,
+  projectId = 'the-park-sukoharjo',
+  projectName = 'The Park Townhouse Sukoharjo',
+}) => {
+  const isThePark = projectId === 'the-park-sukoharjo' || projectId === 'proj-the-park-01';
+
   const [activeTab, setActiveTab] = useState<KbTab>(() => {
     const urlTab = syncUrlTab ? getQueryParam('tab') : null;
     if (urlTab && VALID_KB_TABS.includes(urlTab as KbTab)) {
       return urlTab as KbTab;
     }
-    return loadPersistedState<KbTab>('devos_kb_tab', 'facts');
+    return loadPersistedState<KbTab>(`devos_kb_tab_${projectId}`, 'facts');
   });
   const [searchFact, setSearchFact] = useState(() =>
-    loadPersistedState<string>('devos_kb_search', '')
+    loadPersistedState<string>(`devos_kb_search_${projectId}`, '')
   );
   const [selectedCategory, setSelectedCategory] = useState(() =>
-    loadPersistedState<string>('devos_kb_category', 'semua')
+    loadPersistedState<string>(`devos_kb_category_${projectId}`, 'semua')
   );
+
+  // Facts store per project (hanya The Park yang memiliki fakta kurasi awal)
+  const [facts, setFacts] = useState<KbFact[]>(() => {
+    return loadPersistedState<KbFact[]>(
+      `devos_kb_facts_${projectId}`,
+      isThePark ? THE_PARK_KB_FACTS : []
+    );
+  });
+
+  useEffect(() => {
+    const loaded = loadPersistedState<KbFact[]>(
+      `devos_kb_facts_${projectId}`,
+      isThePark ? THE_PARK_KB_FACTS : []
+    );
+    setFacts(loaded);
+  }, [projectId, isThePark]);
+
+  const handleInitKb = () => {
+    // Inisialisasi KB dasar untuk proyek baru
+    const initialFacts = THE_PARK_KB_FACTS.map((f) => ({
+      ...f,
+      value: f.value.replace(/The Park Townhouse Sukoharjo|The Park Townhouse/g, projectName),
+      source_citation: `Dokumen Resmi ${projectName}`,
+    }));
+    setFacts(initialFacts);
+    savePersistedState(`devos_kb_facts_${projectId}`, initialFacts);
+  };
 
   // Tanya Produk State
   const [chatMessages, setChatMessages] = useState<Array<{ sender: 'user' | 'bot'; text: string; source?: string; isOutOfScope?: boolean }>>(() =>
     loadPersistedState('devos_kb_chat', [
       {
         sender: 'bot',
-        text: 'Halo! Saya asisten Knowledge Base The Park Townhouse Sukoharjo. Tanyakan apa saja seputar tipe unit, harga, luas tanah, jarak fasilitas, atau legalitas.',
+        text: `Halo! Saya asisten Knowledge Base ${projectName}. Tanyakan apa saja seputar tipe unit, harga, luas tanah, jarak fasilitas, atau legalitas.`,
       },
     ])
   );
@@ -100,7 +138,7 @@ export const KnowledgeBaseViewer: React.FC<{ syncUrlTab?: boolean }> = ({ syncUr
     { key: 'fasilitas_kawasan', label: 'Fasilitas Kawasan' },
   ];
 
-  const filteredFacts = THE_PARK_KB_FACTS.filter(f => {
+  const filteredFacts = facts.filter(f => {
     const matchesCategory = selectedCategory === 'semua' || f.category === selectedCategory;
     const matchesSearch = f.key.toLowerCase().includes(searchFact.toLowerCase()) || 
                           f.value.toLowerCase().includes(searchFact.toLowerCase()) ||
@@ -330,59 +368,83 @@ export const KnowledgeBaseViewer: React.FC<{ syncUrlTab?: boolean }> = ({ syncUr
       {/* TAB 1: DAFTAR FAKTA PRODUK */}
       {activeTab === 'facts' && (
         <div className="p-6 space-y-4">
-          <div className="flex flex-col sm:flex-row items-center gap-3">
-            <div className="relative flex-1 w-full">
-              <Search className="size-4 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchFact}
-                onChange={e => setSearchFact(e.target.value)}
-                placeholder="Cari fakta spesifikasi, harga, cluster, atau legalitas..."
-                className="w-full h-9 pl-9 pr-3 rounded-xl border border-warmborder text-xs focus:border-terracotta focus:outline-none"
-              />
+          {facts.length === 0 ? (
+            <div className="p-12 text-center rounded-3xl bg-sandstone/30 border border-dashed border-warmborder space-y-4 my-2">
+              <div className="size-16 rounded-2xl bg-white border border-warmborder text-warmmuted grid place-items-center mx-auto shadow-2xs">
+                <BookOpen className="size-8 text-warmmuted" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-espresso">Belum ada knowledge base</h3>
+                <p className="text-xs text-warmmuted mt-1 max-w-md mx-auto leading-relaxed">
+                  Fakta spesifikasi, cluster, harga, fasilitas kawasan, dan legalitas belum dikurasi untuk <strong>{projectName}</strong>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleInitKb}
+                className="px-4 py-2.5 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 cursor-pointer shadow-xs inline-flex items-center gap-2"
+              >
+                <Sparkles className="size-4" />
+                <span>Buat Knowledge Base Proyek Ini</span>
+              </button>
             </div>
-            <select
-              value={selectedCategory}
-              onChange={e => setSelectedCategory(e.target.value)}
-              className="h-9 px-3 rounded-xl border border-warmborder text-xs bg-sandstone font-medium text-espresso cursor-pointer w-full sm:w-auto"
-            >
-              {categories.map(c => (
-                <option key={c.key} value={c.key}>{c.label}</option>
-              ))}
-            </select>
-          </div>
+          ) : (
+            <>
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <div className="relative flex-1 w-full">
+                  <Search className="size-4 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchFact}
+                    onChange={e => setSearchFact(e.target.value)}
+                    placeholder="Cari fakta spesifikasi, harga, cluster, atau legalitas..."
+                    className="w-full h-9 pl-9 pr-3 rounded-xl border border-warmborder text-xs focus:border-terracotta focus:outline-none"
+                  />
+                </div>
+                <select
+                  value={selectedCategory}
+                  onChange={e => setSelectedCategory(e.target.value)}
+                  className="h-9 px-3 rounded-xl border border-warmborder text-xs bg-sandstone font-medium text-espresso cursor-pointer w-full sm:w-auto"
+                >
+                  {categories.map(c => (
+                    <option key={c.key} value={c.key}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="overflow-x-auto border border-warmborder rounded-xl">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-sandstone/60 border-b border-warmborder font-bold text-warmmuted uppercase text-[10px] tracking-wider">
-                  <th className="py-2.5 px-3">Fact ID</th>
-                  <th className="py-2.5 px-3">Kategori &amp; Kunci</th>
-                  <th className="py-2.5 px-4">Nilai Faktual</th>
-                  <th className="py-2.5 px-3">Sumber Kutipan</th>
-                  <th className="py-2.5 px-2 text-center">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-warmborder">
-                {filteredFacts.map(fact => (
-                  <tr key={fact.fact_id} className="hover:bg-sandstone/30">
-                    <td className="py-2.5 px-3 font-mono font-bold text-terracotta text-[11px]">{fact.fact_id}</td>
-                    <td className="py-2.5 px-3">
-                      <span className="font-bold text-espresso block">{fact.key}</span>
-                      <span className="text-[10px] text-warmmuted">{fact.category}</span>
-                    </td>
-                    <td className="py-2.5 px-4 text-espresso/90 leading-relaxed max-w-md">{fact.value}</td>
-                    <td className="py-2.5 px-3 text-warmmuted font-medium text-[11px]">{fact.source_citation}</td>
-                    <td className="py-2.5 px-2 text-center">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-lime-100 text-olive">
-                        {fact.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              <div className="overflow-x-auto border border-warmborder rounded-xl">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-sandstone/60 border-b border-warmborder font-bold text-warmmuted uppercase text-[10px] tracking-wider">
+                      <th className="py-2.5 px-3">Fact ID</th>
+                      <th className="py-2.5 px-3">Kategori &amp; Kunci</th>
+                      <th className="py-2.5 px-4">Nilai Faktual</th>
+                      <th className="py-2.5 px-3">Sumber Kutipan</th>
+                      <th className="py-2.5 px-2 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-warmborder">
+                    {filteredFacts.map(fact => (
+                      <tr key={fact.fact_id} className="hover:bg-sandstone/30">
+                        <td className="py-2.5 px-3 font-mono font-bold text-terracotta text-[11px]">{fact.fact_id}</td>
+                        <td className="py-2.5 px-3">
+                          <span className="font-bold text-espresso block">{fact.key}</span>
+                          <span className="text-[10px] text-warmmuted">{fact.category}</span>
+                        </td>
+                        <td className="py-2.5 px-4 text-espresso/90 leading-relaxed max-w-md">{fact.value}</td>
+                        <td className="py-2.5 px-3 text-warmmuted font-medium text-[11px]">{fact.source_citation}</td>
+                        <td className="py-2.5 px-2 text-center">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-lime-100 text-olive">
+                            {fact.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -392,7 +454,7 @@ export const KnowledgeBaseViewer: React.FC<{ syncUrlTab?: boolean }> = ({ syncUr
           <div className="p-3 bg-sandstone rounded-xl border border-warmborder text-xs text-warmmuted flex items-start gap-2">
             <Sparkles className="size-4 text-terracotta shrink-0 mt-0.5" />
             <span>
-              Chatbot ini dilatih khusus menggunakan <strong>Knowledge Base The Park Townhouse Sukoharjo</strong>. Seluruh jawaban menyertakan kutipan sumber resmi. Pertanyaan di luar data tidak akan ditebak.
+              Chatbot ini dilatih khusus menggunakan <strong>Knowledge Base {projectName}</strong>. Seluruh jawaban menyertakan kutipan sumber resmi. Pertanyaan di luar data tidak akan ditebak.
             </span>
           </div>
 

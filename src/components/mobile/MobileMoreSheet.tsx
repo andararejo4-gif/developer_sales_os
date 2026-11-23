@@ -21,14 +21,18 @@ import {
   Megaphone,
   MessageSquare,
   Sparkles,
+  Cpu,
+  Star,
   TrendingUp,
   LogOut,
   ArrowLeft,
   ChevronRight,
+  ChevronDown,
   Award,
   FileCheck,
 } from 'lucide-react';
 import type { RoleKey, UserProfile } from '../../data';
+import type { CompanyProject } from '../../lib/projects/projects-data';
 
 export interface MobileMoreActions {
   onOpenTarget: () => void;
@@ -42,6 +46,8 @@ export interface MobileMoreActions {
   onOpenKb: () => void;
   onOpenLoveLetter: () => void;
   onOpenSuperadmin: () => void;
+  onOpenUnitPark?: () => void;
+  onOpenKinerjaSe?: () => void;
   onGoHomepage: () => void;
   onLogout: () => void;
   onNavigateDashboardSection?: (sectionId: string) => void;
@@ -53,6 +59,9 @@ interface MobileMoreSheetProps {
   role: RoleKey;
   user: UserProfile;
   actions: MobileMoreActions;
+  activeProjectId?: string;
+  projects?: CompanyProject[];
+  onSelectProject?: (projectId: string) => void;
 }
 
 interface SheetActionItem {
@@ -70,6 +79,9 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
   role,
   user,
   actions,
+  activeProjectId,
+  projects,
+  onSelectProject,
 }) => {
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
 
@@ -86,6 +98,8 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
 
   if (!isOpen) return null;
 
+  const isPlatformSuperadmin = role === 'SUPERADMIN' || role === 'SUPERADMIN_IT';
+
   const runAction = (fn?: () => void) => {
     onClose();
     if (fn) fn();
@@ -101,8 +115,8 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
       { label: 'Aturan Pool 72 Jam', href: '#aturan-72jam', icon: RefreshCw },
     ],
     SM: [
-      { label: '30 Unit The Park', href: '#master-unit', icon: Home },
-      { label: 'Pantau Kinerja 3 SE', href: '#tim-se', icon: Users },
+      { label: '30 Unit The Park', onClick: actions.onOpenUnitPark, href: '#master-unit', icon: Home },
+      { label: 'Pantau Kinerja 3 SE', onClick: actions.onOpenKinerjaSe, href: '#tim-se', icon: Users },
     ],
     DIREKSI: [
       { label: 'Portofolio Proyek', href: '#portofolio-proyek', icon: Building2 },
@@ -121,6 +135,14 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
       { label: 'Umpan Balik Kualitas Lead', href: '#se-feedback', icon: MessageSquare },
       { label: 'AI Ad Optimizer', href: '#ai-ad-optimizer', icon: Sparkles },
     ],
+    SUPERADMIN: [
+      { label: 'Panel Superadmin Multi-Tenant', onClick: actions.onOpenSuperadmin, href: '#superadmin', icon: ShieldCheck },
+      { label: 'Audit Konsumsi AI Platform', onClick: actions.onOpenSuperadmin, href: '#ai-audit', icon: Cpu },
+    ],
+    SUPERADMIN_IT: [
+      { label: 'Pre-Seed Prospek VIP', onClick: actions.onOpenSuperadmin, href: '#preseed', icon: Sparkles },
+      { label: 'Kurasi Fasilitas Regional (POI)', onClick: actions.onOpenSuperadmin, href: '#poi-curation', icon: Star },
+    ],
   };
 
   const seMenuItems: SheetActionItem[] = [
@@ -132,6 +154,7 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
     { label: 'Surat Cinta 99 Keunggulan', subtitle: 'Materi storytelling & 99 nilai jual proyek', icon: HeartHandshake, onClick: actions.onOpenLoveLetter, tone: 'terracotta' },
   ];
 
+  const isPlatformInternal = role === 'SUPERADMIN' || role === 'SUPERADMIN_IT';
   const defaultProjectMenuItems: SheetActionItem[] = [
     { label: 'Target Penjualan 100%', subtitle: 'Skenario sold out & alokasi kuota SE', icon: TrendingUp, onClick: actions.onOpenTarget, tone: 'terracotta' },
     { label: 'Kalender Konten (30 Hari)', subtitle: 'Jadwal TOFU, MOFU, BOFU harian', icon: Calendar, onClick: actions.onOpenCalendar, tone: 'terracotta' },
@@ -145,12 +168,17 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
     { label: 'Surat Cinta 99 Keunggulan', subtitle: 'Dokumen keunggulan proyek', icon: HeartHandshake, onClick: actions.onOpenLoveLetter, tone: 'terracotta' },
   ];
 
-  const projectMenuItems: SheetActionItem[] = role === 'SE' ? seMenuItems : defaultProjectMenuItems;
+  const projectMenuItems: SheetActionItem[] =
+    role === 'SE'
+      ? seMenuItems
+      : role === 'DIREKSI' || isPlatformInternal
+      ? []
+      : defaultProjectMenuItems;
 
-  if (role === 'IT' || role === 'DIREKSI') {
+  if (isPlatformInternal) {
     projectMenuItems.push({
       label: 'Panel Superadmin Multi-Tenant',
-      subtitle: 'Kelola tenant & hak akses',
+      subtitle: 'Kelola tenant, AI token & kurasi',
       icon: ShieldCheck,
       onClick: actions.onOpenSuperadmin,
       tone: 'amber',
@@ -208,6 +236,46 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
           data-lenis-prevent
           className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 space-y-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
         >
+          {/* Universal Project Selector Mobile (Hanya untuk Role Proyek Developer, Bukan Superadmin Platform) */}
+          {!isPlatformSuperadmin && projects && projects.length > 0 && onSelectProject ? (
+            <div className="p-3 rounded-2xl bg-sandstone border border-warmborder">
+              <label className="block text-[10px] font-extrabold uppercase tracking-wider text-warmmuted mb-1.5">
+                Pilih Proyek Aktif
+              </label>
+              <div className="relative">
+                <select
+                  aria-label="Pilih Proyek Aktif Mobile"
+                  value={activeProjectId}
+                  onChange={(e) => onSelectProject(e.target.value)}
+                  className="w-full h-10 pl-8 pr-8 rounded-xl border border-warmborder bg-white text-xs font-bold text-espresso appearance-none focus:outline-none focus:ring-1 focus:ring-terracotta"
+                >
+                  {projects.map((proj) => (
+                    <option key={proj.id} value={proj.id}>
+                      {proj.nama} ({proj.tipe})
+                    </option>
+                  ))}
+                </select>
+                <Building2 className="size-4 text-terracotta absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <ChevronDown className="size-4 text-warmmuted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            </div>
+          ) : isPlatformSuperadmin ? (
+            <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200/80">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-terracotta">
+                  Cakupan Akses
+                </span>
+                <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-terracotta text-white">
+                  Global Core
+                </span>
+              </div>
+              <p className="text-xs font-bold text-espresso flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <span>Lintas Seluruh Developer &amp; Proyek</span>
+              </p>
+            </div>
+          ) : null}
+
           {/* Bagian 1: Bagian Halaman Role (disembunyikan jika kosong, mis. SE cukup diwakili Dashboard) */}
           {roleSectionItems[role].length > 0 && (
             <section>

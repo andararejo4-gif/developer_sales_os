@@ -1,7 +1,16 @@
 // Data Store & Types untuk Developer Sales OS (PT Andara Rejo Makmur)
 // Sesuai 19 Modul Playbook v1.2 & Migrasi Schema devos
 
-export type RoleKey = 'SE' | 'TL' | 'SM' | 'DIREKSI' | 'ADMIN' | 'IT' | 'DIGITAL_MARKETING';
+export type RoleKey =
+  | 'SE'
+  | 'TL'
+  | 'SM'
+  | 'DIREKSI'
+  | 'ADMIN'
+  | 'IT'
+  | 'DIGITAL_MARKETING'
+  | 'SUPERADMIN'
+  | 'SUPERADMIN_IT';
 
 export interface UserProfile {
   name: string;
@@ -22,8 +31,8 @@ export const USERS_BY_ROLE: Record<RoleKey, UserProfile> = {
     email: 'raka@andararejomakmur.co.id',
     noWa: '+6281122334411',
     avatarText: 'RP',
-    badge: 'SE · The Park Townhouse',
-    proyek: 'The Park Townhouse Sukoharjo',
+    badge: 'Sales Executive · Multi-Proyek',
+    proyek: 'PT Andara Rejo Makmur',
   },
   TL: {
     name: 'AI Team Leader (Autonomous)',
@@ -33,7 +42,7 @@ export const USERS_BY_ROLE: Record<RoleKey, UserProfile> = {
     noWa: '+6281122334403',
     avatarText: 'TL',
     badge: 'AI Autonomous · Supervisor: Rizal',
-    proyek: 'The Park Townhouse Sukoharjo',
+    proyek: 'PT Andara Rejo Makmur',
   },
   SM: {
     name: 'Ferry Kurniawan',
@@ -42,17 +51,17 @@ export const USERS_BY_ROLE: Record<RoleKey, UserProfile> = {
     email: 'sm@andararejomakmur.co.id',
     noWa: '+6281122334402',
     avatarText: 'FK',
-    badge: 'Sales Manager · Semi AI',
-    proyek: 'The Park Townhouse Sukoharjo',
+    badge: 'Sales Manager · Portofolio Proyek',
+    proyek: 'PT Andara Rejo Makmur',
   },
   DIREKSI: {
     name: 'Bambang Soedirjo',
     role: 'DIREKSI',
-    roleLabel: 'Direksi / Owner',
+    roleLabel: 'Direksi / Owner Developer Properti',
     email: 'direksi@andararejomakmur.co.id',
     noWa: '+6281122334401',
     avatarText: 'BS',
-    badge: 'Direksi · Portofolio Owner',
+    badge: 'Direksi Developer · Portofolio Proyek',
     proyek: 'Portofolio Semua Proyek',
   },
   ADMIN: {
@@ -63,17 +72,17 @@ export const USERS_BY_ROLE: Record<RoleKey, UserProfile> = {
     noWa: '+6281122334421',
     avatarText: 'SR',
     badge: 'Admin Sales · Verifikasi & Legal',
-    proyek: 'The Park Townhouse Sukoharjo',
+    proyek: 'PT Andara Rejo Makmur',
   },
   IT: {
     name: 'Dodi Hartono',
     role: 'IT',
-    roleLabel: 'IT & System Lead',
+    roleLabel: 'IT & System Developer Properti',
     email: 'it@andararejomakmur.co.id',
     noWa: '+6281122334431',
     avatarText: 'DH',
-    badge: 'IT Admin · Schema devos',
-    proyek: 'Infrastruktur Sistem',
+    badge: 'IT Developer · Integrasi Lokal & WA',
+    proyek: 'Platform Integrasi Properti',
   },
   DIGITAL_MARKETING: {
     name: 'Agus Prasetyo',
@@ -82,8 +91,28 @@ export const USERS_BY_ROLE: Record<RoleKey, UserProfile> = {
     email: 'marketer@andararejomakmur.co.id',
     noWa: '+6281122334441',
     avatarText: 'AP',
-    badge: 'Digital Ads & CPL Optimizer',
-    proyek: 'The Park Townhouse Sukoharjo',
+    badge: 'Digital Ads & CPL Multi-Proyek',
+    proyek: 'PT Andara Rejo Makmur',
+  },
+  SUPERADMIN: {
+    name: 'Bpk. Hendrawan (Founder)',
+    role: 'SUPERADMIN',
+    roleLabel: 'Direksi Pemilik Developer Sales OS',
+    email: 'direksi@developersalesos.com',
+    noWa: '+6281299988001',
+    avatarText: 'OS',
+    badge: 'Direksi Platform · Owner Developer Sales OS',
+    proyek: 'Developer Sales OS (Core Multi-Tenant)',
+  },
+  SUPERADMIN_IT: {
+    name: 'Arya Wicaksana (Lead DevOps)',
+    role: 'SUPERADMIN_IT',
+    roleLabel: 'Tim IT Internal Developer Sales OS',
+    email: 'it.internal@developersalesos.com',
+    noWa: '+6281299988002',
+    avatarText: 'IT',
+    badge: 'IT Core Platform · Multi-Tenant & AI Engine',
+    proyek: 'Developer Sales OS (Core Multi-Tenant)',
   },
 };
 

@@ -1,77 +1,88 @@
-# Aturan Repositori & Sinkronisasi Git (Developer Sales OS)
+# Aturan Global (semua workspace)
 
-Dokumen ini merupakan aturan wajib bagi seluruh AI Agent, developer, dan otomasi dalam repositori ini.
+Prioritas: 1) benar, 2) konteks utuh, 3) token minimal. Konflik → urutan ini menang.
+Bahasa balasan: Indonesia. Kode, perintah, nama file, pesan error: apa adanya.
+Aturan di file ini berlaku SETIAP sesi, tanpa perlu diingatkan user.
 
----
+## 1. Mulai sesi (wajib, urut)
+1. Baca kondisi nyata: `rtk git status`, branch, file berubah. Jangan andalkan ingatan.
+2. Baca `progress.md` di root workspace: **3–5 entri terbaru saja** (lihat bagian 2). Jika belum ada, buat sesuai format.
+3. Baca `.agents/progress-cache.md` bila ada (cache pencarian lama, lihat bagian 3).
+4. Baca `README`/`docs/` hanya jika relevan dengan tugas.
+5. Pelajari pola yang ada (penamaan, struktur, gaya kode, urutan migrasi). Ikuti, jangan menciptakan pola baru.
+6. Lanjutkan pekerjaan terakhir. Jangan mulai ulang atau menulis ulang yang sudah jalan.
 
-## 1. Pemeriksaan Remote Terlebih Dahulu (Git Pre-Check & Fetch)
-Sebelum melakukan modifikasi file besar, staging (`git add`), pembuatan commit, atau push:
-1. Jalankan `git fetch origin main` (atau remote branch aktif terkait).
-2. Periksa status tracking dengan `git status -uno` dan `git status`.
-3. Bandingkan commit lokal dan remote:
-   - `git log HEAD..origin/main --oneline` (melihat commit baru di remote).
-   - `git diff --name-status HEAD...origin/main` (melihat file yang berubah/bertambah di remote).
+## 2. progress.md (jejak perubahan & handover)
+Tujuan: AI lain bisa melanjutkan hanya dengan membaca file ini.
 
----
+**Kapan menulis:** setiap ada perubahan nyata (kode, skema/migrasi, konfigurasi, dependensi, keputusan desain). Tulis SEBELUM melapor selesai. Tanya-jawab murni tidak dicatat.
+**Satu tugas = satu entri.** Edit berkali-kali pada tugas yang sama → perbarui entri itu, jangan buat baru.
 
-## 2. Proteksi File Remote (Anti-Overwriting & Anti-Deletion)
-Apabila terjadi kondisi konkurensi di mana:
-- Terdapat perubahan lokal di laptop, **DAN**
-- Terdapat perubahan atau commit baru di repositori remote (`origin`),
-- **KHUSUSNYA bila ada file yang ADA di repositori remote tetapi BELUM ADA di laptop**:
+**Letak & urutan:** `progress.md` di root workspace. Entri terbaru di ATAS (setelah judul), supaya membaca 3–5 terakhir cukup dengan membaca bagian awal file.
 
-### **ATURAN MUTLAK**:
-1. **DILARANG KERAS** menghapus, menimpa (*overwrite*), atau membuang file yang ada di remote tersebut.
-2. **JANGAN SENTUH / HAPUS** file remote yang belum ada di lokal. File tersebut harus dipertahankan secara utuh.
-3. **DILARANG KERAS** menggunakan `git push --force`, `git reset --hard origin`, atau perintah destruktif lainnya yang berpotensi melenyapkan pekerjaan di remote.
+**Format entri (maks ±8 baris, poin pendek):**
+```
+## P-012 | 2026-11-21 | Judul singkat
+- Status: selesai | sebagian | terblokir
+- Ubah: `path/file1`, `path/file2` (apa yang diubah, 1 frasa)
+- Alasan/keputusan: 1 baris
+- Verifikasi: perintah/tes yang dijalankan + hasil
+- Berikutnya: langkah lanjut atau "-"
+- Catatan: jebakan, hal yang jangan disentuh (opsional)
+```
+- ID naik berurutan (P-001, P-002, ...). Tanggal format YYYY-MM-DD.
+- Tulis fakta, bukan narasi. Tanpa kode panjang; cukup nama file dan inti perubahan.
+- Jangan hapus entri lama. Jangan tulis secret/kunci.
 
----
+## 3. Membaca progress lama (sekali saja, lalu cache)
+Default: hanya 3–5 entri terbaru. Entri lain dibaca HANYA jika user bertanya tentang pekerjaan yang mungkin sudah dikerjakan sebelumnya.
 
-## 3. Kewajiban Pemberitahuan & Transparansi (Notify User)
-Bila terdeteksi perbedaan antara remote dan laptop:
-1. Laporkan secara transparan ke pengguna:
-   - Daftar file baru atau file yang diubah di remote.
-   - Status branch (`ahead`, `behind`, atau `diverged`).
-   - Penjelasan ringkas mengenai perbedaan yang ditemukan.
-2. Mintalah arahan atau jelaskan langkah rekonsiliasi aman yang akan diambil sebelum melanjutkan modifikasi file yang bersangkutan.
+Alurnya:
+1. Cek `.agents/progress-cache.md` dan ringkasan di konteks sesi. Jika topik sudah ada → pakai itu, JANGAN baca ulang `progress.md`.
+2. Jika belum ada: cari dengan `rtk rg -i "<kata kunci>" progress.md`, lalu baca hanya entri yang cocok. Jangan baca seluruh file.
+3. Segera simpan hasilnya ke cache (1 kali per topik):
+```
+## <topik/kata kunci> | dicari 2026-11-21
+- P-004: ringkasan 1 baris + status
+- P-009: ringkasan 1 baris + status
+```
+4. Jawab user dari cache. Pertanyaan berikutnya tentang topik sama → langsung dari cache.
+5. Jika entri sumber diperbarui kemudian (ID tercatat berubah) → perbarui baris cache terkait, bukan cari ulang semua.
+6. Jika topik memang tidak ditemukan, catat juga di cache: "tidak ada di progress (dicari tanggal)". Supaya tidak dicari lagi.
+- Cache maks ±40 baris. Jika melebihi, ringkas entri tertua.
 
----
+## 4. Hemat token (rtk + headroom)
+- Semua perintah shell lewat rtk: `rtk git status`, `rtk git diff`, `rtk rg <query>`, `rtk deps`. Cek hemat: `rtk gain`.
+- Output besar (log, JSON, hasil tes, riwayat panjang) → kompres dengan headroom sebelum masuk konteks.
+- Cari dulu, baca rentang baris yang perlu. Jangan baca file utuh tanpa alasan.
+- Jangan baca ulang file yang sudah dibaca kecuali sudah berubah.
+- Jangan tempel ulang kode yang sudah ada. Tampilkan hanya bagian berubah.
 
-## 4. Prosedur Penyesuaian & Rekonsiliasi Aman (Safe Reconciliation)
-1. **Amankan Pekerjaan Lokal**: Jika ada perubahan lokal yang belum di-commit, gunakan `git stash` atau commit terisolasi.
-2. **Tarik File Remote**: Ambil file baru/perubahan dari remote ke lokal (misalnya melalui `git merge origin/main` atau `git checkout origin/main -- <path-file>` untuk file spesifik).
-3. **Sesuaikan Perbedaan**: Gabungkan isi file dengan cermat tanpa menghilangkan baris, fungsionalitas, atau aset yang ada di remote maupun di lokal.
-4. **Verifikasi Integritas**: Jalankan seluruh pengujian (`bun test`) dan build sistem (`npm run build`) setelah penyesuaian untuk memastikan kode 100% stabil sebelum di-commit dan di-push.
+## 5. Gaya balasan (caveman)
+- Padat: tanpa pembuka, basa-basi, penutup, atau mengulang pertanyaan.
+- Kalimat pendek, langsung ke hasil. Kode dan error tidak dipadatkan.
+- Jangan jelaskan yang tidak ditanya. Detail hanya jika diminta.
+- Format selesai tugas (maks 5 baris): apa berubah (file) · cara verifikasi · risiko · entri progress (P-xxx).
 
----
+## 6. Edit minimal (ponytail)
+- Solusi paling sederhana yang benar-benar jalan. YAGNI.
+- Pakai stdlib/fitur yang sudah ada dulu. Dependensi baru hanya dengan alasan 1 baris.
+- Ubah hanya yang diminta. Tanpa refactor, rename, atau format ulang di luar tugas.
+- Edit lewat diff kecil, bukan menulis ulang file.
+- Migrasi/skema DB: jangan ubah file lama. Buat file baru bernomor berikutnya.
 
-## 5. Baca Realtime & Edit Minimal (Pola Khusus Repo Ini)
-Aturan umumnya ada di plugin global `workspace-continuity`. Bagian ini berisi pola konkret repo yang wajib diikuti.
+## 7. Swarm (agen paralel)
+- Hanya untuk tugas besar yang bisa dipecah dan independen. Tugas kecil kerjakan sendiri.
+- Beri sub-agen konteks minimal: tujuan, file terkait, batasan, dan 3 entri progress terakhir yang relevan.
+- Hasil sub-agen: ringkasan maks 10 baris + daftar file berubah.
+- Satu file hanya diedit satu agen. Pencatatan `progress.md` dilakukan agen utama saja, agar tidak bentrok.
 
-### 5.1 Sebelum Edit
-- Baca ulang file target dari disk sesaat sebelum mengedit. Jangan mengandalkan ringkasan percakapan.
-- Cek `git status`, `git diff`, dan `git log -5 --oneline`. Perubahan yang belum di-commit adalah milik pengguna dan tidak boleh disentuh tanpa izin.
-- Rujukan keputusan: `DECISIONS.md`, `ERD.md`, `README.md`, `docs/AUDIT_*.md`, dan `db/migrations/`.
+## 8. Konteks hampir penuh
+- Perbarui entri progress terakhir (Status, Berikutnya, Catatan) lebih dulu, lalu lanjut atau mulai sesi baru.
+- Sesi baru cukup mengikuti bagian 1; tidak perlu ringkasan lain.
 
-### 5.2 Pola yang Diikuti
-| Aspek | Pola repo |
-|---|---|
-| Stack | React 19 + TypeScript, Vite 8, Tailwind 4, `bun test`, Leaflet, `lucide-react`, `postgres`. Jangan menambah library baru tanpa izin. |
-| Komponen | `src/components/NamaPascalCase.tsx`. Bagian homepage publik ada di `src/components/v3/*V3.tsx`. |
-| Data | `src/data.ts`, `src/data/*.json`, dan `src/lib/**`. POI hanya diimpor lewat `scripts/import_osm_poi.ts`, bukan daftar manual. |
-| Test | `tests/nama-kebab.test.ts` (bun test). |
-| Migrasi DB | File baru `db/migrations/NNNN_nama_snake.sql` dengan nomor berikutnya. Migrasi lama tidak diedit. |
-| Backup DB | Wajib sebelum mengubah tabel: `db/backups/backup_pre_<topik>_<NNNN>.sql`. |
-| Bahasa | Teks UI, komentar, dan dokumen dalam Bahasa Indonesia. |
-| Visual dasbor | Token `espresso`, `terracotta`, `sandstone`, `warmborder`, `warmmuted`, `olive`. |
-| Visual homepage | `#0B3D2E`, `#2F9E5B`, `#C6F432`, `#F6FAF7`. **Palet dan gaya visual tidak boleh diubah.** |
-| Line ending | Ikuti file asli. Contoh: `src/App.tsx` memakai CRLF, sebagian komponen memakai LF. |
-
-### 5.3 Saat Edit
-- Gunakan edit tertarget per blok. Jangan menimpa seluruh file besar seperti `src/App.tsx`, `MapChapterV3.tsx`, atau `InteractiveMap.tsx`.
-- Jangan memformat ulang, mengganti nama, atau memindah kode yang tidak terkait dengan tugas.
-- Jika perubahan lebih dari ~150 baris pada satu file atau mengubah struktur besar, jelaskan rencananya dan minta persetujuan dulu.
-
-### 5.4 Sesudah Edit
-- `git diff --stat` harus hanya memuat file yang dimaksud.
-- `bun test` dan `npm run build` wajib lulus sebelum commit, lalu ikuti Bagian 1–4 sebelum push.
+## 9. Keamanan & verifikasi
+- Minta konfirmasi sebelum: hapus file/data, drop/reset DB, force push, ubah `.env` atau secret.
+- Jangan mencetak atau meng-commit secret/kunci API.
+- Jangan klaim selesai sebelum diverifikasi (tes/build/lint via rtk). Jika tidak bisa, katakan.
+- Tidak yakin pada hal berisiko → tanya 1 pertanyaan spesifik, jangan menebak.
