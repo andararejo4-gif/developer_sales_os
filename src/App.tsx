@@ -3612,45 +3612,43 @@ export default function App() {
           }}
         >
           <div
-            className="w-full max-w-md bg-white rounded-3xl border border-slate-200/90 shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-150"
+            className="w-full max-w-md bg-white rounded-3xl border border-emerald-200 shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-150"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Top Accent Line */}
-            <div className="h-1.5 w-full bg-emerald-500" />
-
-            <div className="p-5 sm:p-6 space-y-5">
-              {/* Clean Light Header */}
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="size-12 rounded-2xl bg-emerald-50 border border-emerald-200/80 text-emerald-600 grid place-items-center shrink-0">
-                    <Sparkles className="size-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-700 text-[10px] font-extrabold uppercase tracking-wider">
-                      <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Developer Assistant AI
-                    </div>
-                    <h3 className="text-base sm:text-lg font-extrabold text-slate-900 mt-1 truncate">
-                      {(() => {
-                        const h = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
-                        const sapa = h < 11 ? 'Selamat Pagi' : h < 15 ? 'Selamat Siang' : h < 18 ? 'Selamat Sore' : 'Selamat Malam';
-                        return `${sapa}, ${user.name.split(' ')[0]}!`;
-                      })()}
-                    </h3>
-                  </div>
+            {/* Clean Emerald-Tinted Surface Header (Tanpa Garis Tepi Atas) */}
+            <div className="p-5 bg-emerald-50/75 border-b border-emerald-200/70 flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="size-11 rounded-2xl bg-emerald-600 text-white grid place-items-center shrink-0 shadow-2xs">
+                  <Sparkles className="size-5" />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    sessionStorage.setItem(`devos_assistant_greeted_${authSession.loggedInAt}`, '1');
-                    setShowAssistantGreeting(false);
-                  }}
-                  className="size-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 grid place-items-center shrink-0 cursor-pointer transition-colors"
-                  aria-label="Tutup sapaan asisten"
-                >
-                  <X className="size-4" />
-                </button>
+                <div className="min-w-0">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-200 text-emerald-800 text-[10px] font-extrabold uppercase tracking-wider">
+                    <span className="size-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                    Developer Assistant AI
+                  </div>
+                  <h3 className="text-base sm:text-lg font-extrabold text-slate-900 mt-1 truncate">
+                    {(() => {
+                      const h = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
+                      const sapa = h < 11 ? 'Selamat Pagi' : h < 15 ? 'Selamat Siang' : h < 18 ? 'Selamat Sore' : 'Selamat Malam';
+                      return `${sapa}, ${user.name.split(' ')[0]}!`;
+                    })()}
+                  </h3>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.setItem(`devos_assistant_greeted_${authSession.loggedInAt}`, '1');
+                  setShowAssistantGreeting(false);
+                }}
+                className="size-9 rounded-xl bg-white/80 hover:bg-white border border-emerald-200/80 text-slate-600 grid place-items-center shrink-0 cursor-pointer transition-colors"
+                aria-label="Tutup sapaan asisten"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
 
               <p className="text-xs sm:text-sm font-medium text-slate-600 leading-relaxed">
                 Halo, saya <strong className="text-slate-900">Developer Assistant</strong> Anda. Seluruh persiapan lapangan, jadwal konten, dan prospek prioritas hari ini sudah saya susun di menu <strong className="text-slate-900">Notifikasi</strong>.

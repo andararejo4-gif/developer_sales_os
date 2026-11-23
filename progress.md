@@ -3,6 +3,15 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-047 | 2026-11-23 | Kartu Notifikasi Berwarna Sesuai Urgensi (Tanpa Garis Tepi Atas)
+- Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
+- Ubah: `src/components/se/SeNotificationCenter.tsx`, `src/App.tsx`
+- Detail Perubahan:
+  - **Hapus Garis Tepi Atas:** Menghilangkan `h-1.5` top accent bar pada kartu Developer Assistant dan modal detail notifikasi.
+  - **Kartu Berwarna Sesuai Urgensi (`SeNotificationCenter.tsx`):** Setiap item di daftar notifikasi kini tampil sebagai kartu mandiri (`rounded-2xl border p-3`) dengan warna permukaan mengikuti urgensi tugas (`rose-50` untuk Urgent SLA/WA putus, `amber-50` untuk H-5 Menit/Wajib Check-In/Validasi AI, `slate-50` untuk tugas rutin).
+  - **Modal Detail Mengikuti Tema Urgensi:** Header kartu, tile metrik, dan badge rekomendasi di modal detail otomatis menyesuaikan warna urgensi tugas (`rose`, `amber`, atau `emerald`) di atas permukaan clean tanpa warna coklat.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
+
 ## P-046 | 2026-11-23 | Clean Light Card Design untuk Developer Assistant & Modal Detail Notifikasi (Zero Brown Header)
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/App.tsx`, `src/components/se/SeNotificationCenter.tsx`
