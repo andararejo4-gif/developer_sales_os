@@ -1844,9 +1844,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/se/social/connect' && req.method === 'GET') {
-      const platformParam = String(urlObj.searchParams.get('platform') || '').toLowerCase() as ZernioPlatform;
-      if (!['instagram', 'tiktok', 'facebook', 'youtube'].includes(platformParam)) {
-        sendJson(res, 400, { ok: false, error: 'Platform tidak valid. Gunakan: instagram, tiktok, facebook, atau youtube.' });
+      const platformParam = String(parsedUrl.searchParams.get('platform') || '').toLowerCase() as ZernioPlatform;
+      if (
+        !['instagram', 'tiktok', 'facebook', 'youtube', 'twitter', 'threads', 'linkedin', 'pinterest'].includes(
+          platformParam
+        )
+      ) {
+        sendJson(res, 400, { ok: false, error: 'Platform social media tidak valid.' });
         return;
       }
       const keys = getZernioKeys();
@@ -1917,20 +1921,20 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/se/social/callback' && req.method === 'GET') {
-      const seEmail = String(urlObj.searchParams.get('seEmail') || '').trim().toLowerCase();
-      const platformParam = String(urlObj.searchParams.get('platform') || '').toLowerCase();
-      const keyIndex = Number(urlObj.searchParams.get('keyIndex') || 0);
-      const profileId = String(urlObj.searchParams.get('profileId') || '');
+      const seEmail = String(parsedUrl.searchParams.get('seEmail') || '').trim().toLowerCase();
+      const platformParam = String(parsedUrl.searchParams.get('platform') || '').toLowerCase();
+      const keyIndex = Number(parsedUrl.searchParams.get('keyIndex') || 0);
+      const profileId = String(parsedUrl.searchParams.get('profileId') || '');
       let accountId = String(
-        urlObj.searchParams.get('accountId') ||
-          urlObj.searchParams.get('account_id') ||
-          urlObj.searchParams.get('id') ||
+        parsedUrl.searchParams.get('accountId') ||
+          parsedUrl.searchParams.get('account_id') ||
+          parsedUrl.searchParams.get('id') ||
           ''
       );
       let username = String(
-        urlObj.searchParams.get('username') ||
-          urlObj.searchParams.get('account_username') ||
-          urlObj.searchParams.get('name') ||
+        parsedUrl.searchParams.get('username') ||
+          parsedUrl.searchParams.get('account_username') ||
+          parsedUrl.searchParams.get('name') ||
           ''
       );
 
@@ -1992,7 +1996,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/se/social/accounts' && req.method === 'DELETE') {
-      const platformParam = String(urlObj.searchParams.get('platform') || '').toLowerCase();
+      const platformParam = String(parsedUrl.searchParams.get('platform') || '').toLowerCase();
       if (!platformParam) {
         sendJson(res, 400, { ok: false, error: 'Parameter platform wajib diisi.' });
         return;

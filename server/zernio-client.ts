@@ -4,12 +4,20 @@
 // Supports Instagram, TikTok, Facebook, YouTube via Zernio REST API v1
 // ============================================================================
 
-export type ZernioPlatform = 'instagram' | 'tiktok' | 'facebook' | 'youtube';
+export type ZernioPlatform =
+  | 'instagram'
+  | 'tiktok'
+  | 'facebook'
+  | 'youtube'
+  | 'twitter'
+  | 'threads'
+  | 'linkedin'
+  | 'pinterest';
 
 export const ZERNIO_PLATFORMS: Array<{
   id: ZernioPlatform;
   label: string;
-  calendarPlatform: 'Instagram' | 'TikTok' | 'Facebook' | 'YouTube Shorts';
+  calendarPlatform: 'Instagram' | 'TikTok' | 'Facebook' | 'YouTube Shorts' | 'X';
   note: string;
 }> = [
   {
@@ -36,6 +44,30 @@ export const ZERNIO_PLATFORMS: Array<{
     calendarPlatform: 'YouTube Shorts',
     note: 'Video vertikal Shorts & YouTube Channel',
   },
+  {
+    id: 'twitter',
+    label: 'X (Twitter)',
+    calendarPlatform: 'X',
+    note: 'Postingan gambar, video & thread properti',
+  },
+  {
+    id: 'threads',
+    label: 'Threads',
+    calendarPlatform: 'Instagram',
+    note: 'Update singkat, foto & carousel Threads',
+  },
+  {
+    id: 'linkedin',
+    label: 'LinkedIn',
+    calendarPlatform: 'Facebook',
+    note: 'Jaringan profesional, investor & eksekutif',
+  },
+  {
+    id: 'pinterest',
+    label: 'Pinterest',
+    calendarPlatform: 'Instagram',
+    note: 'Pin inspirasi desain rumah Japandi & properti',
+  },
 ];
 
 export const ACCOUNTS_PER_KEY_LIMIT = 2;
@@ -44,7 +76,11 @@ export function mapCalendarPlatformToZernio(platform?: string): ZernioPlatform {
   const p = (platform || '').toLowerCase();
   if (p.includes('tiktok')) return 'tiktok';
   if (p.includes('facebook') || p === 'fb') return 'facebook';
-  if (p.includes('youtube') || p.includes('yt')) return 'youtube';
+  if (p.includes('youtube') || p === 'yt') return 'youtube';
+  if (p.includes('threads')) return 'threads';
+  if (p.includes('linkedin')) return 'linkedin';
+  if (p.includes('pinterest')) return 'pinterest';
+  if (p === 'x' || p.includes('twitter')) return 'twitter';
   return 'instagram';
 }
 
