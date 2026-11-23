@@ -83,6 +83,13 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
 }) => {
   const [meta, setMeta] = useState<SlotMediaMeta>(mediaMeta || {});
   const [hermesHealth, setHermesHealth] = useState<HermesHealth | null>(null);
+  const [busyWindow, setBusyWindow] = useState<{
+    busy: boolean;
+    windowLabel?: string;
+    unlockTime?: string;
+    reason?: string;
+  } | null>(null);
+  const [globalQueuePending, setGlobalQueuePending] = useState<number>(0);
   const [carouselIdx, setCarouselIdx] = useState(0);
   const [urlInput, setUrlInput] = useState(slot.postedUrl || '');
   const [isEnqueuing, setIsEnqueuing] = useState(false);
@@ -130,6 +137,8 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
         const data = await res.json();
         if (!active) return;
         if (data.hermesHealth) setHermesHealth(data.hermesHealth);
+        if (data.busyWindow) setBusyWindow(data.busyWindow);
+        if (typeof data.globalQueuePending === 'number') setGlobalQueuePending(data.globalQueuePending);
         if (data.slot) {
           const nextMeta: SlotMediaMeta = {
             visualPrompt: data.slot.visual_prompt || meta.visualPrompt,
@@ -388,7 +397,7 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
 
                 <button
                   type="button"
-                  disabled={isEnqueuing}
+                  disabled={isEnqueuing || Boolean(busyWindow?.busy)}
                   onClick={handleStartGenerate}
                   className="min-h-[44px] px-4 py-2 rounded-xl bg-espresso hover:bg-espresso/90 disabled:opacity-60 text-white text-xs font-extrabold inline-flex items-center justify-center gap-2 shrink-0 cursor-pointer"
                 >
@@ -400,7 +409,9 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
                     <Sparkles className="size-4 text-amber-300" />
                   )}
                   <span>
-                    {isEnqueuing
+                    {busyWindow?.busy
+                      ? `Terkunci s.d. ${busyWindow.unlockTime || 'Jadwal'}`
+                      : isEnqueuing
                       ? 'Mengirim Antrean...'
                       : isGenerating
                       ? 'Generate Ulang'
@@ -410,6 +421,18 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
                   </span>
                 </button>
               </div>
+
+              {busyWindow?.busy && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-900 font-semibold">
+                  ⏳ {busyWindow.reason}
+                </div>
+              )}
+
+              {globalQueuePending > 0 && (
+                <p className="text-[11px] font-semibold text-warmmuted">
+                  Antrean Global Sekuensial (1-per-1 dengan jeda aman): <strong className="text-espresso">{globalQueuePending}</strong> item menunggu giliran.
+                </p>
+              )}
 
               {/* Progress Bar */}
               <div className="w-full h-2.5 bg-sandstone rounded-full overflow-hidden">

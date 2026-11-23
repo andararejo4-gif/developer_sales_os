@@ -17,6 +17,7 @@ import {
   enqueueSlotMediaViaHermes,
   getHermesHealth,
   getWibClock,
+  getBusyWindowInfo,
   isSlotDueNowWib,
   startContentMediaScheduler,
 } from './content-media-worker';
@@ -1629,7 +1630,9 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/se/content-slots/status' && req.method === 'GET') {
       const slotId = parsedUrl.searchParams.get('slotId') || '';
-      const [rows, hermesHealth] = await Promise.all([
+      const { minutesOfDay } = getWibClock();
+      const busyWindow = getBusyWindowInfo(minutesOfDay);
+      const [rows, hermesHealth, queueCountRows] = await Promise.all([
         slotId
           ? sql`
               SELECT slot_id, status, posted_url, day_number, slot_order, scheduled_time,
@@ -1643,11 +1646,18 @@ const server = http.createServer(async (req, res) => {
             `
           : Promise.resolve([]),
         getHermesHealth(),
+        sql`
+          SELECT COUNT(*)::int AS cnt
+          FROM sales_os.media_render_queue
+          WHERE status IN ('PENDING', 'PROCESSING')
+        `.catch(() => [{ cnt: 0 }]),
       ]);
       sendJson(res, 200, {
         ok: true,
         slot: rows[0] || null,
         hermesHealth,
+        busyWindow,
+        globalQueuePending: Number(queueCountRows[0]?.cnt || 0),
       });
       return;
     }
@@ -1750,6 +1760,17 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/se/content-slots/generate-media' && req.method === 'POST') {
+      const { minutesOfDay } = getWibClock();
+      const busyWindow = getBusyWindowInfo(minutesOfDay);
+      if (busyWindow.busy) {
+        sendJson(res, 423, {
+          ok: false,
+          busyWindow,
+          error: busyWindow.reason,
+        });
+        return;
+      }
+
       const body = await readJsonBody(req);
       const slotId = String(body.slotId || '');
       if (!slotId) {
@@ -2246,6 +2267,25 @@ async function ensureSeOpsTables(): Promise<void> {
       connected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (se_email, platform)
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.media_render_queue (
+      id SERIAL PRIMARY KEY,
+      se_email TEXT NOT NULL,
+      slot_id TEXT NOT NULL,
+      slide_index INTEGER NOT NULL,
+      media_type TEXT NOT NULL DEFAULT 'image',
+      aspect_ratio TEXT NOT NULL DEFAULT '3:4',
+      prompt TEXT NOT NULL,
+      priority INTEGER NOT NULL DEFAULT 20,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      hermes_job_id TEXT,
+      local_url TEXT,
+      error TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      started_at TIMESTAMPTZ,
+      finished_at TIMESTAMPTZ
     )
   `;
 }

@@ -79,6 +79,48 @@ export function getWibClock(): { dateStr: string; minutesOfDay: number } {
   return { dateStr, minutesOfDay };
 }
 
+export interface BusyWindowInfo {
+  busy: boolean;
+  slotOrder?: 1 | 2 | 3;
+  windowLabel?: string;
+  unlockTime?: string;
+  reason?: string;
+}
+
+export function getBusyWindowInfo(minutesOfDay: number): BusyWindowInfo {
+  if (minutesOfDay >= 8 * 60 + 30 && minutesOfDay <= 9 * 60) {
+    return {
+      busy: true,
+      slotOrder: 1,
+      windowLabel: '08:30–09:00 WIB',
+      unlockTime: '09:01 WIB',
+      reason:
+        'Sedang waktu sibuk generate terjadwal Slot Pagi (TOFU 09:00 WIB) agar semua SE siap tepat waktu. Generate manual dibuka kembali pukul 09:01 WIB.',
+    };
+  }
+  if (minutesOfDay >= 13 * 60 + 30 && minutesOfDay <= 14 * 60) {
+    return {
+      busy: true,
+      slotOrder: 2,
+      windowLabel: '13:30–14:00 WIB',
+      unlockTime: '14:01 WIB',
+      reason:
+        'Sedang waktu sibuk generate terjadwal Slot Siang (MOFU 14:00 WIB) agar semua SE siap tepat waktu. Generate manual dibuka kembali pukul 14:01 WIB.',
+    };
+  }
+  if (minutesOfDay >= 19 * 60 && minutesOfDay <= 19 * 60 + 30) {
+    return {
+      busy: true,
+      slotOrder: 3,
+      windowLabel: '19:00–19:30 WIB',
+      unlockTime: '19:31 WIB',
+      reason:
+        'Sedang waktu sibuk generate terjadwal Slot Malam (BOFU 19:30 WIB) agar semua SE siap tepat waktu. Generate manual dibuka kembali pukul 19:31 WIB.',
+    };
+  }
+  return { busy: false };
+}
+
 export function isSlotDueNowWib(slotOrder: number, minutesOfDay: number): boolean {
   if (slotOrder === 1) return minutesOfDay >= 8 * 60 + 30; // 08:30 WIB
   if (slotOrder === 2) return minutesOfDay >= 13 * 60 + 30; // 13:30 WIB
@@ -681,6 +723,7 @@ export async function enqueueSlotMediaViaHermes(params: {
   visualPrompt: string;
   durationSeconds: number;
   slideDeck?: SlideDeckItem[];
+  priority?: number;
 }): Promise<{
   ok: boolean;
   targetCount: number;
@@ -726,8 +769,15 @@ export async function enqueueSlotMediaViaHermes(params: {
     },
   ];
 
+  // Batalkan antrean lama yang masih PENDING untuk slot ini agar tidak dobel
+  await sql`
+    UPDATE sales_os.media_render_queue
+    SET status = 'CANCELLED', finished_at = NOW()
+    WHERE se_email = ${params.seEmail} AND slot_id = ${params.slotId} AND status = 'PENDING'
+  `.catch(() => {});
+
   const jobs: HermesJobEntry[] = [];
-  let lastError: string | undefined;
+  const priority = params.priority ?? 20;
 
   for (let i = 0; i < targetCount; i++) {
     let slidePrompt: string;
@@ -784,6 +834,241 @@ export async function enqueueSlotMediaViaHermes(params: {
       });
     }
 
+    await sql`
+      INSERT INTO sales_os.media_render_queue (
+        se_email, slot_id, slide_index, media_type, aspect_ratio, prompt, priority, status
+      ) VALUES (
+        ${params.seEmail},
+        ${params.slotId},
+        ${i + 1},
+        ${isVideo ? 'video' : 'image'},
+        ${isVideo ? '9:16' : '3:4'},
+        ${slidePrompt},
+        ${priority},
+        'PENDING'
+      )
+    `;
+
+    jobs.push({
+      slideIndex: i + 1,
+      jobId: '',
+      status: 'pending',
+    });
+  }
+
+  return { ok: true, targetCount, jobs };
+}
+
+let isQueueTickBusy = false;
+let nextDispatchAllowedAtMs = 0;
+
+async function syncSlotFromQueue(seEmail: string, slotId: string): Promise<void> {
+  const qRows = await sql`
+    SELECT slide_index, media_type, status, hermes_job_id, local_url, error
+    FROM sales_os.media_render_queue
+    WHERE se_email = ${seEmail} AND slot_id = ${slotId} AND status <> 'CANCELLED'
+    ORDER BY slide_index ASC, id DESC
+  `;
+  if (qRows.length === 0) return;
+
+  const bySlide = new Map<number, any>();
+  for (const r of qRows) {
+    const idx = Number(r.slide_index);
+    if (!bySlide.has(idx)) bySlide.set(idx, r);
+  }
+  const latestRows = Array.from(bySlide.values()).sort(
+    (a, b) => Number(a.slide_index) - Number(b.slide_index)
+  );
+  const isVideo = latestRows.some((r) => r.media_type === 'video');
+  const seScope = seEmail.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const safeSlot = slotId.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  const jobs: HermesJobEntry[] = latestRows.map((r) => ({
+    slideIndex: Number(r.slide_index),
+    jobId: String(r.hermes_job_id || ''),
+    status:
+      r.status === 'DONE'
+        ? 'done'
+        : r.status === 'FAILED'
+        ? 'failed'
+        : 'pending',
+    localUrl: r.local_url || undefined,
+    error: r.error || undefined,
+  }));
+
+  let readyUrls = latestRows
+    .filter((r) => r.status === 'DONE' && r.local_url)
+    .map((r) => String(r.local_url));
+
+  const anyActive = latestRows.some((r) => r.status === 'PENDING' || r.status === 'PROCESSING');
+
+  if (!anyActive && isVideo && readyUrls.length > 0) {
+    try {
+      const clipPaths = readyUrls
+        .filter((u) => u.startsWith('/api/se/media/'))
+        .map((u) => path.join(MEDIA_OUTPUT_DIR, path.basename(u)));
+      if (clipPaths.length > 0) {
+        const finalName = `${seScope}_${safeSlot}_final_25s.mp4`;
+        const finalPath = path.join(MEDIA_OUTPUT_DIR, finalName);
+        const subtitles: SubtitleSegment[] = [
+          {
+            startSec: 0.4,
+            endSec: 7.4,
+            text: 'Selamat datang di The Park Townhouse Sukoharjo,\nhunian boutique 2 lantai Japandi Modern.',
+          },
+          {
+            startSec: 7.8,
+            endSec: 15.0,
+            text: 'Garasi dalam, smart door lock, one-gate RFID 24 jam,\ndan clubhouse lengkap tanpa biaya member.',
+          },
+          {
+            startSec: 15.4,
+            endSec: 22.3,
+            text: 'Mulai Rp650 jutaan · Booking Fee Rp5 Juta.\nJadwalkan survei privat sekarang!',
+          },
+        ];
+        await composeBrandedReelsVideo({
+          clipPaths,
+          subtitles,
+          outputMp4Path: finalPath,
+          targetTotalSec: 25,
+        });
+        readyUrls = [`/api/se/media/${finalName}`];
+      }
+    } catch {
+      /* fallback to raw clips */
+    }
+  }
+
+  const nextStatus = anyActive
+    ? 'GENERATING'
+    : readyUrls.length > 0
+    ? 'READY'
+    : 'FAILED';
+  const firstErr = latestRows.find((r) => r.status === 'FAILED')?.error || null;
+
+  await sql`
+    UPDATE sales_os.se_content_slots
+    SET hermes_job_ids = ${sql.json(jobs)},
+        media_urls = ${sql.json(readyUrls)},
+        media_status = ${nextStatus},
+        media_error = ${firstErr},
+        generated_at = ${nextStatus === 'READY' ? sql`NOW()` : null},
+        updated_at = NOW()
+    WHERE se_email = ${seEmail} AND slot_id = ${slotId}
+  `;
+}
+
+/**
+ * STRICT 1-AT-A-TIME GLOBAL SEQUENTIAL DISPATCHER + COOLDOWN (12-18s)
+ * Ensures only 1 job is ever active in Hermes VNC across all SEs & slots.
+ */
+export async function pollActiveHermesJobs(): Promise<void> {
+  if (isQueueTickBusy) return;
+  isQueueTickBusy = true;
+  try {
+    await fs.mkdir(MEDIA_OUTPUT_DIR, { recursive: true });
+
+    const activeRows = await sql`
+      SELECT * FROM sales_os.media_render_queue
+      WHERE status = 'PROCESSING'
+      ORDER BY id ASC
+      LIMIT 1
+    `;
+
+    if (activeRows.length > 0) {
+      const item = activeRows[0];
+      const seEmail = String(item.se_email);
+      const slotId = String(item.slot_id);
+      const jobId = String(item.hermes_job_id || '');
+
+      if (!jobId) {
+        await sql`
+          UPDATE sales_os.media_render_queue
+          SET status = 'FAILED', error = 'Job ID Hermes kosong', finished_at = NOW()
+          WHERE id = ${item.id}
+        `;
+        await syncSlotFromQueue(seEmail, slotId);
+        return;
+      }
+
+      try {
+        const statusRes = await fetch(`${HERMES_API_URL}/v1/jobs/${jobId}`, {
+          headers: { 'X-API-Key': HERMES_API_KEY },
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!statusRes.ok) return;
+
+        const job = (await statusRes.json()) as {
+          status?: string;
+          error?: string;
+          files?: string[];
+          media_urls?: string[];
+        };
+
+        if (job.status === 'done' && Array.isArray(job.files) && job.files.length > 0) {
+          const isVideo = item.media_type === 'video';
+          const seScope = seEmail.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          const safeSlot = slotId.replace(/[^a-zA-Z0-9_-]/g, '_');
+          const remoteFile = path.basename(job.files[0]);
+          const mediaSourceUrl =
+            job.media_urls?.[0] || `${HERMES_API_URL}/v1/media/${encodeURIComponent(remoteFile)}`;
+          const ext = path.extname(remoteFile) || (isVideo ? '.mp4' : '.jpg');
+          const localFileName = `${seScope}_${safeSlot}_slide_${item.slide_index}${ext}`;
+          const localFilePath = path.join(MEDIA_OUTPUT_DIR, localFileName);
+
+          let localUrl = mediaSourceUrl;
+          const dlRes = await fetch(mediaSourceUrl, {
+            headers: { 'X-API-Key': HERMES_API_KEY },
+            signal: AbortSignal.timeout(25000),
+          });
+          if (dlRes.ok) {
+            const buf = Buffer.from(await dlRes.arrayBuffer());
+            await fs.writeFile(localFilePath, buf);
+            localUrl = `/api/se/media/${localFileName}`;
+          }
+
+          await sql`
+            UPDATE sales_os.media_render_queue
+            SET status = 'DONE', local_url = ${localUrl}, finished_at = NOW()
+            WHERE id = ${item.id}
+          `;
+          nextDispatchAllowedAtMs = Date.now() + 12000 + Math.floor(Math.random() * 6000);
+          await syncSlotFromQueue(seEmail, slotId);
+        } else if (job.status === 'failed') {
+          const errMsg = job.error || 'Render gagal di Hermes VNC';
+          await sql`
+            UPDATE sales_os.media_render_queue
+            SET status = 'FAILED', error = ${errMsg}, finished_at = NOW()
+            WHERE id = ${item.id}
+          `;
+          if (/tidak biasa|unusual|timeout|gagal/i.test(errMsg)) {
+            await sql`
+              UPDATE sales_os.media_render_queue
+              SET status = 'CANCELLED', error = ${errMsg}, finished_at = NOW()
+              WHERE se_email = ${seEmail} AND slot_id = ${slotId} AND status = 'PENDING'
+            `;
+          }
+          nextDispatchAllowedAtMs = Date.now() + 15000;
+          await syncSlotFromQueue(seEmail, slotId);
+        }
+      } catch {
+        /* retry next tick */
+      }
+      return;
+    }
+
+    if (Date.now() < nextDispatchAllowedAtMs) return;
+
+    const nextRows = await sql`
+      SELECT * FROM sales_os.media_render_queue
+      WHERE status = 'PENDING'
+      ORDER BY priority ASC, created_at ASC, id ASC
+      LIMIT 1
+    `;
+    if (nextRows.length === 0) return;
+
+    const nextItem = nextRows[0];
     try {
       const enqueueRes = await fetch(`${HERMES_API_URL}/v1/generate`, {
         method: 'POST',
@@ -792,192 +1077,59 @@ export async function enqueueSlotMediaViaHermes(params: {
           'X-API-Key': HERMES_API_KEY,
         },
         body: JSON.stringify({
-          type: isVideo ? 'video' : 'image',
-          prompt: slidePrompt,
-          aspect: isVideo ? '9:16' : '3:4',
+          type: nextItem.media_type === 'video' ? 'video' : 'image',
+          prompt: String(nextItem.prompt),
+          aspect: String(nextItem.aspect_ratio || '3:4'),
           count: 1,
           duration: '8',
           resolution: '720p',
         }),
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(15000),
       });
 
       if (!enqueueRes.ok) {
         const errText = await enqueueRes.text().catch(() => '');
-        lastError = `Hermes API (${enqueueRes.status}): ${errText || enqueueRes.statusText}`;
-        continue;
+        await sql`
+          UPDATE sales_os.media_render_queue
+          SET status = 'FAILED', error = ${`Hermes API (${enqueueRes.status}): ${errText || enqueueRes.statusText}`}, finished_at = NOW()
+          WHERE id = ${nextItem.id}
+        `;
+        nextDispatchAllowedAtMs = Date.now() + 15000;
+        await syncSlotFromQueue(String(nextItem.se_email), String(nextItem.slot_id));
+        return;
       }
 
       const json = (await enqueueRes.json()) as { job_id?: string };
-      if (json.job_id) {
-        jobs.push({
-          slideIndex: i + 1,
-          jobId: json.job_id,
-          status: 'pending',
-        });
-      }
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : 'Gagal enqueue ke Hermes';
-    }
-  }
-
-  if (jobs.length === 0) {
-    return {
-      ok: false,
-      targetCount,
-      jobs: [],
-      error: lastError || 'Gagal mendaftarkan antrean ke Hermes VNC.',
-    };
-  }
-
-  return { ok: true, targetCount, jobs };
-}
-
-/**
- * Polls pending Hermes jobs in the background. Whenever ANY single slide finishes,
- * it immediately downloads that file and updates PostgreSQL media_urls so the UI
- * shows partial progress (e.g. 3/5 slides ready right away).
- */
-export async function pollActiveHermesJobs(): Promise<void> {
-  try {
-    await fs.mkdir(MEDIA_OUTPUT_DIR, { recursive: true });
-    const rows = await sql`
-      SELECT se_email, slot_id, format, target_media_count, hermes_job_ids, media_urls
-      FROM sales_os.se_content_slots
-      WHERE media_status = 'GENERATING'
-    `;
-
-    for (const row of rows) {
-      const seEmail = String(row.se_email);
-      const slotId = String(row.slot_id);
-      const seScope = seEmail.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      const safeSlot = slotId.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const isVideo =
-        String(row.format || '').toLowerCase().includes('reels') ||
-        String(row.format || '').toLowerCase().includes('video');
-
-      const jobs: HermesJobEntry[] = Array.isArray(row.hermes_job_ids)
-        ? (row.hermes_job_ids as HermesJobEntry[])
-        : [];
-      if (jobs.length === 0) continue;
-
-      let changed = false;
-      for (const entry of jobs) {
-        if (entry.status !== 'pending' || !entry.jobId) continue;
-
-        try {
-          const statusRes = await fetch(`${HERMES_API_URL}/v1/jobs/${entry.jobId}`, {
-            headers: { 'X-API-Key': HERMES_API_KEY },
-            signal: AbortSignal.timeout(8000),
-          });
-          if (!statusRes.ok) continue;
-
-          const job = (await statusRes.json()) as {
-            status?: string;
-            error?: string;
-            files?: string[];
-            media_urls?: string[];
-          };
-
-          if (job.status === 'failed') {
-            entry.status = 'failed';
-            entry.error = job.error || 'Render gagal di Hermes';
-            changed = true;
-          } else if (job.status === 'done' && Array.isArray(job.files) && job.files.length > 0) {
-            const remoteFile = path.basename(job.files[0]);
-            const mediaSourceUrl =
-              job.media_urls?.[0] || `${HERMES_API_URL}/v1/media/${encodeURIComponent(remoteFile)}`;
-            const ext = path.extname(remoteFile) || (isVideo ? '.mp4' : '.jpg');
-            const localFileName = `${seScope}_${safeSlot}_slide_${entry.slideIndex}${ext}`;
-            const localFilePath = path.join(MEDIA_OUTPUT_DIR, localFileName);
-
-            const dlRes = await fetch(mediaSourceUrl, {
-              headers: { 'X-API-Key': HERMES_API_KEY },
-              signal: AbortSignal.timeout(25000),
-            });
-            if (dlRes.ok) {
-              const buf = Buffer.from(await dlRes.arrayBuffer());
-              await fs.writeFile(localFilePath, buf);
-              entry.localUrl = `/api/se/media/${localFileName}`;
-            } else {
-              entry.localUrl = mediaSourceUrl;
-            }
-            entry.status = 'done';
-            changed = true;
-          }
-        } catch {
-          /* continue polling next tick */
-        }
-      }
-
-      if (changed) {
-        let readyUrls = jobs
-          .filter((j) => j.status === 'done' && j.localUrl)
-          .sort((a, b) => a.slideIndex - b.slideIndex)
-          .map((j) => j.localUrl as string);
-
-        const anyPending = jobs.some((j) => j.status === 'pending');
-
-        // Jika video multi-klip sudah selesai semua -> gabungkan jadi 25 detik + subtitle + outro 2 logo
-        if (!anyPending && isVideo && readyUrls.length > 0) {
-          try {
-            const clipPaths = readyUrls
-              .filter((u) => u.startsWith('/api/se/media/'))
-              .map((u) => path.join(MEDIA_OUTPUT_DIR, path.basename(u)));
-            if (clipPaths.length > 0) {
-              const finalName = `${seScope}_${safeSlot}_final_25s.mp4`;
-              const finalPath = path.join(MEDIA_OUTPUT_DIR, finalName);
-              const subtitles: SubtitleSegment[] = [
-                {
-                  startSec: 0.4,
-                  endSec: 7.4,
-                  text: 'Selamat datang di The Park Townhouse Sukoharjo,\nhunian boutique 2 lantai Japandi Modern.',
-                },
-                {
-                  startSec: 7.8,
-                  endSec: 15.0,
-                  text: 'Garasi dalam, smart door lock, one-gate RFID 24 jam,\ndan clubhouse lengkap tanpa biaya member.',
-                },
-                {
-                  startSec: 15.4,
-                  endSec: 22.3,
-                  text: 'Mulai Rp650 jutaan · Booking Fee Rp5 Juta.\nJadwalkan survei privat sekarang!',
-                },
-              ];
-              await composeBrandedReelsVideo({
-                clipPaths,
-                subtitles,
-                outputMp4Path: finalPath,
-                targetTotalSec: 25,
-              });
-              readyUrls = [`/api/se/media/${finalName}`];
-            }
-          } catch {
-            /* fallback to raw clips if ffmpeg compose fails */
-          }
-        }
-
-        const nextStatus = anyPending
-          ? 'GENERATING'
-          : readyUrls.length > 0
-          ? 'READY'
-          : 'FAILED';
-        const firstErr = jobs.find((j) => j.status === 'failed')?.error || null;
-
+      if (!json.job_id) {
         await sql`
-          UPDATE sales_os.se_content_slots
-          SET hermes_job_ids = ${sql.json(jobs)},
-              media_urls = ${sql.json(readyUrls)},
-              media_status = ${nextStatus},
-              media_error = ${firstErr},
-              generated_at = ${nextStatus === 'READY' ? sql`NOW()` : null},
-              updated_at = NOW()
-          WHERE se_email = ${seEmail} AND slot_id = ${slotId}
+          UPDATE sales_os.media_render_queue
+          SET status = 'FAILED', error = 'Hermes tidak mengembalikan job_id', finished_at = NOW()
+          WHERE id = ${nextItem.id}
         `;
+        await syncSlotFromQueue(String(nextItem.se_email), String(nextItem.slot_id));
+        return;
       }
+
+      await sql`
+        UPDATE sales_os.media_render_queue
+        SET status = 'PROCESSING', hermes_job_id = ${json.job_id}, started_at = NOW()
+        WHERE id = ${nextItem.id}
+      `;
+      await syncSlotFromQueue(String(nextItem.se_email), String(nextItem.slot_id));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Gagal menghubungi Hermes';
+      await sql`
+        UPDATE sales_os.media_render_queue
+        SET status = 'FAILED', error = ${msg}, finished_at = NOW()
+        WHERE id = ${nextItem.id}
+      `;
+      nextDispatchAllowedAtMs = Date.now() + 15000;
+      await syncSlotFromQueue(String(nextItem.se_email), String(nextItem.slot_id));
     }
   } catch {
-    /* keep background poller resilient */
+    /* keep background dispatcher resilient */
+  } finally {
+    isQueueTickBusy = false;
   }
 }
 
@@ -1040,8 +1192,8 @@ export function startContentMediaScheduler(): void {
         FROM sales_os.se_content_slots
         WHERE report_date = ${dateStr}::date
           AND media_status = 'SCHEDULED'
-        ORDER BY slot_order ASC
-        LIMIT 2
+        ORDER BY slot_order ASC, se_email ASC
+        LIMIT 10
       `;
       for (const row of dueRows) {
         if (!isSlotDueNowWib(Number(row.slot_order || 1), minutesOfDay)) continue;
@@ -1055,6 +1207,7 @@ export function startContentMediaScheduler(): void {
           visualPrompt: String(row.visual_prompt || ''),
           durationSeconds: Number(row.duration_seconds || 15),
           slideDeck: Array.isArray(row.slide_deck) ? (row.slide_deck as SlideDeckItem[]) : undefined,
+          priority: 10,
         });
         await sql`
           UPDATE sales_os.se_content_slots

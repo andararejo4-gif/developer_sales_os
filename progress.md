@@ -3,6 +3,15 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-036 | 2026-11-23 | Global Sequential Render Queue (1-per-1 + Cooldown), Busy-Window Guard & Fail-Fast Hermes
+- Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
+- Ubah: `server/content-media-worker.ts`, `server/index.ts`, `src/components/content/ContentSlotOverviewPage.tsx`, `/opt/flow-service/flow_engine.py` (di `hades`)
+- Detail Perubahan:
+  - **Global Sequential Queue (`sales_os.media_render_queue`):** Seluruh permintaan render foto/carousel/video dari semua SE dan scheduler kini masuk ke 1 antrean global PostgreSQL. Worker memproses **tepat 1 item (`PROCESSING`)** pada satu waktu, menunggu selesai, lalu memberi **jeda cooldown aman 12–18 detik** sebelum mengirim item berikutnya (menghilangkan burst 5 job sekaligus).
+  - **Busy-Window Guard (30 Menit Sebelum Jadwal):** Mengunci generate manual pada **`08:30–09:00 WIB`** (buka `09:01`), **`13:30–14:00 WIB`** (buka `14:01`), dan **`19:00–19:30 WIB`** (buka `19:31`) agar scheduler terjadwal untuk semua SE selesai tepat waktu tanpa bentrok. UI otomatis menampilkan banner waktu sibuk & jumlah antrean global.
+  - **Fail-Fast Hermes (`flow_engine.py`):** Menambahkan deteksi dini pesan *"aktivitas yang tidak biasa"* / *"unusual activity"* pada Google Flow (backup aman di `flow_engine.py.bak.20261123b`) sehingga job langsung berhenti dalam hitungan detik alih-alih menunggu timeout 160 detik, dan worker otomatis membatalkan sisa slide `PENDING` slot yang terkena limit.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), `flow-api.service` & PM2 `developer-sales-os-api` `online`.
+
 ## P-035 | 2026-11-23 | Playbook Khusus SE & Validasi Foto + GPS Rute Harian Canvassing
 - Status: selesai (`e488e54`, live di `https://developerproperti.giivepro.com`)
 - Ubah: `src/components/PlaybookViewer.tsx`, `src/components/DailyRouteViewer.tsx`, `src/App.tsx`
