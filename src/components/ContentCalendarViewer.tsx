@@ -22,6 +22,8 @@ import {
   ChevronRight,
   Film,
   Image as ImageIcon,
+  Send,
+  Share2,
 } from 'lucide-react';
 import {
   getContentCalendar,
@@ -34,6 +36,10 @@ import {
   ContentSlotOverviewPage,
   type SlotMediaMeta,
 } from './content/ContentSlotOverviewPage';
+import {
+  SocialConnectModal,
+  type ConnectedSocialAccount,
+} from './content/SocialConnectModal';
 import {
   getQueryParam,
   setQueryParam,
@@ -148,6 +154,42 @@ export function ContentCalendarViewer({
   const [selectedDay, setSelectedDay] = useState<number>(() =>
     loadPersistedState<number>(`devos_cal_day_${userScope}`, 1)
   );
+  const [socialAccounts, setSocialAccounts] = useState<ConnectedSocialAccount[]>([]);
+  const [maxSocialAccounts, setMaxSocialAccounts] = useState<number>(4);
+  const [isSocialModalOpen, setIsSocialModalOpen] = useState(false);
+  const [publishingSlotId, setPublishingSlotId] = useState<string | null>(null);
+
+  const loadSocialAccounts = async () => {
+    try {
+      const res = await fetch('/api/se/social/accounts', {
+        headers: {
+          'X-User-Email': userEmail,
+          'X-User-Role': userRole,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok) {
+          setSocialAccounts(Array.isArray(data.accounts) ? data.accounts : []);
+          if (data.maxAccounts) setMaxSocialAccounts(Number(data.maxAccounts));
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  useEffect(() => {
+    void loadSocialAccounts();
+    const onMsg = (ev: MessageEvent) => {
+      if (ev.data?.type === 'ZERNIO_CONNECTED') {
+        void loadSocialAccounts();
+        setToastMessage(`Akun ${String(ev.data.platform || '').toUpperCase()} berhasil terhubung!`);
+      }
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [userEmail, userRole]);
   const [selectedWeek, setSelectedWeek] = useState<number>(() =>
     loadPersistedState<number>(`devos_cal_week_${userScope}`, 1)
   );
@@ -614,6 +656,50 @@ export function ContentCalendarViewer({
       ? 'bg-white rounded-2xl border border-warmborder w-full flex flex-col overflow-hidden shadow-xs'
       : 'bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden';
 
+  const handlePublishSlotNow = async (slot: ContentSlot) => {
+    setPublishingSlotId(slot.id);
+    try {
+      const res = await fetch('/api/se/content-slots/publish', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Email': userEmail,
+          'X-User-Role': userRole,
+        },
+        body: JSON.stringify({ slotId: slot.id, platform: slot.platform }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        if (data.code === 'SOCIAL_NOT_CONNECTED') {
+          setIsSocialModalOpen(true);
+        }
+        setToastMessage(data.error || 'Gagal memposting ke social media.');
+        return;
+      }
+      const nextUrl = String(data.postUrl || '');
+      updateSlotPosting(projectId, slot.id, nextUrl, 'SUDAH_POSTING');
+      setCalendar((prev) => {
+        if (!prev) return null;
+        const nextSlots = prev.slots.map((s) =>
+          s.id === slot.id ? { ...s, postedUrl: nextUrl, status: 'SUDAH_POSTING' as const } : s
+        );
+        return {
+          ...prev,
+          slots: nextSlots,
+          postedSlotsCount: nextSlots.filter((s) => s.status === 'SUDAH_POSTING').length,
+        };
+      });
+      if (onDataChanged) onDataChanged();
+      setToastMessage(
+        `Berhasil diposting ke ${slot.platform}${data.username ? ` (@${data.username})` : ''} & link terisi otomatis!`
+      );
+    } catch {
+      setToastMessage('Koneksi gagal saat memposting ke social media.');
+    } finally {
+      setPublishingSlotId(null);
+    }
+  };
+
   const selectedDetailSlot = selectedDetailSlotId && calendar
     ? calendar.slots.find((s) => s.id === selectedDetailSlotId) || null
     : null;
@@ -627,6 +713,10 @@ export function ContentCalendarViewer({
             mediaMeta={slotMediaMap[selectedDetailSlot.id]}
             userEmail={userEmail}
             userRole={userRole}
+            socialAccounts={socialAccounts}
+            isPublishing={publishingSlotId === selectedDetailSlot.id}
+            onOpenSocialModal={() => setIsSocialModalOpen(true)}
+            onPublishNow={() => handlePublishSlotNow(selectedDetailSlot)}
             onBack={closeSlotDetail}
             onMediaMetaUpdated={(slotId, nextMeta) =>
               setSlotMediaMap((prev) => ({ ...prev, [slotId]: nextMeta }))
@@ -634,6 +724,15 @@ export function ContentCalendarViewer({
             onCopyCaption={handleCopyCaption}
             onQuickMarkUploaded={handleQuickMarkUploaded}
             onSavePostedUrl={handleSavePostedUrl}
+          />
+          <SocialConnectModal
+            isOpen={isSocialModalOpen}
+            onClose={() => setIsSocialModalOpen(false)}
+            accounts={socialAccounts}
+            maxAccounts={maxSocialAccounts}
+            userEmail={userEmail}
+            userRole={userRole}
+            onAccountsChanged={loadSocialAccounts}
           />
         </div>
       </div>
@@ -679,6 +778,15 @@ export function ContentCalendarViewer({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsSocialModalOpen(true)}
+              className="min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-extrabold bg-espresso text-white hover:bg-espresso/90 flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm whitespace-nowrap"
+            >
+              <Share2 className="size-3.5 text-amber-400 shrink-0" />
+              <span>Akun Sosmed ({socialAccounts.length}/{maxSocialAccounts})</span>
+            </button>
+
             <button
               onClick={handleExportDocx}
               disabled={isExporting}
@@ -1361,6 +1469,24 @@ export function ContentCalendarViewer({
                           </button>
                         )}
 
+                        {!isUploaded && (slotMediaMap[slot.id]?.mediaUrls?.length || 0) > 0 && (
+                          <button
+                            type="button"
+                            disabled={publishingSlotId === slot.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handlePublishSlotNow(slot);
+                            }}
+                            className="min-h-[44px] md:min-h-[36px] px-3 py-1.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-extrabold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-60"
+                          >
+                            {publishingSlotId === slot.id ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <Send className="size-3.5" />
+                            )}
+                            <span>{publishingSlotId === slot.id ? 'Memposting...' : 'Posting ke Social Media Sekarang'}</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1394,6 +1520,17 @@ export function ContentCalendarViewer({
           </>
           )}
         </div>
+
+        {/* Modal Hubungkan Akun Social Media (Zernio) */}
+        <SocialConnectModal
+          isOpen={isSocialModalOpen}
+          onClose={() => setIsSocialModalOpen(false)}
+          accounts={socialAccounts}
+          maxAccounts={maxSocialAccounts}
+          userEmail={userEmail}
+          userRole={userRole}
+          onAccountsChanged={loadSocialAccounts}
+        />
 
         {/* Modal Detail & Tempel Link */}
         {activeSlotModal && (

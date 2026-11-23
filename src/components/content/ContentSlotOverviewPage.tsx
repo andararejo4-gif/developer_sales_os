@@ -13,8 +13,11 @@ import {
   RefreshCw,
   Sparkles,
   AlertTriangle,
+  Send,
+  Share2,
 } from 'lucide-react';
 import type { ContentSlot } from '../../lib/content-calendar/types';
+import type { ConnectedSocialAccount } from './SocialConnectModal';
 
 export interface SlotMediaMeta {
   visualPrompt?: string;
@@ -52,6 +55,10 @@ interface ContentSlotOverviewPageProps {
   mediaMeta?: SlotMediaMeta;
   userEmail: string;
   userRole: string;
+  socialAccounts?: ConnectedSocialAccount[];
+  isPublishing?: boolean;
+  onOpenSocialModal?: () => void;
+  onPublishNow?: () => void;
   onBack: () => void;
   onMediaMetaUpdated: (slotId: string, nextMeta: SlotMediaMeta) => void;
   onCopyCaption: (caption: string, hashtags: string[], cta: string) => void;
@@ -64,6 +71,10 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
   mediaMeta,
   userEmail,
   userRole,
+  socialAccounts = [],
+  isPublishing = false,
+  onOpenSocialModal,
+  onPublishNow,
   onBack,
   onMediaMetaUpdated,
   onCopyCaption,
@@ -233,7 +244,28 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {onOpenSocialModal && (
+            <button
+              type="button"
+              onClick={onOpenSocialModal}
+              className="min-h-[44px] px-3 py-1.5 rounded-xl bg-sandstone border border-warmborder text-espresso hover:bg-warmborder/40 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Share2 className="size-3.5 text-terracotta" />
+              <span>Akun Sosmed ({socialAccounts.length}/4)</span>
+            </button>
+          )}
+          {!isUploaded && readyUrls.length > 0 && onPublishNow && (
+            <button
+              type="button"
+              disabled={isPublishing}
+              onClick={onPublishNow}
+              className="min-h-[44px] px-3.5 py-1.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-60"
+            >
+              {isPublishing ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              <span>{isPublishing ? 'Memposting...' : 'Posting ke Social Media Sekarang'}</span>
+            </button>
+          )}
           {isUploaded ? (
             <span className="min-h-[36px] px-3 py-1 rounded-xl bg-emerald-600 text-white text-xs font-extrabold inline-flex items-center gap-1">
               <CheckCircle2 className="size-3.5" />

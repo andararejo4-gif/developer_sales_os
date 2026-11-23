@@ -21,6 +21,17 @@ import {
   startContentMediaScheduler,
 } from './content-media-worker';
 import {
+  ACCOUNTS_PER_KEY_LIMIT,
+  ZERNIO_PLATFORMS,
+  fetchZernioAccountsForProfile,
+  getOrCreateZernioProfile,
+  getZernioConnectUrl,
+  getZernioKeys,
+  mapCalendarPlatformToZernio,
+  publishSlotViaZernio,
+  type ZernioPlatform,
+} from './zernio-client';
+import {
   startBaileysForSe,
   disconnectBaileysForSe,
   getWaStatusForSe,
@@ -1793,6 +1804,295 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // =========================================================================
+    // ZERNIO SOCIAL MEDIA INTEGRATION (4 Akun / SE via 2 API Key Pool)
+    // =========================================================================
+    if (pathname === '/api/se/social/accounts' && req.method === 'GET') {
+      const keys = getZernioKeys();
+      const rows = await sql`
+        SELECT platform, zernio_key_index, zernio_profile_id, zernio_account_id, account_username, status, connected_at
+        FROM sales_os.se_social_accounts
+        WHERE se_email = ${user.email} AND status = 'CONNECTED'
+        ORDER BY connected_at ASC
+      `;
+      sendJson(res, 200, {
+        ok: true,
+        accounts: rows,
+        maxAccounts: keys.length * ACCOUNTS_PER_KEY_LIMIT,
+        configuredKeysCount: keys.length,
+        platforms: ZERNIO_PLATFORMS,
+      });
+      return;
+    }
+
+    if (pathname === '/api/se/social/connect' && req.method === 'GET') {
+      const platformParam = String(urlObj.searchParams.get('platform') || '').toLowerCase() as ZernioPlatform;
+      if (!['instagram', 'tiktok', 'facebook', 'youtube'].includes(platformParam)) {
+        sendJson(res, 400, { ok: false, error: 'Platform tidak valid. Gunakan: instagram, tiktok, facebook, atau youtube.' });
+        return;
+      }
+      const keys = getZernioKeys();
+      if (keys.length === 0) {
+        sendJson(res, 500, { ok: false, error: 'ZERNIO_API_KEY belum dikonfigurasi di server.' });
+        return;
+      }
+
+      const existingRows = await sql`
+        SELECT platform, zernio_key_index, zernio_profile_id
+        FROM sales_os.se_social_accounts
+        WHERE se_email = ${user.email} AND status = 'CONNECTED'
+      `;
+      const existingSamePlatform = existingRows.find((r: any) => r.platform === platformParam);
+
+      let chosenKeyIndex = 0;
+      if (existingSamePlatform) {
+        chosenKeyIndex = Number(existingSamePlatform.zernio_key_index || 0);
+      } else {
+        if (existingRows.length >= keys.length * ACCOUNTS_PER_KEY_LIMIT) {
+          sendJson(res, 400, {
+            ok: false,
+            error: `Batas maksimal ${keys.length * ACCOUNTS_PER_KEY_LIMIT} akun sosmed terhubung sudah tercapai. Putuskan salah satu akun terlebih dahulu.`,
+          });
+          return;
+        }
+        // Pilih API key yang slotnya (< 2 akun) masih tersedia
+        let foundIndex = -1;
+        for (let i = 0; i < keys.length; i++) {
+          const usedOnKey = existingRows.filter((r: any) => Number(r.zernio_key_index) === i).length;
+          if (usedOnKey < ACCOUNTS_PER_KEY_LIMIT) {
+            foundIndex = i;
+            break;
+          }
+        }
+        if (foundIndex === -1) {
+          sendJson(res, 400, { ok: false, error: 'Semua slot API Key Zernio penuh.' });
+          return;
+        }
+        chosenKeyIndex = foundIndex;
+      }
+
+      const profileId =
+        existingSamePlatform?.zernio_profile_id ||
+        (await getOrCreateZernioProfile(chosenKeyIndex, user.email, user.name));
+
+      const hostHeader = String(req.headers.host || 'localhost:3040');
+      const proto = String(req.headers['x-forwarded-proto'] || (hostHeader.includes('localhost') || hostHeader.includes('127.0.0.1') ? 'http' : 'https'));
+      const originBase = (process.env.PUBLIC_APP_URL && !hostHeader.includes('localhost') && !hostHeader.includes('127.0.0.1'))
+        ? process.env.PUBLIC_APP_URL.replace(/\/+$/, '')
+        : `${proto}://${hostHeader}`;
+
+      const callbackUrl = new URL(`${originBase}/api/se/social/callback`);
+      callbackUrl.searchParams.set('seEmail', user.email);
+      callbackUrl.searchParams.set('platform', platformParam);
+      callbackUrl.searchParams.set('keyIndex', String(chosenKeyIndex));
+      callbackUrl.searchParams.set('profileId', profileId);
+
+      const authUrl = await getZernioConnectUrl({
+        keyIndex: chosenKeyIndex,
+        profileId,
+        platform: platformParam,
+        redirectUrl: callbackUrl.toString(),
+      });
+
+      sendJson(res, 200, { ok: true, authUrl, platform: platformParam, keyIndex: chosenKeyIndex });
+      return;
+    }
+
+    if (pathname === '/api/se/social/callback' && req.method === 'GET') {
+      const seEmail = String(urlObj.searchParams.get('seEmail') || '').trim().toLowerCase();
+      const platformParam = String(urlObj.searchParams.get('platform') || '').toLowerCase();
+      const keyIndex = Number(urlObj.searchParams.get('keyIndex') || 0);
+      const profileId = String(urlObj.searchParams.get('profileId') || '');
+      let accountId = String(
+        urlObj.searchParams.get('accountId') ||
+          urlObj.searchParams.get('account_id') ||
+          urlObj.searchParams.get('id') ||
+          ''
+      );
+      let username = String(
+        urlObj.searchParams.get('username') ||
+          urlObj.searchParams.get('account_username') ||
+          urlObj.searchParams.get('name') ||
+          ''
+      );
+
+      if ((!accountId || !username) && profileId) {
+        const remoteAccounts = await fetchZernioAccountsForProfile(keyIndex, profileId);
+        const match =
+          remoteAccounts.find((a) => String(a.platform).toLowerCase() === platformParam) ||
+          remoteAccounts[remoteAccounts.length - 1];
+        if (match) {
+          if (!accountId) accountId = String(match._id);
+          if (!username) username = String(match.username || match.displayName || platformParam);
+        }
+      }
+
+      if (seEmail && platformParam && accountId) {
+        await sql`
+          INSERT INTO sales_os.se_social_accounts (
+            se_email, platform, zernio_key_index, zernio_profile_id, zernio_account_id,
+            account_username, status, connected_at, updated_at
+          ) VALUES (
+            ${seEmail}, ${platformParam}, ${keyIndex}, ${profileId}, ${accountId},
+            ${username || platformParam}, 'CONNECTED', NOW(), NOW()
+          )
+          ON CONFLICT (se_email, platform) DO UPDATE SET
+            zernio_key_index = EXCLUDED.zernio_key_index,
+            zernio_profile_id = EXCLUDED.zernio_profile_id,
+            zernio_account_id = EXCLUDED.zernio_account_id,
+            account_username = EXCLUDED.account_username,
+            status = 'CONNECTED',
+            updated_at = NOW()
+        `;
+      }
+
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(`<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><title>Akun Sosmed Terhubung</title></head>
+<body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FBF9F5;color:#2C1E16;">
+  <div style="background:#fff;border:1px solid #E8DFD1;border-radius:20px;padding:28px;max-width:420px;text-align:center;">
+    <h2 style="margin:0 0 8px;">${accountId ? 'Akun Berhasil Terhubung!' : 'Koneksi Diproses'}</h2>
+    <p style="font-size:14px;color:#6E5D52;margin:0 0 18px;">
+      Platform <strong>${platformParam.toUpperCase()}</strong> ${username ? `(@${username})` : ''} siap dipakai untuk posting 1-klik.
+    </p>
+    <button onclick="window.close(); window.location.href='/kalender';" style="background:#C2593F;color:#fff;border:none;border-radius:12px;padding:10px 18px;font-weight:700;cursor:pointer;">
+      Kembali ke Kalender Konten
+    </button>
+  </div>
+  <script>
+    try {
+      if (window.opener) {
+        window.opener.postMessage({ type: 'ZERNIO_CONNECTED', platform: ${JSON.stringify(platformParam)}, username: ${JSON.stringify(username)} }, '*');
+        setTimeout(() => window.close(), 900);
+      } else {
+        setTimeout(() => { window.location.href = '/kalender?social_connected=${encodeURIComponent(platformParam)}'; }, 1200);
+      }
+    } catch (e) {}
+  </script>
+</body></html>`);
+      return;
+    }
+
+    if (pathname === '/api/se/social/accounts' && req.method === 'DELETE') {
+      const platformParam = String(urlObj.searchParams.get('platform') || '').toLowerCase();
+      if (!platformParam) {
+        sendJson(res, 400, { ok: false, error: 'Parameter platform wajib diisi.' });
+        return;
+      }
+      await sql`
+        DELETE FROM sales_os.se_social_accounts
+        WHERE se_email = ${user.email} AND platform = ${platformParam}
+      `;
+      sendJson(res, 200, { ok: true, platform: platformParam });
+      return;
+    }
+
+    if (pathname === '/api/se/content-slots/publish' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const slotId = String(body.slotId || '');
+      if (!slotId) {
+        sendJson(res, 400, { ok: false, error: 'slotId wajib diisi.' });
+        return;
+      }
+
+      const slotRows = await sql`
+        SELECT * FROM sales_os.se_content_slots
+        WHERE se_email = ${user.email} AND slot_id = ${slotId}
+        LIMIT 1
+      `;
+      const row = slotRows[0];
+      if (!row) {
+        sendJson(res, 404, { ok: false, error: 'Slot konten tidak ditemukan di database.' });
+        return;
+      }
+
+      const mediaUrls: string[] = Array.isArray(row.media_urls) ? row.media_urls : [];
+      if (mediaUrls.length === 0) {
+        sendJson(res, 400, { ok: false, error: 'Media konten belum siap. Generate media terlebih dahulu.' });
+        return;
+      }
+
+      const targetPlatform = mapCalendarPlatformToZernio(String(body.platform || row.platform || 'Instagram'));
+      const accRows = await sql`
+        SELECT * FROM sales_os.se_social_accounts
+        WHERE se_email = ${user.email} AND platform = ${targetPlatform} AND status = 'CONNECTED'
+        LIMIT 1
+      `;
+      const acc = accRows[0];
+      if (!acc) {
+        sendJson(res, 400, {
+          ok: false,
+          code: 'SOCIAL_NOT_CONNECTED',
+          platform: targetPlatform,
+          error: `Akun ${targetPlatform.toUpperCase()} belum terhubung. Hubungkan akun Anda di menu "Akun Sosmed Terhubung".`,
+        });
+        return;
+      }
+
+      const hashtagsArr: string[] = Array.isArray(row.hashtags) ? row.hashtags : [];
+      const fullContent = [
+        String(row.caption || row.title || ''),
+        String(row.cta || ''),
+        hashtagsArr.join(' '),
+      ]
+        .filter((s) => s.trim().length > 0)
+        .join('\n\n');
+
+      const isVideo =
+        String(row.format || '').toLowerCase().includes('reels') ||
+        String(row.format || '').toLowerCase().includes('video') ||
+        mediaUrls.some((u) => /\.mp4(\?|$)/i.test(u));
+
+      const hostHeader = String(req.headers.host || 'developerproperti.giivepro.com');
+      const proto = String(req.headers['x-forwarded-proto'] || 'https');
+      const pubResult = await publishSlotViaZernio({
+        keyIndex: Number(acc.zernio_key_index || 0),
+        accountId: String(acc.zernio_account_id),
+        platform: targetPlatform,
+        content: fullContent,
+        mediaUrls,
+        isVideo,
+        requestOrigin: `${proto}://${hostHeader}`,
+      });
+
+      const finalPostUrl =
+        pubResult.postUrl ||
+        `https://${targetPlatform}.com/${acc.account_username || ''}`;
+
+      await sql`
+        UPDATE sales_os.se_content_slots
+        SET status = 'SUDAH_POSTING',
+            posted_url = ${finalPostUrl},
+            updated_at = NOW()
+        WHERE se_email = ${user.email} AND slot_id = ${slotId}
+      `;
+
+      const todayStr = toWibDateStr(new Date());
+      const postingCat = isVideo ? 'REEL' : 'STORY';
+      await sql`
+        INSERT INTO sales_os.se_field_logs (
+          se_email, se_name, log_type, title, location_label, notes, payload
+        ) VALUES (
+          ${user.email}, ${user.name}, 'CONTENT_POSTING',
+          ${`Auto-Publish ${targetPlatform.toUpperCase()} (${slotId})`},
+          ${finalPostUrl},
+          ${`Diposting via Zernio ke @${acc.account_username || targetPlatform}`},
+          ${sql.json({ slotId, platform: targetPlatform, postId: pubResult.postId, postUrl: finalPostUrl, postingCat, reportDate: todayStr })}
+        )
+      `.catch(() => {});
+
+      sendJson(res, 200, {
+        ok: true,
+        slotId,
+        platform: targetPlatform,
+        username: acc.account_username,
+        postId: pubResult.postId,
+        postUrl: finalPostUrl,
+        status: pubResult.status,
+      });
+      return;
+    }
+
     sendJson(res, 404, { ok: false, error: `Endpoint tidak ditemukan: ${pathname}` });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Terjadi kesalahan internal server.';
@@ -1862,6 +2162,21 @@ async function ensureSeOpsTables(): Promise<void> {
       ADD COLUMN IF NOT EXISTS slide_deck JSONB DEFAULT '[]'::jsonb,
       ADD COLUMN IF NOT EXISTS report_date DATE,
       ADD COLUMN IF NOT EXISTS generated_at TIMESTAMPTZ
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.se_social_accounts (
+      id SERIAL PRIMARY KEY,
+      se_email TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      zernio_key_index INTEGER NOT NULL DEFAULT 0,
+      zernio_profile_id TEXT,
+      zernio_account_id TEXT NOT NULL,
+      account_username TEXT,
+      status TEXT NOT NULL DEFAULT 'CONNECTED',
+      connected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (se_email, platform)
+    )
   `;
 }
 

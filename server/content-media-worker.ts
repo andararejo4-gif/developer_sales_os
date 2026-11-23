@@ -991,6 +991,42 @@ export function startContentMediaScheduler(): void {
   setInterval(async () => {
     try {
       const { dateStr, minutesOfDay } = getWibClock();
+
+      // Auto-init 3 slot hari ini untuk SE yang sudah pernah aktif agar di jam 09:00/14:00/19:30 WIB sudah READY
+      const activeSeRows = await sql`
+        SELECT DISTINCT se_email FROM sales_os.se_content_slots
+        WHERE se_email IS NOT NULL AND se_email <> ''
+      `;
+      for (const seRow of activeSeRows) {
+        const seEmail = String(seRow.se_email);
+        const todayExisting = await sql`
+          SELECT slot_id FROM sales_os.se_content_slots
+          WHERE se_email = ${seEmail} AND report_date = ${dateStr}::date
+          LIMIT 1
+        `;
+        if (todayExisting.length === 0 && minutesOfDay >= 8 * 60 + 20) {
+          const seName = seEmail.split('@')[0];
+          const aiSlots = await generateUniqueDaySlotsWithAi(seEmail, seName, 1);
+          for (const s of aiSlots) {
+            const slotId = `slot-d1-s${s.slotOrder}-sales_in_house`;
+            await sql`
+              INSERT INTO sales_os.se_content_slots (
+                se_email, slot_id, status, posted_url, day_number, slot_order,
+                scheduled_time, funnel_stage, platform, format, title, brief,
+                visual_prompt, caption, hashtags, cta, duration_seconds,
+                persona_code, slide_deck, media_status, report_date, updated_at
+              ) VALUES (
+                ${seEmail}, ${slotId}, 'SIAP_POSTING', '', 1, ${s.slotOrder},
+                ${s.scheduledTime}, ${s.funnelStage}, ${s.platform}, ${s.format}, ${s.title}, ${s.brief},
+                ${s.visualPrompt}, ${s.caption}, ${sql.json(s.hashtags)}, ${s.cta}, ${s.durationSeconds},
+                ${s.personaCode || null}, ${sql.json(s.slideDeck || [])}, 'SCHEDULED', ${dateStr}::date, NOW()
+              )
+              ON CONFLICT (se_email, slot_id) DO NOTHING
+            `;
+          }
+        }
+      }
+
       const dueRows = await sql`
         SELECT se_email, slot_id, slot_order, funnel_stage, format, title, brief, visual_prompt, duration_seconds, slide_deck
         FROM sales_os.se_content_slots
