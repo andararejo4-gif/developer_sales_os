@@ -327,6 +327,12 @@ BUAT 3 KONTEN HARIAN UNIK SESUAI RUMUS ASLI TOFU · MOFU · BOFU (WAJIB SERTAKAN
    - ${slot3Format === 'Single Image + Visual Quote' ? `WAJIB sertakan "slideDeck" berisi tepat 1 objek poster flagship [{"kicker":"2-3 kata","headline":"3-5 kata","subheadline":"4-7 kata","visualPrompt":"sweeping diagonal cluster street at golden hour...","badgePrice":"${unitBadge}"}]` : `Sertakan "brief" skrip per detik yang KETAT (0-3d: Offer Hook dengan angka resmi | 4-11d: Skema bayar Cash/KPR/CT24 & keunggulan inti | 12-${reelsDur2}d: CTA WA & Booking Rp5 Juta) + visualPrompt sinematik vertikal 9:16.`}
 
 Setiap objek dalam JSON array WAJIB memiliki field: "hook", "title", "brief", "visualPrompt", "caption", "hashtags", "cta", "platform", "durationSeconds", dan "slideDeck" (bila Carousel/Single Image).
+
+ATURAN GAYA COPYWRITING CAPTION (WAJIB FUN, EXCITED & MANUSIAWI):
+- Tulis dengan gaya kreator properti Instagram/TikTok yang hangat, antusias, mengalir, dan enak dibaca di layar HP (paragraf pendek 1–2 kalimat, pakai 2–4 emoji relevan secara natural).
+- DILARANG KERAS menulis label segmen kaku di awal kalimat (seperti "Untuk Perantau / Pekerja Migran:" atau "Untuk Dokter:") dan DILARANG menulis tag internal seperti "(Gold/Diamond)", "[P4]", atau "(H-1)" di judul maupun caption!
+- Ubah spesifikasi teknis menjadi cerita manfaat hidup sehari-hari yang bikin audiens membayangkan tinggal di sana.
+
 Balas HANYA JSON array valid berisi 3 objek (tanpa markdown fence).`;
 
       const resp = await fetch(`${baseUrl}/chat/completions`, {
@@ -342,7 +348,7 @@ Balas HANYA JSON array valid berisi 3 objek (tanpa markdown fence).`;
             {
               role: 'system',
               content:
-                'Kamu adalah Creative Director properti senior yang 100% patuh pada data resmi Playbook v1.2, anti-halusinasi, dan selalu membalas JSON array valid. DILARANG menulis nama fiktif persona (seperti "Pak Hendra", "Mas Bima") atau kode nomor #12/#16 di caption publik — gunakan deskripsi segmen alami (mis. "keluarga muda", "pengusaha", "dokter/profesional").',
+                'Kamu adalah Creative Director & Social Media Copywriter properti yang jago bikin konten viral, fun, antusias, dan dekat dengan audiens (bukan bahasa brosur kaku), 100% patuh pada data resmi Playbook v1.2, anti-halusinasi, dan selalu membalas JSON array valid. DILARANG menulis nama fiktif persona, kode nomor #12/#16, atau tag internal (Gold/Diamond) di caption publik.',
             },
             { role: 'user', content: prompt },
           ],
@@ -530,6 +536,8 @@ Balas HANYA JSON array valid berisi 3 objek (tanpa markdown fence).`;
     },
   ];
 
+  const cleanUnitName = unitFocus.label.split('(')[0].trim();
+
   return [
     {
       slotOrder: 1,
@@ -537,13 +545,13 @@ Balas HANYA JSON array valid berisi 3 objek (tanpa markdown fence).`;
       funnelStage: 'TOFU',
       platform: 'Instagram',
       format: 'Carousel Edukasi',
-      hook: `Kenapa banyak ${persona.archetype} memilih hunian 2 lantai ber-clubhouse di Solo Selatan?`,
+      hook: `Serius, punya rumah 2 lantai ber-clubhouse itu ternyata bikin kualitas waktu bareng keluarga berubah total ✨`,
       title: `${pillar.label}: Checklist Hunian Ideal ${unitFocus.cluster}`,
-      brief: `Carousel 5 slide edukasi TOFU (tanpa hard-sell) untuk ${persona.archetype}. Motivasi: ${persona.motivasi}. Menjawab kekhawatiran: ${persona.kekhawatiran}.`,
+      brief: `Carousel 5 slide edukasi TOFU (tanpa hard-sell): sentuh aspirasi punya hunian nyaman & privat, lalu kenalkan fasilitas gaya hidup di ${unitFocus.cluster}.`,
       visualPrompt: tofuDeck[0].visualPrompt,
-      caption: `Kenapa banyak ${persona.archetype} memilih hunian 2 lantai ber-clubhouse di Solo Selatan?\n\n${persona.openingHook}\n\nDi The Park Townhouse Sukoharjo (${unitFocus.label}), Anda mendapatkan ${pillar.focus} Geser sampai slide terakhir untuk checklist hunian ideal keluarga.`,
-      hashtags: ['#TheParkTownhouse', '#TownhouseSukoharjo', '#JapandiModern', '#AndaraRejoMakmur'],
-      cta: 'Simpan postingan ini & DM saya untuk info denah lengkap.',
+      caption: `Serius, punya rumah 2 lantai ber-clubhouse itu ternyata bikin kualitas waktu bareng keluarga berubah total ✨\n\nBayangin weekend nggak perlu macet-macetan keluar kompleks—pagi bisa berenang santai, sore ngopi di lounge atau main mini golf bareng orang tersayang 🏡🌿\n\nDi The Park Townhouse Sukoharjo (${cleanUnitName}), konsep Japandi Modern-nya dibuat lega, terang, dan super privat. Geser sampai slide terakhir buat ceklist hunian ideal versi kamu! 👉`,
+      hashtags: ['#TheParkTownhouse', '#TownhouseSukoharjo', '#JapandiModern', '#RumahIdamanSolo'],
+      cta: 'Simpan postingan ini dulu biar nggak hilang, atau DM aku kalau mau intip denahnya! 💬',
       durationSeconds: 0,
       personaCode,
       slideDeck: tofuDeck,
@@ -554,19 +562,19 @@ Balas HANYA JSON array valid berisi 3 objek (tanpa markdown fence).`;
       funnelStage: 'MOFU',
       platform: slot2Format === 'Carousel Edukasi' ? 'Instagram' : 'TikTok',
       format: slot2Format,
-      hook: `Beli rumah second lalu renovasi vs unit baru ${unitFocus.label} — cek hitungan nyatanya.`,
-      title: `Bedah ${unitFocus.label.split('(')[0].trim()}: ${pillar.label}`,
+      hook: `Beli rumah second lalu renovasi vs langsung masuk unit baru ${cleanUnitName} — mending mana? 🤔`,
+      title: `Bedah ${cleanUnitName}: ${pillar.label}`,
       brief:
         slot2Format === 'Carousel Edukasi'
-          ? `Carousel 5 slide MOFU membedah ${unitFocus.label} (${unitCashLabel} cash / ${unitKprLabel} KPR) vs rumah second untuk segmen ${persona.archetype}.`
-          : `0–3d Hook: Perbandingan rumah second vs ${unitFocus.label} | 4–11d Tur: ${pillar.label} & tata ruang 2 lantai | 12–${reelsDur1}d CTA: Survei privat.`,
+          ? `Carousel 5 slide MOFU membedah keunggulan nyata ${cleanUnitName} (${unitCashLabel} cash / ${unitKprLabel} KPR) dibanding renovasi rumah lama.`
+          : `0–3d Hook: Perbandingan rumah second vs ${cleanUnitName} | 4–11d Tur: ${pillar.label} & tata ruang 2 lantai | 12–${reelsDur1}d CTA: Survei privat.`,
       visualPrompt:
         slot2Format === 'Carousel Edukasi'
           ? mofuDeck[0].visualPrompt
-          : `Vertical 9:16 real estate Reels video (${reelsDur1}s) showcasing ${unitFocus.label} modern 2-story white tropical Japandi townhouse in Sukoharjo, warm golden daylight, photorealistic`,
-      caption: `Beli rumah second lalu renovasi vs unit baru ${unitFocus.label} — cek hitungan nyatanya.\n\nSiang ini saya bedah unit ${unitFocus.label} di Cluster ${unitFocus.cluster}. Cocok untuk ${persona.archetype} yang menginginkan ${pillar.focus}`,
-      hashtags: ['#TourRumahSukoharjo', '#TheParkTownhouse', `#Cluster${unitFocus.cluster}`],
-      cta: 'Ketik "SURVEI" di komentar untuk kirim pin lokasi Marketing Gallery & jadwal tur privat.',
+          : `Vertical 9:16 real estate Reels video (${reelsDur1}s) showcasing ${cleanUnitName} modern 2-story white tropical Japandi townhouse in Sukoharjo, warm golden daylight, photorealistic`,
+      caption: `Beli rumah second lalu renovasi vs langsung masuk unit baru ${cleanUnitName} — mending mana? 🤔\n\nBanyak yang ngira beli rumah lama lebih hemat, padahal biaya renovasi + perapian sering membengkak di luar rencana! Di Cluster ${unitFocus.cluster}, kamu sudah dapat bangunan 2 lantai siap desain Japandi, garasi dalam tertutup, dan keamanan one-gate RFID 24 jam 🔒✨\n\nPenasaran lihat langsung feel ruangannya? Yuk jadwalkan tur privat minggu ini!`,
+      hashtags: ['#TourRumahSukoharjo', '#TheParkTownhouse', `#Cluster${unitFocus.cluster}`, '#HunianModern'],
+      cta: 'Ketik "SURVEI" di komentar atau DM sekarang, nanti aku kirimkan pin lokasi & jadwal kosongnya! 📍',
       durationSeconds: slot2Format === 'Carousel Edukasi' ? 0 : reelsDur1,
       personaCode,
       slideDeck: slot2Format === 'Carousel Edukasi' ? mofuDeck : undefined,
@@ -577,19 +585,19 @@ Balas HANYA JSON array valid berisi 3 objek (tanpa markdown fence).`;
       funnelStage: 'BOFU',
       platform: 'Instagram',
       format: slot3Format,
-      hook: `Mulai ${unitKprLabel} (KPR) atau ${unitCashLabel} (Cash) — 3 KT + garasi dalam + akses clubhouse seumur hidup.`,
-      title: `Penawaran ${unitFocus.label.split('(')[0].trim()}: Cash ${unitCashLabel} · Booking Rp5 Juta`,
+      hook: `Mulai ${unitKprLabel} (KPR) atau ${unitCashLabel} (Cash) — sudah dapat 3 KT, garasi dalam & clubhouse seumur hidup! 🔥`,
+      title: `Penawaran ${cleanUnitName}: Cash ${unitCashLabel} · Booking Rp5 Juta`,
       brief:
         slot3Format === 'Single Image + Visual Quote'
-          ? `Poster BOFU untuk ${persona.archetype}: ${persona.pendekatanClosing}. Skema Cash Keras (${unitCashLabel}), CT12, CT24, dan KPR DP 10% (${unitKprLabel}).`
+          ? `Poster BOFU penawaran unit ${cleanUnitName}: skema Cash Keras (${unitCashLabel}), CT12, CT24, dan KPR DP 10% (${unitKprLabel}) + Booking Fee Rp5 Juta.`
           : `0–3d Offer Hook: Mulai ${unitKprLabel} KPR / ${unitCashLabel} Cash | 4–11d Skema bayar & keunggulan inti | 12–${reelsDur2}d CTA WA & Booking Rp5 Juta.`,
       visualPrompt:
         slot3Format === 'Single Image + Visual Quote'
           ? bofuPosterDeck[0].visualPrompt
-          : `Vertical 9:16 evening luxury townhouse walkthrough (${reelsDur2}s) for ${unitFocus.label}, warm architectural lighting, inviting family atmosphere, photorealistic`,
-      caption: `Mulai ${unitKprLabel} (KPR) atau ${unitCashLabel} (Cash) — 3 KT + garasi dalam + akses clubhouse seumur hidup.\n\nUnit ${unitFocus.label} tersedia dengan skema Cash Keras, CT12, CT24, atau KPR DP 10% (pengajuan paralel 2 bank). Booking Fee resmi Rp5.000.000 melalui rekening PT Andara Rejo Makmur sebelum penyesuaian harga Desember.`,
-      hashtags: ['#KPRSukoharjo', '#TheParkTownhouse', '#BookingFee5Juta', '#AndaraRejoMakmur'],
-      cta: 'Klik link WA di bio atau DM sekarang untuk simulasi cicilan & cek kavling tersedia.',
+          : `Vertical 9:16 evening luxury townhouse walkthrough (${reelsDur2}s) for ${cleanUnitName}, warm architectural lighting, inviting family atmosphere, photorealistic`,
+      caption: `Mulai ${unitKprLabel} (KPR) atau ${unitCashLabel} (Cash) — sudah dapat 3 KT, garasi dalam & akses clubhouse seumur hidup tanpa iuran member! 🔥\n\nBuat kamu yang lagi cari hunian boutique di Solo Selatan, unit ${cleanUnitName} bisa diamankan dengan skema fleksibel (Cash Keras, Cash Tempo 12/24 bulan, atau KPR DP 10% dibantu pengajuan paralel 2 bank) 🏦✨\n\nCukup Booking Fee Rp5 juta (resmi ke rekening PT Andara Rejo Makmur) sebelum penyesuaian harga Desember!`,
+      hashtags: ['#KPRSukoharjo', '#TheParkTownhouse', '#BookingFee5Juta', '#PropertiSolo'],
+      cta: 'Klik link WA atau DM aku sekarang buat hitungan simulasi cicilan paling ringan & cek unit yang masih kosong! 📲',
       durationSeconds: slot3Format === 'Single Image + Visual Quote' ? 0 : reelsDur2,
       personaCode,
       slideDeck: slot3Format === 'Single Image + Visual Quote' ? bofuPosterDeck : undefined,
