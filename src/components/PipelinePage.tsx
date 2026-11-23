@@ -265,6 +265,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
   );
 
   // Skema Pembayaran + Custom
+  const [stagePickerLead, setStagePickerLead] = useState<PipelineLeadRecord | null>(null);
   const [formPaymentSelect, setFormPaymentSelect] = useState(() =>
     loadPersistedState(`devos_pl_pay_sel_${user.email}`, 'KPR')
   );
@@ -2065,20 +2066,14 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
 
                   {/* Kontrol Cepat & Tombol Buka/Tutup Detail (100% Terkandung & 1 Baris di Mobile) */}
                   <div className="flex flex-col lg:flex-row lg:items-center gap-2 shrink-0 w-full lg:w-auto min-w-0">
-                    <select
-                      aria-label="Ubah Tahap Pipeline"
-                      value={lead.stage}
-                      onChange={(e) =>
-                        handleQuickStageChange(lead, e.target.value as PipelineStageCode)
-                      }
-                      className={`w-full lg:w-auto min-w-0 max-w-full min-h-[44px] px-3 rounded-xl border text-xs font-bold cursor-pointer truncate ${stageInfo.colorClass}`}
+                    <button
+                      type="button"
+                      onClick={() => setStagePickerLead(lead)}
+                      className={`w-full lg:w-auto min-w-0 max-w-full min-h-[38px] sm:min-h-[42px] px-2.5 sm:px-3 rounded-xl border text-[11px] sm:text-xs font-bold cursor-pointer flex items-center justify-between gap-2 ${stageInfo.colorClass}`}
                     >
-                      {PLAYBOOK_PIPELINE_STAGES.map((st) => (
-                        <option key={st.code} value={st.code}>
-                          Tahap: {st.label}
-                        </option>
-                      ))}
-                    </select>
+                      <span className="truncate">Tahap: {stageInfo.label}</span>
+                      <ChevronDown className="size-3.5 shrink-0 opacity-75" />
+                    </button>
 
                     <div className="grid grid-cols-4 lg:flex items-center gap-1.5 w-full lg:w-auto">
                       <button
@@ -2611,6 +2606,64 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Pop-up Pemilih Tahap Pipeline (Pengganti Select Bawaan Browser) */}
+      {stagePickerLead && (
+        <div
+          className="fixed inset-0 z-50 bg-espresso/60 backdrop-blur-[2px] flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setStagePickerLead(null)}
+        >
+          <div
+            className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl border border-warmborder shadow-2xl overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-3.5 border-b border-warmborder flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-terracotta">
+                  Ubah Tahap Pipeline
+                </p>
+                <h3 className="text-sm font-extrabold text-espresso truncate">
+                  {stagePickerLead.full_name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStagePickerLead(null)}
+                className="size-10 rounded-xl bg-sandstone hover:bg-warmborder text-espresso flex items-center justify-center shrink-0 cursor-pointer"
+                aria-label="Tutup pilihan tahap"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="p-3 sm:p-4 max-h-[65dvh] overflow-y-auto space-y-1.5 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+              {PLAYBOOK_PIPELINE_STAGES.map((st) => {
+                const isSelected = stagePickerLead.stage === st.code;
+                return (
+                  <button
+                    key={st.code}
+                    type="button"
+                    onClick={() => {
+                      const target = stagePickerLead;
+                      setStagePickerLead(null);
+                      if (target.stage !== st.code) {
+                        void handleQuickStageChange(target, st.code as PipelineStageCode);
+                      }
+                    }}
+                    className={`w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border text-left text-xs font-bold flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-espresso text-white border-espresso shadow-xs'
+                        : 'bg-sandstone/50 hover:bg-sandstone text-espresso border-warmborder'
+                    }`}
+                  >
+                    <span className="truncate">{st.label}</span>
+                    {isSelected && <CheckCircle2 className="size-4 text-emerald-400 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

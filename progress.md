@@ -3,6 +3,15 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-040 | 2026-11-23 | Hapus Badge Sudah Upload, Custom Stage Picker Pipeline & Mobile-First Absen/GPS
+- Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
+- Ubah: `src/components/content/ContentSlotOverviewPage.tsx`, `src/components/PipelinePage.tsx`, `src/components/FieldOpsModal.tsx`
+- Detail Perubahan:
+  - **Detail Konten (`ContentSlotOverviewPage.tsx`):** Menghapus pill `Sudah Upload` dari top bar agar header mobile (`Kembali` + `Sosmed (x/4)`) bersih tanpa terpotong.
+  - **Custom Pop-up Tahap Pipeline (`PipelinePage.tsx`):** Mengganti `<select>` bawaan Chrome pada kartu lead dengan tombol ringkas (`min-h-[38px]`) yang membuka custom bottom-sheet/modal `Ubah Tahap Pipeline` bergaya native.
+  - **Mobile-First Absensi & GPS (`FieldOpsModal.tsx`):** Merapikan tab navigasi (`grid-cols-3`/`grid-cols-4` 1 baris tanpa overflow), menyusun 3 tombol absensi (`Foto`, `Check-In`, `Check-Out`) dalam `grid-cols-3` 1 baris sejajar (`>=44px`), dan menambah `pb-24 md:pb-6` agar aman dari bottom nav.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
+
 ## P-039 | 2026-11-23 | Link Postingan Spesifik Zernio, Filter Desktop-Only & Reflow Mobile Pipeline
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `server/zernio-client.ts`, `server/index.ts`, `src/components/content/ContentSlotOverviewPage.tsx`, `src/components/ContentCalendarViewer.tsx`, `src/components/PipelinePage.tsx`

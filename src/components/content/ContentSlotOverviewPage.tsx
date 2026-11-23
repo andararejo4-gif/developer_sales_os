@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -341,12 +340,6 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
                 <Share2 className="size-3.5 text-terracotta shrink-0" />
                 <span>Sosmed ({socialAccounts.length}/4)</span>
               </button>
-            )}
-            {isUploaded && (
-              <span className="min-h-[44px] px-3 rounded-xl bg-emerald-600 text-white text-xs font-extrabold inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap">
-                <CheckCircle2 className="size-3.5 shrink-0" />
-                <span>Sudah Upload</span>
-              </span>
             )}
           </div>
         </div>

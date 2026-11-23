@@ -497,15 +497,15 @@ export function FieldOpsModal({
           )}
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="px-4 sm:px-6 py-3 bg-white border-b border-warmborder">
-          <div className="flex gap-2 overflow-x-auto no-scrollbar snap-x">
+        {/* Navigation Tabs (Mobile-First Compact Grid / Strip) */}
+        <div className="px-3 sm:px-6 py-2.5 sm:py-3 bg-white border-b border-warmborder">
+          <div className={`grid gap-1.5 sm:flex sm:gap-2 ${hideAiGuide ? 'grid-cols-3' : 'grid-cols-4'}`}>
             {[
-              { id: 'absen', label: 'Absensi Harian', icon: UserCheck, badge: 'GPS' },
-              { id: 'gps', label: 'Tracking GPS & Foto', icon: MapPin, badge: 'Lapangan' },
-              { id: 'call', label: 'Log Panggilan', icon: PhoneCall, badge: 'Call' },
+              { id: 'absen', label: 'Absensi', desktopLabel: 'Absensi Harian', icon: UserCheck, badge: 'GPS' },
+              { id: 'gps', label: 'GPS & Foto', desktopLabel: 'Tracking GPS & Foto', icon: MapPin, badge: 'Lapangan' },
+              { id: 'call', label: 'Log Call', desktopLabel: 'Log Panggilan', icon: PhoneCall, badge: 'Call' },
               ...(!hideAiGuide
-                ? [{ id: 'ai_guide', label: 'AI Panduan Aktivitas SE', icon: Sparkles, badge: 'Platinum & Diamond' }]
+                ? [{ id: 'ai_guide', label: 'AI Guide', desktopLabel: 'AI Panduan Aktivitas SE', icon: Sparkles, badge: 'Platinum' }]
                 : []),
             ].map((tab) => {
               const Icon = tab.icon;
@@ -514,16 +514,17 @@ export function FieldOpsModal({
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                  className={`min-h-[44px] px-2 sm:px-3.5 py-2 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 transition-all cursor-pointer whitespace-nowrap ${
                     isActive
                       ? 'bg-espresso text-white shadow-xs'
                       : 'bg-sandstone text-warmmuted hover:text-espresso'
                   }`}
                 >
-                  <Icon className="size-3.5" />
-                  <span>{tab.label}</span>
+                  <Icon className="size-3.5 shrink-0" />
+                  <span className="sm:hidden truncate">{tab.label}</span>
+                  <span className="hidden sm:inline">{tab.desktopLabel}</span>
                   <span
-                    className={`text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase ${
+                    className={`hidden sm:inline-block text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase ${
                       tab.id === 'ai_guide'
                         ? 'bg-amber-400 text-espresso'
                         : isActive
@@ -540,7 +541,7 @@ export function FieldOpsModal({
         </div>
 
         {/* Content Body */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-6">
+        <div className="p-3.5 sm:p-6 pb-24 md:pb-6 overflow-y-auto flex-1 space-y-4 sm:space-y-6">
           {/* TAB 1: ABSENSI HARIAN */}
           {activeTab === 'absen' && isManager && (
             <SmFieldMonitoringView
@@ -554,31 +555,24 @@ export function FieldOpsModal({
           )}
 
           {activeTab === 'absen' && !isManager && (
-            <div className="space-y-5">
-              <div className="p-5 rounded-2xl bg-white border border-warmborder flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
+            <div className="space-y-4 sm:space-y-5">
+              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-warmborder flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4">
+                <div className="min-w-0">
                   <span className="text-[10px] font-extrabold uppercase tracking-wider text-olive">
-                    {isManager ? 'Mode Supervisi & Presensi Manajemen' : 'Presensi Terkunci Koordinat GPS'}
+                    Presensi Terkunci Koordinat GPS
                   </span>
-                  <h3 className="text-base font-extrabold text-espresso mt-0.5">
-                    {isManager ? (
-                      <>
-                        Monitoring Absensi Tim SE · Akun {userProfile?.roleLabel || userRole} ({activeUserName})
-                      </>
-                    ) : (
-                      <>Absensi Hari Ini ({activeUserName})</>
-                    )}
+                  <h3 className="text-sm sm:text-base font-extrabold text-espresso mt-0.5 truncate">
+                    Absensi Hari Ini ({activeUserName})
                   </h3>
-                  <p className="text-xs text-warmmuted mt-0.5">
-                    {isManager
-                      ? `Memantau jam check-in & posisi GPS seluruh tim SE binaan di proyek ${effectiveProjectName}. Anda juga dapat melakukan check-in supervisi.`
-                      : 'Setiap absen masuk & pulang mencatat titik koordinat lokasi SE untuk validasi kehadiran.'}
+                  <p className="hidden sm:block text-xs text-warmmuted mt-0.5">
+                    Setiap absen masuk &amp; pulang mencatat titik koordinat lokasi SE untuk validasi kehadiran.
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <label className="min-h-[44px] px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-espresso border border-warmborder text-xs font-bold flex items-center gap-1.5 cursor-pointer">
-                    <Camera className="size-4 text-terracotta" />
-                    <span>{photoProofUrl ? 'Foto Terlampir ✓' : 'Lampirkan Foto'}</span>
+                <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2.5 w-full sm:w-auto shrink-0">
+                  <label className="min-h-[44px] px-2 sm:px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-espresso border border-warmborder text-[11px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap">
+                    <Camera className="size-3.5 sm:size-4 text-terracotta shrink-0" />
+                    <span className="sm:hidden truncate">{photoProofUrl ? 'Foto ✓' : 'Foto'}</span>
+                    <span className="hidden sm:inline">{photoProofUrl ? 'Foto Terlampir ✓' : 'Lampirkan Foto'}</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -589,15 +583,18 @@ export function FieldOpsModal({
                   </label>
                   <button
                     onClick={handleCheckIn}
-                    className="min-h-[44px] px-4 py-2.5 rounded-xl bg-olive text-white text-xs font-bold hover:bg-olive/90 cursor-pointer flex items-center gap-1.5 shadow-xs"
+                    className="min-h-[44px] px-2 sm:px-4 py-2 rounded-xl bg-olive text-white text-[11px] sm:text-xs font-bold hover:bg-olive/90 cursor-pointer inline-flex items-center justify-center gap-1 sm:gap-1.5 shadow-xs whitespace-nowrap"
                   >
-                    <CheckCircle2 className="size-4" /> Check-In GPS ({userRole})
+                    <CheckCircle2 className="size-3.5 sm:size-4 shrink-0" />
+                    <span className="sm:hidden">Check-In</span>
+                    <span className="hidden sm:inline">Check-In GPS ({userRole})</span>
                   </button>
                   <button
                     onClick={handleCheckOut}
-                    className="min-h-[44px] px-4 py-2.5 rounded-xl bg-espresso text-white text-xs font-bold hover:bg-espresso/90 cursor-pointer flex items-center gap-1.5"
+                    className="min-h-[44px] px-2 sm:px-4 py-2 rounded-xl bg-espresso text-white text-[11px] sm:text-xs font-bold hover:bg-espresso/90 cursor-pointer inline-flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap"
                   >
-                    <Clock className="size-4" /> Check-Out
+                    <Clock className="size-3.5 sm:size-4 shrink-0" />
+                    <span>Check-Out</span>
                   </button>
                 </div>
               </div>
