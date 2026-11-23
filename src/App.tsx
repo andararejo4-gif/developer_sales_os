@@ -1582,6 +1582,11 @@ export default function App() {
             {role === 'SE' && (
               <SeNotificationBell
                 quickStatus={seRealData?.quickStatus}
+                extra={{
+                  leadsTodayValidCount: seRealData?.metrics?.leadsTodayValidCount,
+                  needsCompletionLeadsCount: seRealData?.metrics?.needsCompletionLeadsCount,
+                  waConnectionStatus: seRealData?.metrics?.waConnectionStatus,
+                }}
                 onNavigateTarget={handleSeNotifNavigate}
                 onH5ReminderTriggered={(item) => setActiveH5Reminder(item)}
               />
@@ -1613,6 +1618,11 @@ export default function App() {
             {role === 'SE' && (
               <SeNotificationBell
                 quickStatus={seRealData?.quickStatus}
+                extra={{
+                  leadsTodayValidCount: seRealData?.metrics?.leadsTodayValidCount,
+                  needsCompletionLeadsCount: seRealData?.metrics?.needsCompletionLeadsCount,
+                  waConnectionStatus: seRealData?.metrics?.waConnectionStatus,
+                }}
                 onNavigateTarget={handleSeNotifNavigate}
               />
             )}

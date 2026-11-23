@@ -61,7 +61,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   return (
     <nav
       aria-label="Navigasi Bawah Mobile"
-      className="fixed inset-x-0 bottom-0 z-40 md:hidden bg-white border-t border-warmborder pb-[env(safe-area-inset-bottom)]"
+      className="fixed inset-x-0 bottom-0 z-30 md:hidden bg-white border-t border-warmborder pb-[env(safe-area-inset-bottom)]"
     >
       <div className="grid grid-cols-5 h-16 max-w-lg mx-auto px-1">
         {navItems.map((item) => {

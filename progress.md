@@ -3,6 +3,15 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-043 | 2026-11-23 | Portal Z-Index Notifikasi (Tutupi Bottom Bar), Modal Detail Tengah & Daftar Tugas SE Lengkap
+- Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
+- Ubah: `src/components/mobile/MobileBottomNav.tsx`, `src/components/se/SeNotificationCenter.tsx`, `src/App.tsx`
+- Detail Perubahan:
+  - **Z-Index & Portal (`MobileBottomNav.tsx`, `SeNotificationCenter.tsx`):** Menurunkan `MobileBottomNav` ke `z-30` dan merender panel notifikasi (`z-[80]`) serta modal detail (`z-[90]`) melalui `createPortal(..., document.body)` agar keluar dari stacking context `<header>` (`z-20`) — bottom-sheet di mobile 100% menutupi bottom bar tanpa glitch scroll.
+  - **Modal Detail di Tengah (`SeNotificationCenter.tsx`):** Saat salah satu notifikasi diklik, detail lengkap muncul sebagai pop-up di **tengah layar** (`items-center justify-center`), menampilkan ringkasan, tabel detail fakta/status saat ini, rekomendasi aksi lengkap, dan CTA langsung.
+  - **Daftar Notifikasi Lengkap:** Mencakup H-5 menit konten (`08:55`, `13:55`, `19:25 WIB`), H-5 menit Export Laporan (`17:55 WIB`), Lead Urgent SLA ≤ 5m, Check-In & Check-Out GPS, Lead Perlu Dilengkapi Data, Jadwal Konten Harian, Rute Canvassing, Target 8 Lead Harian, Koneksi WhatsApp SE, dan Export Laporan Harian.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
+
 ## P-042 | 2026-11-23 | Custom Dropdown + Opsi Lainnya Kalkulator KPR & Notifikasi Header Real-Time (H-5 Menit)
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/components/KnowledgeBaseViewer.tsx`, `src/components/se/SeNotificationCenter.tsx` (baru), `src/components/se/SeGuidedTour.tsx`, `src/App.tsx`
