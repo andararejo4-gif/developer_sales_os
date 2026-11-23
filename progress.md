@@ -3,6 +3,64 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-035 | 2026-11-23 | Playbook Khusus SE & Validasi Foto + GPS Rute Harian Canvassing
+- Status: selesai (`e488e54`, live di `https://developerproperti.giivepro.com`)
+- Ubah: `src/components/PlaybookViewer.tsx`, `src/components/DailyRouteViewer.tsx`, `src/App.tsx`
+- Detail Perubahan:
+  - **Playbook Independen SE:** Saat login sebagai `SE`, role switcher (`TL`, `SM`, `Digital Marketing`, `Admin & KPR`) disembunyikan dan Playbook dikunci eksklusif hanya menampilkan SOP & skrip milik `SE`.
+  - **Rute Harian Canvassing:** Setiap titik rute wajib dilengkapi **Bukti Foto** (`capture="environment"` + preview thumbnail) dan memiliki 2 opsi validasi:
+    1. **Tombol "Validasi Lokasi":** Melacak GPS live SE, menghitung jarak ke titik tujuan/area, mengecek kelengkapan foto. Jika lokasi sesuai radius & foto terlampir → status **`TERVALIDASI ✓`** + tercatat ke log GPS DB (`POST /api/se/field-logs`); jika lokasi di luar radius atau foto belum ada → tercatat **`PERLU DILENGKAPI`** beserta pesan kekurangannya.
+    2. **Tombol "Tidak Input GPS":** Membuka field wajib **Alasan Tidak Input GPS** yang tersimpan ke PostgreSQL `/api/se/routes` dengan status **`TANPA_GPS`**.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), live `HTTP 200` (`last-modified: Mon, 23 Nov 2026 13:50:46 GMT`).
+
+## P-034 | 2026-11-23 | Pembersihan Tampilan Brief Konten SE & Tombol Perbarui Brief AI
+- Status: selesai (`5d452ab`, live)
+- Ubah: `src/components/content/ContentSlotOverviewPage.tsx`, `server/index.ts`
+- Detail Perubahan:
+  - Mengubah **"Brief Eksekusi Konten"** menjadi **"Panduan Eksekusi Konten"** yang bersih & mudah dibaca SE (menghapus prefix internal `[P4]`, `(H-1)`, dan catatan internal persona seperti `"untuk Mas Bayu"`), menambahkan badge tujuan funnel (`Edukasi & Save` / `Bukti & Pertimbangan` / `Penawaran & Closing`), serta menampilkan **Alur Cerita 5 Slide** secara terstruktur.
+  - Menyembunyikan **Prompt Visual AI (Hermes)** bahasa Inggris ke dalam toggle `<details>` opsional agar tidak membingungkan SE.
+  - Menambahkan endpoint `POST /api/se/content-slots/regenerate-brief` & tombol **"Perbarui Brief AI"** di halaman detail slot untuk menyegarkan slot lama di DB dengan format brief & hook TOFU/MOFU/BOFU terbaru.
+  - Audit antrean Carousel Hermes: memverifikasi `queue_size` turun bertahap (7 → 6) dengan kecepatan ±60–75 detik/gambar secara sekuensial.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), PM2 `developer-sales-os-api` `online`.
+
+## P-033 | 2026-11-23 | Monitoring Absensi & GPS Tracking Sisi Sales Manager (SM)
+- Status: selesai (`840828d`, live)
+- Ubah: `src/components/field/SmFieldMonitoringView.tsx` (baru), `src/components/FieldOpsModal.tsx`, `server/index.ts`
+- Detail Perubahan:
+  - **Backend `GET /api/se/field-logs`:** Role manajer (`SM`, `TL`, `DIREKSI`, `ADMIN`) kini menerima seluruh log absensi, koordinat GPS, dan foto bukti dari semua SE di PostgreSQL `sales_os.se_field_logs` (role `SE` tetap terisolasi per `se_email`).
+  - **Tab Absensi (Default untuk SM):** Menampilkan daftar seluruh SE (status hadir, jam Masuk `In`, jam Pulang `Out`, jumlah foto bukti), filter **Harian · Mingguan · Bulanan**, tombol **Export Excel (`.xls`)**, serta tampilan detail per SE saat diklik (riwayat In/Out, koordinat, catatan, & preview foto).
+  - **Tab GPS (Sisi SM):** Default **tanpa radar** — hanya menampilkan **daftar SE terdaftar beserta posisi terakhir** (nama lokasi, jarak dari gerbang, jam terakhir, jumlah titik & foto). Klik salah satu SE membuka **halaman detail khusus SE** berisi pemilih tanggal, **Timeline Koordinat Harian Per Jam**, dan **Galeri Laporan Foto Lapangan** (bisa di-zoom).
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), live deploy sukses.
+
+## P-032 | 2026-11-23 | Export Laporan (PDF/Excel), Pipeline Tab "Perlu Ditangani", & Guided Tour SE
+- Status: selesai (`3df5b64`, live)
+- Ubah: `src/lib/exporters/daily-report-exporter.ts` (baru), `src/components/se/SeGuidedTour.tsx` (baru), `src/components/PipelinePage.tsx`, `src/components/mobile/SeMobileViews.tsx`, `src/App.tsx`, `server/index.ts`
+- Detail Perubahan:
+  - **Export Laporan (PDF & Excel):** Mengganti seluruh tombol `Salin Laporan WA` (termasuk perbaikan `ReferenceError: copyWa is not defined`) menjadi **"Export Laporan"** dengan modal pilihan **Export PDF** (print-ready) atau **Export Excel (`.xls`)**, sekaligus menyimpan catatan laporan ke DB sebelum ekspor.
+  - **Pipeline `Perlu Ditangani`:** Menambahkan tab baru **"Perlu Ditangani"** dengan badge indikator merah dinamis; lead yang belum dibalas / memiliki draf AI baru / lead `NEW` tanpa follow-up otomatis **berwarna merah** dan di-sort **paling atas** di semua tab.
+  - **Roadmap & Guided Tour SE (Desktop & Mobile):** Menambahkan `SeDailyRoadmapStrip` (4 tahap: `① Absen & GPS` → `② Lead Perlu Ditangani` → `③ Konten & Rute` → `④ Export Laporan`) serta `SeGuidedTourModal` anti-ribet (1 pop-up aktif per prioritas, context-aware, tombol snooze 30 menit): memandu Check-In & GPS di pagi hari, dan memunculkan pop-up merah **"Follow Up Sekarang"** jika ada lead belum ditangani.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), live `/api/health` OK.
+
+## P-031 | 2026-11-23 | Integrasi Zernio Social Media (4 Akun/SE, 8 Platform) & Pre-Generate Scheduler
+- Status: selesai (`41a4bb6`, `b292b95`, live)
+- Ubah: `server/zernio-client.ts` (baru), `src/components/content/SocialConnectModal.tsx` (baru), `server/index.ts`, `server/content-media-worker.ts`, `src/components/ContentCalendarViewer.tsx`, `src/components/content/ContentSlotOverviewPage.tsx`
+- Detail Perubahan:
+  - Mengonfigurasi pool **2 Zernio API Key** di `.env` lokal & server `hades` (`ZERNIO_API_KEY`, `ZERNIO_API_KEY_2`, `ZERNIO_BASE_URL`, `PUBLIC_APP_URL`) sehingga tiap SE dapat menghubungkan hingga **4 akun sosmed** (2 akun per key).
+  - Menambahkan tabel `sales_os.se_social_accounts` dan endpoint `GET /api/se/social/accounts`, `GET /api/se/social/connect`, `GET /api/se/social/callback`, `DELETE /api/se/social/accounts`, serta `POST /api/se/content-slots/publish`.
+  - Membangun `SocialConnectModal` dengan logo **8 platform** (**Instagram, TikTok, Facebook Page, YouTube Shorts, X/Twitter, Threads, LinkedIn, Pinterest**).
+  - Default **tidak auto-posting**; tombol **"Posting ke Social Media Sekarang"** muncul setelah media `READY`, lalu otomatis mengisi `posted_url` & mengubah status menjadi `SUDAH_POSTING`.
+  - Scheduler `startContentMediaScheduler()` otomatis menginisialisasi 3 slot harian mulai `08:20 WIB` dan merender media 30 menit sebelum jadwal (`08:30`, `13:30`, `19:00 WIB`).
+- Verifikasi: `GET /api/se/social/connect?platform=instagram` live mengembalikan `HTTP 200` dengan `authUrl` resmi Instagram.
+
+## P-030 | 2026-11-23 | Sinkronisasi Lokal SE + `origin/IT-kantor` ke `main`, Penguatan Hook TOFU/MOFU/BOFU & Dashboard SE
+- Status: selesai (`ec338dd`, `ccc7a1a`, `c0187d8`, live)
+- Ubah: `src/App.tsx`, `src/components/ContentCalendarViewer.tsx`, `src/components/FieldOpsModal.tsx`, `src/components/PlaybookViewer.tsx`, `src/components/KnowledgeBaseViewer.tsx`, `src/components/mobile/MobileMoreSheet.tsx`, `server/content-media-worker.ts`, `server/index.ts`
+- Detail Perubahan:
+  - Mengamankan seluruh pekerjaan lokal SE (`PROJECT.md`, Hermes Studio, GPS Radar, Rute Harian, KPR KB) di branch `feat/se-ops-local`, lalu menggabungkan `origin/IT-kantor` (multi-proyek, Superadmin/IT dashboards, impersonasi) ke `main` dengan tetap mempertahankan 100% isolasi & fitur `SE`.
+  - Memperketat prompt AI TOFU/MOFU/BOFU di `content-media-worker.ts` dengan field `hook` eksplisit per stage dan skrip Reels 3-tahap (`0-3d Hook | 4-11d Bukti | 12-Nd CTA`).
+  - Memperbaiki Dashboard SE: menambah *debounce* 500ms pada input catatan laporan, counter `Target Hit` dinamis, dan `quickStatus` di `/api/se/dashboard`.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy perdana ke `https://developerproperti.giivepro.com` (`HTTP 200`).
+
 ## P-029 | 2026-11-23 | Pembuatan & Push Branch Terisolasi IT-kantor ke Remote
 - Status: selesai
 - Ubah: Branch Git `IT-kantor`
