@@ -1698,6 +1698,7 @@ export default function App() {
               variant="page"
               projectId={activeProject.id}
               projectName={activeProject.nama}
+              userRole={role}
             />
           )}
 

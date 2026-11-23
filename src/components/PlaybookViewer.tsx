@@ -32,6 +32,7 @@ interface PlaybookViewerProps {
   projectId?: string;
   projectName?: string;
   initialRole?: PlaybookRole;
+  userRole?: string;
   isDemoMode?: boolean;
   variant?: 'modal' | 'page';
   onClose?: () => void;
@@ -41,20 +42,26 @@ export function PlaybookViewer({
   projectId = 'proj-the-park-01',
   projectName = 'The Park Townhouse Sukoharjo',
   initialRole = 'SE',
+  userRole,
   isDemoMode = false,
   variant = 'modal',
   onClose,
 }: PlaybookViewerProps) {
+  const isSeOnly = userRole === 'SE';
   const [role, setRole] = useState<PlaybookRole>(() =>
-    loadPersistedState<PlaybookRole>(`devos_playbook_role_${projectId}`, initialRole)
+    isSeOnly
+      ? 'SE'
+      : loadPersistedState<PlaybookRole>(`devos_playbook_role_${projectId}`, initialRole)
   );
+  const effectiveRole: PlaybookRole = isSeOnly ? 'SE' : role;
   const [playbook, setPlaybook] = useState<PlaybookPlan | null>(() =>
-    getPlaybook(projectId, role, isDemoMode)
+    getPlaybook(projectId, effectiveRole, isDemoMode)
   );
 
   useEffect(() => {
-    setPlaybook(getPlaybook(projectId, role, isDemoMode));
-  }, [projectId, role, isDemoMode]);
+    if (isSeOnly && role !== 'SE') setRole('SE');
+    setPlaybook(getPlaybook(projectId, effectiveRole, isDemoMode));
+  }, [projectId, effectiveRole, isDemoMode, isSeOnly, role]);
 
   const [activeTab, setActiveTab] = useState<PlaybookTab>(() => {
     const urlTab = variant === 'page' ? getQueryParam('tab') : null;
@@ -202,31 +209,37 @@ export function PlaybookViewer({
 
         {/* Role Selector & Tab Bar */}
         <div className="px-6 py-3 bg-white border-b border-warmborder flex flex-wrap items-center justify-between gap-3 shrink-0">
-          {/* Role Switcher (SE, TL, SM, Digital Marketing, Admin) */}
-          <div className="flex flex-wrap items-center gap-1 p-1 bg-sandstone rounded-2xl border border-warmborder">
-            {(['SE', 'TL', 'SM', 'DIGITAL_MARKETING', 'ADMIN'] as PlaybookRole[]).map((r) => {
-              const roleLabels: Record<PlaybookRole, string> = {
-                SE: 'SE (Sales)',
-                TL: 'TL (Leader)',
-                SM: 'SM (Manager)',
-                DIGITAL_MARKETING: 'Digital Marketing',
-                ADMIN: 'Admin & KPR',
-              };
-              return (
-                <button
-                  key={r}
-                  onClick={() => handleRoleChange(r)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-                    role === r
-                      ? 'bg-espresso text-white shadow-sm'
-                      : 'text-warmmuted hover:text-espresso'
-                  }`}
-                >
-                  {roleLabels[r]}
-                </button>
-              );
-            })}
-          </div>
+          {/* Role Switcher (Disembunyikan untuk SE agar SE independen hanya melihat Playbook SE) */}
+          {isSeOnly ? (
+            <div className="px-3.5 py-1.5 rounded-xl bg-espresso text-white text-xs font-extrabold">
+              Playbook Khusus Sales Executive (SE)
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-1 p-1 bg-sandstone rounded-2xl border border-warmborder">
+              {(['SE', 'TL', 'SM', 'DIGITAL_MARKETING', 'ADMIN'] as PlaybookRole[]).map((r) => {
+                const roleLabels: Record<PlaybookRole, string> = {
+                  SE: 'SE (Sales)',
+                  TL: 'TL (Leader)',
+                  SM: 'SM (Manager)',
+                  DIGITAL_MARKETING: 'Digital Marketing',
+                  ADMIN: 'Admin & KPR',
+                };
+                return (
+                  <button
+                    key={r}
+                    onClick={() => handleRoleChange(r)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                      role === r
+                        ? 'bg-espresso text-white shadow-sm'
+                        : 'text-warmmuted hover:text-espresso'
+                    }`}
+                  >
+                    {roleLabels[r]}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* Tab Navigation */}
           <div className="flex gap-1.5 overflow-x-auto no-scrollbar max-w-full">

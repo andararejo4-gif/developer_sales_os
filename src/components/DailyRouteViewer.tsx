@@ -13,8 +13,10 @@ import {
   Plus,
   Trash2,
   Edit3,
-  CheckCircle2,
   RotateCcw,
+  Camera,
+  LocateFixed,
+  AlertTriangle,
 } from 'lucide-react';
 import { generateDailyRoutePlan } from '../lib/playbook/route-generator';
 import {
@@ -30,6 +32,26 @@ const VALID_DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 interface CustomWaypoint extends DailyRouteWaypoint {
   isCustom?: boolean;
   visited?: boolean;
+  photoProofUrl?: string;
+  targetLat?: number;
+  targetLng?: number;
+  validatedLat?: number;
+  validatedLng?: number;
+  validationDistanceM?: number;
+  validationStatus?: 'TERVALIDASI' | 'PERLU_DILENGKAPI' | 'TANPA_GPS';
+  validationMessage?: string;
+  gpsSkipReason?: string;
+}
+
+function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const R = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
 interface DailyRouteViewerProps {
@@ -71,6 +93,9 @@ export function DailyRouteViewer({
   const [wpDurationMin, setWpDurationMin] = useState(60);
   const [wpFlyers, setWpFlyers] = useState(15);
   const [wpLeads, setWpLeads] = useState(3);
+  const [validatingOrder, setValidatingOrder] = useState<number | null>(null);
+  const [skipFormOrder, setSkipFormOrder] = useState<number | null>(null);
+  const [skipReasonInput, setSkipReasonInput] = useState('');
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -190,13 +215,6 @@ export function DailyRouteViewer({
     const filtered = waypoints.filter((w) => w.order !== orderNum);
     await persistWaypoints(filtered);
     showToast('Titik kunjungan dihapus dari rute.');
-  };
-
-  const handleToggleVisited = async (orderNum: number) => {
-    const next = waypoints.map((w) =>
-      w.order === orderNum ? { ...w, visited: !w.visited } : w
-    );
-    await persistWaypoints(next);
   };
 
   const handleResetDefaultRoute = async () => {
@@ -503,35 +521,214 @@ export function DailyRouteViewer({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleVisited(wp.order)}
-                        className={`min-h-[44px] px-3 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer ${
-                          wp.visited
-                            ? 'bg-lime-100 text-olive border border-lime-300'
-                            : 'bg-sandstone text-espresso hover:bg-warmborder'
-                        }`}
-                      >
-                        <CheckCircle2 className="size-4" />
-                        <span>{wp.visited ? 'Selesai' : 'Tandai'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleEditWaypoint(wp)}
-                        aria-label="Edit Titik"
-                        className="min-h-[44px] min-w-[44px] rounded-xl bg-sandstone hover:bg-warmborder text-espresso grid place-items-center cursor-pointer"
-                      >
-                        <Edit3 className="size-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteWaypoint(wp.order)}
-                        aria-label="Hapus Titik"
-                        className="min-h-[44px] min-w-[44px] rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 grid place-items-center cursor-pointer"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <label className="min-h-[40px] px-3 py-1.5 rounded-xl bg-sandstone hover:bg-warmborder text-espresso border border-warmborder text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+                          <Camera className="size-3.5 text-terracotta" />
+                          <span>{wp.photoProofUrl ? 'Foto ✓' : 'Bukti Foto'}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                if (typeof reader.result === 'string') {
+                                  const next = waypoints.map((w) =>
+                                    w.order === wp.order ? { ...w, photoProofUrl: reader.result as string } : w
+                                  );
+                                  persistWaypoints(next);
+                                  showToast(`Bukti foto titik #${wp.order} terlampir.`);
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+
+                        <button
+                          type="button"
+                          disabled={validatingOrder === wp.order}
+                          onClick={() => {
+                            if (!navigator.geolocation) {
+                              showToast('Browser tidak mendukung GPS. Gunakan tombol Tidak Input GPS.');
+                              return;
+                            }
+                            setValidatingOrder(wp.order);
+                            navigator.geolocation.getCurrentPosition(
+                              async (pos) => {
+                                const lat = pos.coords.latitude;
+                                const lng = pos.coords.longitude;
+                                const hasTarget = wp.targetLat != null && wp.targetLng != null;
+                                const refLat = hasTarget ? Number(wp.targetLat) : -7.6145;
+                                const refLng = hasTarget ? Number(wp.targetLng) : 110.8182;
+                                const distM = distanceMeters(lat, lng, refLat, refLng);
+                                const radiusLimitM = hasTarget ? 500 : 15000;
+                                const locMatched = distM <= radiusLimitM;
+                                const hasPhoto = Boolean(wp.photoProofUrl);
+
+                                const nextStatus: CustomWaypoint['validationStatus'] =
+                                  locMatched && hasPhoto ? 'TERVALIDASI' : 'PERLU_DILENGKAPI';
+                                const msg = !hasPhoto
+                                  ? `Lokasi GPS terekam (${lat.toFixed(5)}, ${lng.toFixed(5)}), namun bukti foto wajib diunggah.`
+                                  : !locMatched
+                                  ? `Lokasi belum sesuai target (jarak ${(distM / 1000).toFixed(2)} km) — perlu dilengkapi.`
+                                  : `Lokasi & bukti foto tervalidasi (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+
+                                const next = waypoints.map((w) =>
+                                  w.order === wp.order
+                                    ? {
+                                        ...w,
+                                        visited: locMatched && hasPhoto,
+                                        validatedLat: lat,
+                                        validatedLng: lng,
+                                        validationDistanceM: distM,
+                                        validationStatus: nextStatus,
+                                        validationMessage: msg,
+                                      }
+                                    : w
+                                );
+                                persistWaypoints(next);
+                                try {
+                                  await fetch('/api/se/field-logs', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'X-User-Email': userEmail,
+                                      'X-User-Role': userRole,
+                                    },
+                                    body: JSON.stringify({
+                                      logType: 'GPS',
+                                      title: `Validasi Rute: ${wp.name}`,
+                                      locationLabel: wp.name,
+                                      lat,
+                                      lng,
+                                      photoDataUrl: wp.photoProofUrl || null,
+                                      notes: msg,
+                                    }),
+                                  });
+                                } catch {
+                                  /* ignore */
+                                }
+                                setValidatingOrder(null);
+                                showToast(msg);
+                              },
+                              () => {
+                                setValidatingOrder(null);
+                                showToast('Gagal melacak GPS. Pastikan izin lokasi aktif atau isi Tidak Input GPS.');
+                              },
+                              { enableHighAccuracy: true, timeout: 10000 }
+                            );
+                          }}
+                          className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer ${
+                            wp.validationStatus === 'TERVALIDASI'
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-terracotta hover:bg-terracotta/90 text-white'
+                          }`}
+                        >
+                          <LocateFixed className="size-3.5" />
+                          <span>
+                            {validatingOrder === wp.order
+                              ? 'Melacak...'
+                              : wp.validationStatus === 'TERVALIDASI'
+                              ? 'Tervalidasi ✓'
+                              : 'Validasi Lokasi'}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSkipFormOrder(skipFormOrder === wp.order ? null : wp.order);
+                            setSkipReasonInput(wp.gpsSkipReason || '');
+                          }}
+                          className="min-h-[40px] px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold cursor-pointer"
+                        >
+                          Tidak Input GPS
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleEditWaypoint(wp)}
+                          aria-label="Edit Titik"
+                          className="min-h-[40px] min-w-[40px] rounded-xl bg-sandstone hover:bg-warmborder text-espresso grid place-items-center cursor-pointer"
+                        >
+                          <Edit3 className="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteWaypoint(wp.order)}
+                          aria-label="Hapus Titik"
+                          className="min-h-[40px] min-w-[40px] rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 grid place-items-center cursor-pointer"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+
+                      {/* Status Validasi / Preview Foto / Form Alasan Tidak Input GPS */}
+                      {(wp.validationStatus || wp.photoProofUrl || skipFormOrder === wp.order) && (
+                        <div className="w-full space-y-2 text-xs">
+                          {wp.validationStatus === 'PERLU_DILENGKAPI' && (
+                            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-center gap-2 font-semibold">
+                              <AlertTriangle className="size-4 text-rose-600 shrink-0" />
+                              <span>Perlu Dilengkapi: {wp.validationMessage}</span>
+                            </div>
+                          )}
+                          {wp.validationStatus === 'TANPA_GPS' && wp.gpsSkipReason && (
+                            <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-semibold">
+                              Tidak Input GPS — Alasan: {wp.gpsSkipReason}
+                            </div>
+                          )}
+                          {wp.photoProofUrl && (
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={wp.photoProofUrl}
+                                alt={`Bukti ${wp.name}`}
+                                className="size-12 rounded-xl object-cover border border-warmborder"
+                              />
+                              <span className="text-[11px] font-bold text-olive">Bukti foto terlampir ✓</span>
+                            </div>
+                          )}
+                          {skipFormOrder === wp.order && (
+                            <div className="p-3 rounded-xl bg-sandstone/70 border border-warmborder flex flex-col sm:flex-row gap-2">
+                              <input
+                                type="text"
+                                value={skipReasonInput}
+                                onChange={(e) => setSkipReasonInput(e.target.value)}
+                                placeholder="Alasan tidak input GPS (mis. sinyal lemah di basement/gedung)..."
+                                className="flex-1 min-h-[38px] px-3 rounded-lg border border-warmborder bg-white text-xs"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!skipReasonInput.trim()) {
+                                    showToast('Wajib isi alasan tidak input GPS.');
+                                    return;
+                                  }
+                                  const next = waypoints.map((w) =>
+                                    w.order === wp.order
+                                      ? {
+                                          ...w,
+                                          validationStatus: 'TANPA_GPS' as const,
+                                          gpsSkipReason: skipReasonInput.trim(),
+                                        }
+                                      : w
+                                  );
+                                  persistWaypoints(next);
+                                  setSkipFormOrder(null);
+                                  showToast('Alasan tidak input GPS tersimpan.');
+                                }}
+                                className="min-h-[38px] px-3.5 rounded-lg bg-espresso text-white text-xs font-bold cursor-pointer"
+                              >
+                                Simpan Alasan
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
