@@ -3,6 +3,15 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-045 | 2026-11-23 | Arsitektur 4-Lapis Mobile Laporan Harian SE, Developer Assistant Login Onboarding & 3-Card Row Dashboard
+- Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
+- Ubah: `src/components/mobile/SeMobileViews.tsx`, `src/components/se/SeNotificationCenter.tsx`, `src/App.tsx`
+- Detail Perubahan:
+  - **Arsitektur 4-Lapis Mobile Laporan Harian (`SeMobileDailyReportList`):** Merombak 13 kartu monoton menjadi (1) Strip Progres Harian, (2) Deck Input Cepat 3 Item Manual (`+ / -`), (3) **Grid 2 Kolom (`grid-cols-2`)** untuk 9 Metrik Otomatis CRM dengan bottom-sheet catatan (`z-[85]` via Portal), dan (4) Kartu Penutup Hambatan & Bantuan SM (#13) dengan 4 chip cepat.
+  - **Hide Roadmap Kerja Harian & 3 Kartu Sebaris (`App.tsx`):** Menyembunyikan `SeDailyRoadmapStrip` dan menyusun 3 kartu di bawah Poin Akselerasi Hari Ini (`Lead Baru`, `BANT ≥ 7`, `WA & SLA`) menjadi **1 baris sejajar (`grid-cols-3`)** di mobile & desktop.
+  - **Developer Assistant Onboarding Setiap Login (`App.tsx`, `SeNotificationCenter.tsx`):** Setiap kali pengguna login (atau logout lalu login kembali), muncul pop-up sapaan **Developer Assistant** yang langsung mengarahkan dan membuka menu **Notifikasi** untuk mengecek persiapan & tugas wajib hari ini.
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
+
 ## P-044 | 2026-11-23 | Redesign Mobile Scorecard Bulanan (Visual KPI Progress) & Laporan Harian SE (On-Demand Notes + Quick Chips)
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/components/mobile/SeMobileViews.tsx`, `src/App.tsx`

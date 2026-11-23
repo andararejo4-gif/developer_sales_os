@@ -26,11 +26,11 @@ import {
   SeMobileDailyReportList,
 } from './components/mobile/SeMobileViews';
 import {
-  SeDailyRoadmapStrip,
   SeGuidedTourModal,
 } from './components/se/SeGuidedTour';
 import {
   SeNotificationBell,
+  buildSeRealtimeNotifications,
   type SeNotificationItem,
   type SeNotifTarget,
 } from './components/se/SeNotificationCenter';
@@ -626,6 +626,12 @@ export default function App() {
   const [isExportReportModalOpen, setIsExportReportModalOpen] = useState(false);
   const [pipelineTargetFilter, setPipelineTargetFilter] = useState<string | undefined>(undefined);
   const [activeH5Reminder, setActiveH5Reminder] = useState<SeNotificationItem | null>(null);
+  const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
+  const [showAssistantGreeting, setShowAssistantGreeting] = useState<boolean>(() => {
+    const sess = loadAuthSession();
+    if (!sess) return false;
+    return !sessionStorage.getItem(`devos_assistant_greeted_${sess.loggedInAt}`);
+  });
   const [tourSnoozedUntilMs, setTourSnoozedUntilMs] = useState<number>(() =>
     loadPersistedState<number>(`devos_se_tour_snooze_${user.email}`, 0)
   );
@@ -823,6 +829,8 @@ export default function App() {
     clearImpersonatorBackup();
     setAuthSession(null);
     setIsMobileMoreOpen(false);
+    setIsNotifPanelOpen(false);
+    setShowAssistantGreeting(false);
     setActiveView('dashboard');
     navigateToView('dashboard');
     setViewMode('homepage');
@@ -854,6 +862,7 @@ export default function App() {
         setRole(session.role);
       }
       setViewMode('dashboard');
+      setShowAssistantGreeting(true);
     };
 
     return <PublicHomepageV3 onEnterDashboard={handleEnterDashboard} />;
@@ -1587,6 +1596,8 @@ export default function App() {
                   needsCompletionLeadsCount: seRealData?.metrics?.needsCompletionLeadsCount,
                   waConnectionStatus: seRealData?.metrics?.waConnectionStatus,
                 }}
+                externalOpen={isNotifPanelOpen}
+                onExternalOpenChange={setIsNotifPanelOpen}
                 onNavigateTarget={handleSeNotifNavigate}
                 onH5ReminderTriggered={(item) => setActiveH5Reminder(item)}
               />
@@ -1803,16 +1814,6 @@ export default function App() {
                 onExportReport={() => setIsExportReportModalOpen(true)}
               />
 
-              {/* Roadmap Kerja Harian SE (4 Tahap Prioritas Terintegrasi) */}
-              <SeDailyRoadmapStrip
-                quickStatus={seRealData?.quickStatus}
-                onOpenFieldOps={() => openView('lapangan')}
-                onOpenUrgentPipeline={handleOpenUrgentPipeline}
-                onOpenCalendar={() => openView('kalender')}
-                onOpenDailyRoute={() => openView('rute')}
-                onOpenExportReport={() => setIsExportReportModalOpen(true)}
-              />
-
               {/* Top Split KPI Card & Monthly Revenue */}
               <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-5">
                 <div className="lg:col-span-4 bg-espresso text-white rounded-2xl p-4 sm:p-6 flex flex-col justify-between shadow-sm">
@@ -1874,62 +1875,73 @@ export default function App() {
                 </div>
 
                 <div className="lg:col-span-8 flex flex-col gap-4 md:gap-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* 3 Kartu Ringkasan Sebaris di Mobile & Desktop (grid-cols-3) */}
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3">
                     <button
                       type="button"
                       onClick={() => openView('pipeline')}
-                      className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-4 shadow-sm flex flex-col justify-between text-left cursor-pointer transition-colors"
+                      className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-2.5 sm:p-4 shadow-sm flex flex-col justify-between text-left cursor-pointer transition-colors min-w-0"
                     >
-                      <div>
-                        <p className="text-xs text-warmmuted">{activePeriodData.leadCardTitle}</p>
-                        <p className="text-xl sm:text-2xl font-extrabold tabular-nums text-espresso mt-1">
-                          {activePeriodData.leadsCount}{' '}
-                          <span className="text-xs font-normal text-warmmuted">
-                            / {activePeriodData.leadsTarget} Target
+                      <div className="min-w-0">
+                        <p className="text-[10px] sm:text-xs font-bold text-warmmuted truncate">
+                          <span className="sm:hidden">Lead Baru</span>
+                          <span className="hidden sm:inline">{activePeriodData.leadCardTitle}</span>
+                        </p>
+                        <p className="text-base sm:text-2xl font-extrabold tabular-nums text-espresso mt-1 truncate">
+                          {activePeriodData.leadsCount}
+                          <span className="text-[10px] sm:text-xs font-normal text-warmmuted">
+                            /{activePeriodData.leadsTarget}
                           </span>
                         </p>
                       </div>
-                      <p className="text-[11px] font-semibold text-olive mt-2 pt-1.5 border-t border-warmborder/60">
+                      <p className="text-[9px] sm:text-[11px] font-semibold text-olive mt-2 pt-1.5 border-t border-warmborder/60 truncate">
                         {activePeriodData.leadsSubtext}
                       </p>
                     </button>
+
                     <button
                       type="button"
                       onClick={() => openView('pipeline')}
-                      className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-4 shadow-sm flex flex-col justify-between text-left cursor-pointer transition-colors"
+                      className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-2.5 sm:p-4 shadow-sm flex flex-col justify-between text-left cursor-pointer transition-colors min-w-0"
                     >
-                      <div>
-                        <p className="text-xs text-warmmuted">Prospek BANT ≥ 7 &amp; Hot</p>
-                        <p className="text-xl sm:text-2xl font-extrabold tabular-nums text-terracotta mt-1">
-                          {seRealData?.metrics?.qualifiedProspectsCount ?? 0} Prospek
+                      <div className="min-w-0">
+                        <p className="text-[10px] sm:text-xs font-bold text-warmmuted truncate">
+                          <span className="sm:hidden">BANT ≥ 7</span>
+                          <span className="hidden sm:inline">Prospek BANT ≥ 7 &amp; Hot</span>
+                        </p>
+                        <p className="text-base sm:text-2xl font-extrabold tabular-nums text-terracotta mt-1 truncate">
+                          {seRealData?.metrics?.qualifiedProspectsCount ?? 0}
+                          <span className="hidden sm:inline text-sm font-bold"> Prospek</span>
                         </p>
                       </div>
-                      <p className="text-[11px] font-semibold text-warmmuted mt-2 pt-1.5 border-t border-warmborder/60">
-                        {seRealData?.metrics?.hotProspectsCount ?? 0} Grade A (Hot) ·{' '}
-                        {seRealData?.metrics?.warmProspectsCount ?? 0} Grade B (Warm)
+                      <p className="text-[9px] sm:text-[11px] font-semibold text-warmmuted mt-2 pt-1.5 border-t border-warmborder/60 truncate">
+                        {seRealData?.metrics?.hotProspectsCount ?? 0} Hot · {seRealData?.metrics?.warmProspectsCount ?? 0} Warm
                       </p>
                     </button>
+
                     <button
                       type="button"
                       onClick={() => openView('pipeline')}
-                      className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-4 shadow-sm flex flex-col justify-between text-left cursor-pointer transition-colors"
+                      className="bg-white border border-warmborder hover:border-terracotta rounded-2xl p-2.5 sm:p-4 shadow-sm flex flex-col justify-between text-left cursor-pointer transition-colors min-w-0"
                     >
-                      <div>
-                        <p className="text-xs text-warmmuted">Interaksi WA &amp; SLA ≤ 5m</p>
-                        <p className="text-xl sm:text-2xl font-extrabold tabular-nums text-espresso mt-1">
-                          {seRealData?.metrics?.totalWaInteractions ?? 0}{' '}
-                          <span className="text-xs font-semibold text-olive">
-                            · SLA {seRealData?.metrics?.waSlaCompliancePercent ?? 100}%
+                      <div className="min-w-0">
+                        <p className="text-[10px] sm:text-xs font-bold text-warmmuted truncate">
+                          <span className="sm:hidden">WA &amp; SLA</span>
+                          <span className="hidden sm:inline">Interaksi WA &amp; SLA ≤ 5m</span>
+                        </p>
+                        <p className="text-base sm:text-2xl font-extrabold tabular-nums text-espresso mt-1 truncate">
+                          {seRealData?.metrics?.totalWaInteractions ?? 0}
+                          <span className="text-[10px] sm:text-xs font-semibold text-olive">
+                            {' '}· {seRealData?.metrics?.waSlaCompliancePercent ?? 100}%
                           </span>
                         </p>
                       </div>
-                      <p className="text-[11px] font-semibold text-warmmuted mt-2 pt-1.5 border-t border-warmborder/60 flex items-center justify-between gap-1">
-                        <span>
-                          {seRealData?.metrics?.waInboundMessages ?? 0} Masuk ·{' '}
-                          {seRealData?.metrics?.waOutboundMessages ?? 0} Follow-Up
+                      <p className="text-[9px] sm:text-[11px] font-semibold text-warmmuted mt-2 pt-1.5 border-t border-warmborder/60 flex items-center justify-between gap-1 min-w-0">
+                        <span className="hidden sm:inline truncate">
+                          {seRealData?.metrics?.waInboundMessages ?? 0} Masuk · {seRealData?.metrics?.waOutboundMessages ?? 0} Balas
                         </span>
                         <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${
+                          className={`px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-extrabold truncate ${
                             seRealData?.metrics?.waConnectionStatus === 'CONNECTED'
                               ? 'bg-lime-100 text-olive'
                               : 'bg-rose-100 text-rose-700'
@@ -1937,7 +1949,7 @@ export default function App() {
                         >
                           {seRealData?.metrics?.waConnectionStatus === 'CONNECTED'
                             ? 'WA Aktif'
-                            : 'WA Terdiskonek'}
+                            : 'WA Putus'}
                         </span>
                       </p>
                     </button>
@@ -2071,30 +2083,32 @@ export default function App() {
                 id="laporan-harian"
                 className="scroll-mt-24 bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm"
               >
-                <div className="p-5 border-b border-warmborder flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="p-4 sm:p-5 border-b border-warmborder flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2.5">
-                      <h2 className="text-base font-bold text-espresso">Laporan Harian SE (13 Item Playbook §13.1)</h2>
-                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-lg bg-amber-50 text-terracotta">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm sm:text-base font-extrabold text-espresso">
+                        Laporan Harian SE
+                      </h2>
+                      <span className="hidden sm:inline-block text-xs font-bold px-2.5 py-0.5 rounded-lg bg-amber-50 text-terracotta">
                         {hits}/{items.filter((r) => r.targetNum !== null).length} Target Hit
                       </span>
                     </div>
-                    <p className="text-xs text-warmmuted mt-0.5">
+                    <p className="hidden sm:block text-xs text-warmmuted mt-0.5">
                       Tersinkron otomatis dari Pipeline &amp; aktivitas SE di database PostgreSQL sales_os. Kirim sebelum pukul 18.00 WIB.
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 overflow-x-auto">
+                  <div className="grid grid-cols-4 sm:flex items-center gap-1.5 sm:gap-2">
                     {[
-                      { key: 'all', label: `Semua (${items.length})` },
-                      { key: 'prospek', label: 'Prospek' },
+                      { key: 'all', label: 'Semua' },
                       { key: 'outreach', label: 'Outreach' },
-                      { key: 'closing', label: 'Closing & KPR' },
+                      { key: 'prospek', label: 'Prospek' },
+                      { key: 'closing', label: 'Closing' },
                     ].map((f) => (
                       <button
                         key={f.key}
                         onClick={() => setFilter(f.key as 'all' | Category)}
-                        className={`min-h-[44px] md:min-h-[36px] px-3.5 md:px-3 rounded-xl md:rounded-lg text-xs font-semibold shrink-0 cursor-pointer transition-all ${
+                        className={`min-h-[38px] md:min-h-[36px] px-2 md:px-3 rounded-xl md:rounded-lg text-[11px] sm:text-xs font-bold shrink-0 cursor-pointer transition-all whitespace-nowrap ${
                           filter === f.key ? 'bg-espresso text-white' : 'bg-sandstone text-warmmuted hover:text-espresso'
                         }`}
                       >
@@ -3588,8 +3602,92 @@ export default function App() {
         </div>
       )}
 
+      {/* Developer Assistant Welcome & Notification Onboarding (Muncul Setiap Login Baru) */}
+      {showAssistantGreeting && authSession && (
+        <div
+          className="fixed inset-0 z-[88] bg-espresso/65 backdrop-blur-[2px] flex items-center justify-center p-4"
+          onClick={() => {
+            sessionStorage.setItem(`devos_assistant_greeted_${authSession.loggedInAt}`, '1');
+            setShowAssistantGreeting(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-3xl border border-warmborder shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 bg-espresso text-white flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="size-11 rounded-2xl bg-terracotta text-white grid place-items-center shrink-0 shadow-sm">
+                  <Sparkles className="size-5" />
+                </div>
+                <div className="min-w-0">
+                  <span className="inline-block px-2 py-0.5 rounded-full bg-white/15 text-amber-300 text-[10px] font-extrabold uppercase tracking-wider">
+                    Developer Assistant AI
+                  </span>
+                  <h3 className="text-base font-extrabold mt-0.5 truncate">
+                    {(() => {
+                      const h = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
+                      const sapa = h < 11 ? 'Selamat Pagi' : h < 15 ? 'Selamat Siang' : h < 18 ? 'Selamat Sore' : 'Selamat Malam';
+                      return `${sapa}, ${user.name.split(' ')[0]}!`;
+                    })()}
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.setItem(`devos_assistant_greeted_${authSession.loggedInAt}`, '1');
+                  setShowAssistantGreeting(false);
+                }}
+                className="size-9 rounded-xl bg-white/10 hover:bg-white/20 text-white grid place-items-center shrink-0 cursor-pointer"
+                aria-label="Tutup sapaan asisten"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <p className="text-xs sm:text-sm font-medium text-espresso leading-relaxed">
+                Halo, nama saya <strong>Developer Assistant</strong>. Saya sudah merangkum seluruh agenda, persiapan lapangan, dan tugas prioritas yang perlu Anda selesaikan hari ini di menu <strong>Notifikasi</strong>.
+              </p>
+
+              <div className="p-3.5 rounded-2xl bg-[#FBF9F5] border border-warmborder flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-terracotta">
+                    Checklist Hari Ini
+                  </p>
+                  <p className="text-xs font-extrabold text-espresso mt-0.5">
+                    {buildSeRealtimeNotifications(seRealData?.quickStatus, Date.now(), {
+                      leadsTodayValidCount: seRealData?.metrics?.leadsTodayValidCount,
+                      needsCompletionLeadsCount: seRealData?.metrics?.needsCompletionLeadsCount,
+                      waConnectionStatus: seRealData?.metrics?.waConnectionStatus,
+                    }).length || 4}{' '}
+                    Agenda &amp; Persiapan Siap Dicek
+                  </p>
+                </div>
+                <span className="px-2.5 py-1 rounded-xl bg-amber-100 text-terracotta text-[11px] font-extrabold shrink-0">
+                  Real-Time
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.setItem(`devos_assistant_greeted_${authSession.loggedInAt}`, '1');
+                  setShowAssistantGreeting(false);
+                  setIsNotifPanelOpen(true);
+                }}
+                className="w-full min-h-[46px] px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+              >
+                <span>Buka Menu Notifikasi Sekarang</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Guided Tour & Pengingat Prioritas Wajib SE (Desktop & Mobile) */}
-      {role === 'SE' && (
+      {role === 'SE' && !showAssistantGreeting && (
         <SeGuidedTourModal
           activeView={activeView}
           quickStatus={seRealData?.quickStatus}

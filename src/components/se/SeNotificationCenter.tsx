@@ -341,6 +341,8 @@ export function buildSeRealtimeNotifications(
 interface SeNotificationBellProps {
   quickStatus?: SeQuickStatusData;
   extra?: SeNotificationExtra;
+  externalOpen?: boolean;
+  onExternalOpenChange?: (open: boolean) => void;
   onNavigateTarget: (target: SeNotifTarget) => void;
   onH5ReminderTriggered?: (item: SeNotificationItem) => void;
 }
@@ -348,11 +350,19 @@ interface SeNotificationBellProps {
 export const SeNotificationBell: React.FC<SeNotificationBellProps> = ({
   quickStatus,
   extra,
+  externalOpen,
+  onExternalOpenChange,
   onNavigateTarget,
   onH5ReminderTriggered,
 }) => {
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setIsOpen = (val: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof val === 'function' ? val(isOpen) : val;
+    setInternalOpen(next);
+    onExternalOpenChange?.(next);
+  };
   const [selectedNotif, setSelectedNotif] = useState<SeNotificationItem | null>(null);
   const [triggeredH5Ids, setTriggeredH5Ids] = useState<Record<string, boolean>>({});
 
