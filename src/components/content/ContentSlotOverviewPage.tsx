@@ -86,7 +86,15 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
   const [carouselIdx, setCarouselIdx] = useState(0);
   const [urlInput, setUrlInput] = useState(slot.postedUrl || '');
   const [isEnqueuing, setIsEnqueuing] = useState(false);
+  const [isRegeneratingBrief, setIsRegeneratingBrief] = useState(false);
   const [isSavingUrl, setIsSavingUrl] = useState(false);
+  const [localOverride, setLocalOverride] = useState<{
+    title?: string;
+    brief?: string;
+    caption?: string;
+    cta?: string;
+    hashtags?: string[];
+  }>({});
   const [notice, setNotice] = useState<string | null>(null);
 
   const isVideo =
@@ -218,6 +226,52 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
     setNotice('Link postingan tersimpan ke akun Anda & Laporan Harian SE!');
   };
 
+  const displayTitle = (localOverride.title || slot.title)
+    .replace(/^\[P\d+\]\s*/i, '')
+    .replace(/\s*\(H-\d+\)$/i, '');
+  const displayBrief = localOverride.brief || slot.brief;
+  const displayCaption = localOverride.caption || slot.caption;
+  const displayCta = localOverride.cta || slot.cta;
+  const displayHashtags = localOverride.hashtags || slot.hashtags;
+
+  const handleRegenerateBrief = async () => {
+    setIsRegeneratingBrief(true);
+    setNotice(null);
+    try {
+      const res = await fetch('/api/se/content-slots/regenerate-brief', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Email': userEmail,
+          'X-User-Role': userRole,
+        },
+        body: JSON.stringify({ slotId: slot.id }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok && data.generated) {
+        setLocalOverride({
+          title: data.generated.title,
+          brief: data.generated.brief,
+          caption: data.generated.caption,
+          cta: data.generated.cta,
+          hashtags: data.generated.hashtags,
+        });
+        onMediaMetaUpdated(slot.id, {
+          ...meta,
+          visualPrompt: data.generated.visualPrompt,
+          slideDeck: data.generated.slideDeck,
+        });
+        setNotice('Brief, Hook & Caption AI berhasil diperbarui sesuai TOFU/MOFU/BOFU!');
+      } else {
+        setNotice(data.error || 'Gagal memperbarui brief.');
+      }
+    } catch {
+      setNotice('Koneksi gagal saat memperbarui brief.');
+    } finally {
+      setIsRegeneratingBrief(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#FBF9F5]">
       {/* Sticky Top Header (Mobile-First) */}
@@ -239,7 +293,7 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
               <span className="text-[11px] font-bold text-warmmuted">{slot.platform}</span>
             </div>
             <h2 className="text-sm sm:text-base font-extrabold text-espresso truncate mt-0.5">
-              {slot.title}
+              {displayTitle}
             </h2>
           </div>
         </div>
@@ -563,21 +617,61 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
           {/* Kolom Kanan (5 cols): Brief, Prompt Visual AI, Caption & Upload */}
           <div className="lg:col-span-5 space-y-4">
             <div className="bg-white rounded-2xl border border-warmborder p-4 sm:p-5 shadow-xs space-y-3 text-xs">
-              <div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-extrabold text-espresso uppercase tracking-wider text-[11px]">
-                  Brief Eksekusi Konten
+                  Panduan Eksekusi Konten ({slot.funnelStage})
                 </span>
-                <p className="text-espresso leading-relaxed mt-1">{slot.brief}</p>
-              </div>
-              {meta.visualPrompt && (
-                <div className="pt-3 border-t border-warmborder">
-                  <span className="font-extrabold text-terracotta uppercase tracking-wider text-[11px]">
-                    Prompt Visual AI (Hermes)
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2 py-0.5 rounded-full bg-amber-50 text-terracotta border border-amber-200 text-[10px] font-extrabold">
+                    {slot.funnelStage === 'TOFU'
+                      ? 'Edukasi & Save'
+                      : slot.funnelStage === 'MOFU'
+                      ? 'Bukti & Pertimbangan'
+                      : 'Penawaran & Closing'}
                   </span>
-                  <p className="text-warmmuted leading-relaxed mt-1 font-mono text-[11px] bg-sandstone/50 p-2.5 rounded-xl">
+                  <button
+                    type="button"
+                    disabled={isRegeneratingBrief}
+                    onClick={handleRegenerateBrief}
+                    className="px-2.5 py-1 rounded-lg bg-sandstone hover:bg-warmborder text-espresso text-[10px] font-extrabold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    {isRegeneratingBrief ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3 text-terracotta" />}
+                    <span>{isRegeneratingBrief ? 'Menyusun...' : 'Perbarui Brief AI'}</span>
+                  </button>
+                </div>
+              </div>
+              <p className="text-espresso leading-relaxed">
+                {displayBrief
+                  .replace(/Carousel 5 slide edukasi Playbook v1\.2 untuk [^.]+\.\s*/i, '')
+                  .replace(/Konten BOFU untuk [^:]+:\s*/i, '')
+                  .replace(/\.\./g, '.')}
+              </p>
+              {Array.isArray(meta.slideDeck) && meta.slideDeck.length > 0 && (
+                <div className="pt-2 border-t border-warmborder/70 space-y-1.5">
+                  <p className="text-[11px] font-extrabold text-warmmuted uppercase tracking-wider">
+                    Alur Cerita {meta.slideDeck.length} Slide
+                  </p>
+                  <div className="space-y-1">
+                    {meta.slideDeck.map((sl, idx) => (
+                      <div key={idx} className="flex items-start gap-2 text-[11px] bg-[#FBF9F5] px-2.5 py-1.5 rounded-lg border border-warmborder/60">
+                        <span className="font-black text-terracotta shrink-0">#{idx + 1}</span>
+                        <span className="text-espresso font-semibold">
+                          {sl.headline} <span className="text-warmmuted font-normal">— {sl.subheadline}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {meta.visualPrompt && (
+                <details className="pt-2 border-t border-warmborder/70">
+                  <summary className="text-[11px] font-bold text-warmmuted hover:text-espresso cursor-pointer select-none">
+                    Detail Teknis Prompt Visual AI (Opsional)
+                  </summary>
+                  <p className="text-warmmuted leading-relaxed mt-1.5 font-mono text-[10px] bg-sandstone/50 p-2.5 rounded-xl">
                     {meta.visualPrompt}
                   </p>
-                </div>
+                </details>
               )}
             </div>
 
@@ -588,7 +682,7 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
                 </span>
                 <button
                   type="button"
-                  onClick={() => onCopyCaption(slot.caption, slot.hashtags, slot.cta)}
+                  onClick={() => onCopyCaption(displayCaption, displayHashtags, displayCta)}
                   className="min-h-[40px] px-3 py-1.5 rounded-xl bg-sandstone hover:bg-warmborder text-terracotta font-bold inline-flex items-center gap-1.5 cursor-pointer"
                 >
                   <Copy className="size-3.5" />
@@ -596,10 +690,10 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
                 </button>
               </div>
               <p className="text-espresso leading-relaxed whitespace-pre-line bg-amber-50/40 p-3 rounded-xl border border-amber-100">
-                {slot.caption}
+                {displayCaption}
               </p>
-              <p className="font-semibold text-terracotta">{slot.cta}</p>
-              <p className="text-[11px] text-warmmuted">{slot.hashtags.join(' ')}</p>
+              <p className="font-semibold text-terracotta">{displayCta}</p>
+              <p className="text-[11px] text-warmmuted">{displayHashtags.join(' ')}</p>
             </div>
 
             <form

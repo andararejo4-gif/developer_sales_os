@@ -1816,6 +1816,39 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (pathname === '/api/se/content-slots/regenerate-brief' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const slotId = String(body.slotId || '');
+      if (!slotId) {
+        sendJson(res, 400, { ok: false, error: 'slotId wajib diisi.' });
+        return;
+      }
+      const existing = await sql`
+        SELECT day_number, slot_order FROM sales_os.se_content_slots
+        WHERE se_email = ${user.email} AND slot_id = ${slotId}
+        LIMIT 1
+      `;
+      const dayNum = Number(existing[0]?.day_number || 1);
+      const slotOrder = Number(existing[0]?.slot_order || 1);
+      const aiSlots = await generateUniqueDaySlotsWithAi(user.email, user.name, dayNum);
+      const picked = aiSlots.find((s) => s.slotOrder === slotOrder) || aiSlots[0];
+      const updated = await sql`
+        UPDATE sales_os.se_content_slots
+        SET title = ${picked.title},
+            brief = ${picked.brief},
+            visual_prompt = ${picked.visualPrompt},
+            caption = ${picked.caption},
+            hashtags = ${sql.json(picked.hashtags)},
+            cta = ${picked.cta},
+            slide_deck = ${sql.json(picked.slideDeck || [])},
+            updated_at = NOW()
+        WHERE se_email = ${user.email} AND slot_id = ${slotId}
+        RETURNING *
+      `;
+      sendJson(res, 200, { ok: true, slot: updated[0], generated: picked });
+      return;
+    }
+
     if (pathname === '/api/se/content-slots' && req.method === 'POST') {
       const body = await readJsonBody(req);
       const slotId = String(body.slotId || '');
