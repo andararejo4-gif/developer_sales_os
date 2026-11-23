@@ -3,15 +3,16 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
-## P-047 | 2026-11-23 | Kartu Notifikasi Berwarna Sesuai Urgensi (Tanpa Garis Tepi Atas) & Kalender Konten Berdasarkan Tanggal Asli WIB
+## P-047 | 2026-11-23 | Kartu Notifikasi Berwarna Sesuai Urgensi, Kalender Tanggal Asli WIB & Fix FlowClient.ev
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
-- Ubah: `src/components/se/SeNotificationCenter.tsx`, `src/App.tsx`, `src/lib/content-calendar/calendar-generator.ts`, `src/components/ContentCalendarViewer.tsx`, `server/content-media-worker.ts`, `server/index.ts`
+- Ubah: `src/components/se/SeNotificationCenter.tsx`, `src/App.tsx`, `src/lib/content-calendar/calendar-generator.ts`, `src/components/ContentCalendarViewer.tsx`, `server/content-media-worker.ts`, `server/index.ts`, `/opt/flow-service/flow_engine.py` (di `hades`)
 - Detail Perubahan:
+  - **Fix `FlowClient.ev` di Hermes (`flow_engine.py`):** Memperbaiki pemanggilan metode evaluasi JS di `/opt/flow-service/flow_engine.py` dari `client.js(...)` menjadi `client.ev(...)`, me-restart `flow-api.service`, dan mengembalikan item antrean yang terdampak ke `PENDING`.
   - **Kartu Notifikasi Berwarna Sesuai Urgensi (Tanpa Garis Tepi Atas):** Menghilangkan `h-1.5` top accent bar dan mewarnai kartu notifikasi + modal detail sesuai urgensi (`rose` untuk Urgent SLA/WA putus, `amber` untuk H-5 Menit/Wajib Check-In/Validasi AI, `slate`/`emerald` untuk tugas rutin).
   - **Kalender Konten Berdasarkan Tanggal Asli & Jumlah Hari Bulan Aktif (`getWibCalendarInfo`, `getWibClock`):**
     - Kalender otomatis membuka **tanggal asli WIB hari ini** (mis. tanggal `23` hari ini, dan otomatis pindah ke tanggal `24` besok) serta menyesuaikan jumlah hari secara dinamis sesuai bulan berjalan (`28`, `29`, `30`, atau `31` hari).
     - **Scheduler Otomatis Tanggal Berjalan (`startContentMediaScheduler`):** Scheduler di `server/content-media-worker.ts` kini mengeksekusi `day_number = dayOfMonth` (mis. besok tanggal 24 mengeksekusi `slot-d24-s1-sales_in_house` mulai pukul `08:15–08:30 WIB`) untuk seluruh akun SE aktif sehingga pukul `09:00 WIB` konten tanggal 24 sudah siap.
-- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy frontend & backend ke `hades` (`HTTP 200` + PM2 `online`).
+- Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), `flow-api.service` `ok: true`, deploy frontend & backend ke `hades` (`HTTP 200` + PM2 `online`).
 
 ## P-046 | 2026-11-23 | Clean Light Card Design untuk Developer Assistant & Modal Detail Notifikasi (Zero Brown Header)
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
