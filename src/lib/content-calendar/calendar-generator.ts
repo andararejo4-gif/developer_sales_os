@@ -208,20 +208,60 @@ function hashSeed(str: string): number {
   return h;
 }
 
+const MONTH_NAMES_ID = [
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember',
+];
+
+export function getWibCalendarInfo(nowMs = Date.now()): {
+  todayDate: number;
+  daysInMonth: number;
+  monthNumber: number;
+  year: number;
+  monthNameId: string;
+  dateStr: string;
+} {
+  const wib = new Date(nowMs + 7 * 60 * 60 * 1000);
+  const year = wib.getUTCFullYear();
+  const monthIdx = wib.getUTCMonth();
+  const todayDate = wib.getUTCDate();
+  const daysInMonth = new Date(Date.UTC(year, monthIdx + 1, 0)).getUTCDate();
+  const dateStr = wib.toISOString().slice(0, 10);
+  return {
+    todayDate,
+    daysInMonth,
+    monthNumber: monthIdx + 1,
+    year,
+    monthNameId: MONTH_NAMES_ID[monthIdx] || 'Bulan Ini',
+    dateStr,
+  };
+}
+
 /**
- * Generates 90 slots for 30 days (Day 1..30, Slots 1..3 per day) for the selected track.
+ * Generates slots for totalDays (default 30 for backward-compatible tests, or daysInMonth = 28..31)
  * Optional seedKey (e.g., userEmail) rotates blueprints deterministically per SE account
  * so each Sales Executive receives a unique content schedule.
  */
 export function generateContentCalendarSlots(
   track: ContentTrack = 'OFFICIAL',
-  seedKey?: string
+  seedKey?: string,
+  totalDays: number = 30
 ): ContentSlot[] {
   const slots: ContentSlot[] = [];
   const seed = seedKey ? hashSeed(seedKey.toLowerCase().trim()) : 0;
   const isCustomSe = Boolean(seedKey && track === 'SALES_IN_HOUSE');
 
-  for (let day = 1; day <= 30; day++) {
+  for (let day = 1; day <= totalDays; day++) {
     // Slot 1: TOFU (Pagi - 09:00 WIB)
     const tofuOffset = isCustomSe ? seed % TOFU_BLUEPRINTS.length : 0;
     const tofuIndex = (((day - 1 + tofuOffset) % TOFU_BLUEPRINTS.length) + TOFU_BLUEPRINTS.length) % TOFU_BLUEPRINTS.length;

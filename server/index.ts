@@ -17,6 +17,7 @@ import {
   enqueueSlotMediaViaHermes,
   getHermesHealth,
   getWibClock,
+  formatWibDateForDay,
   getBusyWindowInfo,
   getQueuePositionInfo,
   isSlotDueNowWib,
@@ -682,7 +683,7 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
       SELECT status, day_number, media_status
       FROM sales_os.se_content_slots
       WHERE se_email = ${seEmail}
-        AND (report_date = ${todayStr}::date OR day_number = 1)
+        AND (report_date = ${todayStr}::date OR day_number = ${getWibClock().dayOfMonth})
     `.catch(() => [] as any[]),
   ]);
 
@@ -1711,8 +1712,9 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/se/content-slots/init-day' && req.method === 'POST') {
       const body = await readJsonBody(req);
-      const dayNumber = Math.max(1, Math.min(30, Number(body.dayNumber || 1)));
-      const { dateStr, minutesOfDay } = getWibClock();
+      const { minutesOfDay, dayOfMonth, daysInMonth } = getWibClock();
+      const dayNumber = Math.max(1, Math.min(daysInMonth, Number(body.dayNumber || dayOfMonth)));
+      const targetDateStr = formatWibDateForDay(dayNumber);
 
       const existing = await sql`
         SELECT * FROM sales_os.se_content_slots
@@ -1739,7 +1741,7 @@ const server = http.createServer(async (req, res) => {
             ${s.scheduledTime}, ${s.funnelStage}, ${s.platform}, ${s.format},
             ${s.title}, ${s.brief}, ${s.visualPrompt}, ${s.caption},
             ${sql.json(s.hashtags)}, ${s.cta}, ${s.durationSeconds},
-            ${s.personaCode || 'P1'}, ${sql.json(s.slideDeck || [])}, 'SCHEDULED', ${dateStr}::date, NOW()
+            ${s.personaCode || 'P1'}, ${sql.json(s.slideDeck || [])}, 'SCHEDULED', ${targetDateStr}::date, NOW()
           )
           ON CONFLICT (se_email, slot_id) DO UPDATE SET
             day_number = EXCLUDED.day_number,
@@ -1762,18 +1764,18 @@ const server = http.createServer(async (req, res) => {
         `;
       }
 
-      // Trigger hanya slot yang jamnya sudah jatuh tempo hari ini (jika dayNumber === 1 / hari aktif)
+      // Trigger hanya slot yang jamnya sudah jatuh tempo hari ini (jika dayNumber === dayOfMonth / tanggal hari ini)
       const savedRows = await sql`
         SELECT * FROM sales_os.se_content_slots
         WHERE se_email = ${user.email} AND day_number = ${dayNumber}
         ORDER BY slot_order ASC
       `;
 
-      // Non-blocking: jika ada 1 slot yang due sekarang, enqueue ke Hermes tanpa memblokir UI
+      // Non-blocking: jika ada 1 slot yang due sekarang di tanggal aktif hari ini, enqueue ke Hermes tanpa memblokir UI
       const dueSlot = savedRows.find(
         (r) => r.media_status === 'SCHEDULED' && isSlotDueNowWib(Number(r.slot_order), minutesOfDay)
       );
-      if (dueSlot && dayNumber === 1) {
+      if (dueSlot && dayNumber === dayOfMonth) {
         void (async () => {
           try {
             const enq = await enqueueSlotMediaViaHermes({

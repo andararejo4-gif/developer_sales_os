@@ -71,12 +71,36 @@ function hashStr(str: string): number {
   return h;
 }
 
-export function getWibClock(): { dateStr: string; minutesOfDay: number } {
+export function getWibClock(): {
+  dateStr: string;
+  minutesOfDay: number;
+  dayOfMonth: number;
+  daysInMonth: number;
+  monthNumber: number;
+  year: number;
+} {
   const now = new Date();
   const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
   const dateStr = wib.toISOString().slice(0, 10);
   const minutesOfDay = wib.getUTCHours() * 60 + wib.getUTCMinutes();
-  return { dateStr, minutesOfDay };
+  const year = wib.getUTCFullYear();
+  const monthIdx = wib.getUTCMonth();
+  const dayOfMonth = wib.getUTCDate();
+  const daysInMonth = new Date(Date.UTC(year, monthIdx + 1, 0)).getUTCDate();
+  return {
+    dateStr,
+    minutesOfDay,
+    dayOfMonth,
+    daysInMonth,
+    monthNumber: monthIdx + 1,
+    year,
+  };
+}
+
+export function formatWibDateForDay(dayNumber: number): string {
+  const { year, monthNumber, daysInMonth } = getWibClock();
+  const clampedDay = Math.max(1, Math.min(daysInMonth, dayNumber));
+  return `${year}-${String(monthNumber).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
 }
 
 export interface BusyWindowInfo {
@@ -656,12 +680,13 @@ export async function generateWeekSlotsForSe(
   seName: string,
   weekNumber: number
 ): Promise<number> {
+  const { daysInMonth } = getWibClock();
   const startDay = (weekNumber - 1) * 7 + 1;
-  const endDay = Math.min(30, weekNumber * 7);
-  const { dateStr } = getWibClock();
+  const endDay = Math.min(daysInMonth, weekNumber * 7);
   let savedCount = 0;
 
   for (let day = startDay; day <= endDay; day++) {
+    const dayDateStr = formatWibDateForDay(day);
     const existing = await sql`
       SELECT slot_id FROM sales_os.se_content_slots
       WHERE se_email = ${seEmail} AND day_number = ${day} AND visual_prompt IS NOT NULL
@@ -682,7 +707,7 @@ export async function generateWeekSlotsForSe(
           ${s.scheduledTime}, ${s.funnelStage}, ${s.platform}, ${s.format},
           ${s.title}, ${s.brief}, ${s.visualPrompt}, ${s.caption},
           ${sql.json(s.hashtags)}, ${s.cta}, ${s.durationSeconds},
-          ${s.personaCode || 'P1'}, ${sql.json(s.slideDeck || [])}, 'SCHEDULED', ${dateStr}::date, NOW()
+          ${s.personaCode || 'P1'}, ${sql.json(s.slideDeck || [])}, 'SCHEDULED', ${dayDateStr}::date, NOW()
         )
         ON CONFLICT (se_email, slot_id) DO UPDATE SET
           day_number = EXCLUDED.day_number,
@@ -700,6 +725,7 @@ export async function generateWeekSlotsForSe(
           duration_seconds = EXCLUDED.duration_seconds,
           persona_code = EXCLUDED.persona_code,
           slide_deck = EXCLUDED.slide_deck,
+          report_date = EXCLUDED.report_date,
           updated_at = NOW()
       `;
       savedCount++;
@@ -1272,41 +1298,64 @@ export function startContentMediaScheduler(): void {
     void pollActiveHermesJobs();
   }, 4000);
 
-  setInterval(async () => {
+  const runDailyScheduleTick = async () => {
     try {
-      const { dateStr, minutesOfDay } = getWibClock();
+      const { dateStr, minutesOfDay, dayOfMonth, daysInMonth } = getWibClock();
 
-      // Auto-init 3 slot hari ini untuk SE yang sudah pernah aktif agar di jam 09:00/14:00/19:30 WIB sudah READY
-      const activeSeRows = await sql`
+      // Kumpulkan seluruh SE aktif (dari DB + akun SE default) agar otomatis siap di tanggal berjalan & besok pagi (09:00 WIB)
+      const dbSeRows = await sql`
         SELECT DISTINCT se_email FROM sales_os.se_content_slots
         WHERE se_email IS NOT NULL AND se_email <> ''
-      `;
-      for (const seRow of activeSeRows) {
-        const seEmail = String(seRow.se_email);
-        const todayExisting = await sql`
-          SELECT slot_id FROM sales_os.se_content_slots
-          WHERE se_email = ${seEmail} AND report_date = ${dateStr}::date
-          LIMIT 1
-        `;
-        if (todayExisting.length === 0 && minutesOfDay >= 8 * 60 + 20) {
-          const seName = seEmail.split('@')[0];
-          const aiSlots = await generateUniqueDaySlotsWithAi(seEmail, seName, 1);
-          for (const s of aiSlots) {
-            const slotId = `slot-d1-s${s.slotOrder}-sales_in_house`;
+      `.catch(() => [] as any[]);
+      const seEmails = Array.from(
+        new Set([
+          'raka@andararejomakmur.co.id',
+          'dina@andararejomakmur.co.id',
+          'fajar@andararejomakmur.co.id',
+          ...dbSeRows.map((r: any) => String(r.se_email).toLowerCase().trim()).filter(Boolean),
+        ])
+      );
+
+      const daysToEnsure = Array.from(
+        new Set([dayOfMonth, Math.min(daysInMonth, dayOfMonth + 1)])
+      );
+
+      for (const seEmail of seEmails) {
+        for (const targetDay of daysToEnsure) {
+          const targetDateStr = formatWibDateForDay(targetDay);
+          const existingRows = await sql`
+            SELECT slot_id, report_date FROM sales_os.se_content_slots
+            WHERE se_email = ${seEmail} AND day_number = ${targetDay}
+          `;
+          if (existingRows.length < 3) {
+            const seName = seEmail.split('@')[0];
+            const aiSlots = await generateUniqueDaySlotsWithAi(seEmail, seName, targetDay);
+            for (const s of aiSlots) {
+              const slotId = `slot-d${targetDay}-s${s.slotOrder}-sales_in_house`;
+              await sql`
+                INSERT INTO sales_os.se_content_slots (
+                  se_email, slot_id, status, posted_url, day_number, slot_order,
+                  scheduled_time, funnel_stage, platform, format, title, brief,
+                  visual_prompt, caption, hashtags, cta, duration_seconds,
+                  persona_code, slide_deck, media_status, report_date, updated_at
+                ) VALUES (
+                  ${seEmail}, ${slotId}, 'SIAP', '', ${targetDay}, ${s.slotOrder},
+                  ${s.scheduledTime}, ${s.funnelStage}, ${s.platform}, ${s.format}, ${s.title}, ${s.brief},
+                  ${s.visualPrompt}, ${s.caption}, ${sql.json(s.hashtags)}, ${s.cta}, ${s.durationSeconds},
+                  ${s.personaCode || 'P1'}, ${sql.json(s.slideDeck || [])}, 'SCHEDULED', ${targetDateStr}::date, NOW()
+                )
+                ON CONFLICT (se_email, slot_id) DO UPDATE SET
+                  report_date = ${targetDateStr}::date
+              `;
+            }
+          } else {
             await sql`
-              INSERT INTO sales_os.se_content_slots (
-                se_email, slot_id, status, posted_url, day_number, slot_order,
-                scheduled_time, funnel_stage, platform, format, title, brief,
-                visual_prompt, caption, hashtags, cta, duration_seconds,
-                persona_code, slide_deck, media_status, report_date, updated_at
-              ) VALUES (
-                ${seEmail}, ${slotId}, 'SIAP_POSTING', '', 1, ${s.slotOrder},
-                ${s.scheduledTime}, ${s.funnelStage}, ${s.platform}, ${s.format}, ${s.title}, ${s.brief},
-                ${s.visualPrompt}, ${s.caption}, ${sql.json(s.hashtags)}, ${s.cta}, ${s.durationSeconds},
-                ${s.personaCode || null}, ${sql.json(s.slideDeck || [])}, 'SCHEDULED', ${dateStr}::date, NOW()
-              )
-              ON CONFLICT (se_email, slot_id) DO NOTHING
-            `;
+              UPDATE sales_os.se_content_slots
+              SET report_date = ${targetDateStr}::date
+              WHERE se_email = ${seEmail}
+                AND day_number = ${targetDay}
+                AND (report_date IS NULL OR report_date <> ${targetDateStr}::date)
+            `.catch(() => {});
           }
         }
       }
@@ -1314,10 +1363,10 @@ export function startContentMediaScheduler(): void {
       const dueRows = await sql`
         SELECT se_email, slot_id, slot_order, funnel_stage, format, title, brief, visual_prompt, duration_seconds, slide_deck
         FROM sales_os.se_content_slots
-        WHERE report_date = ${dateStr}::date
+        WHERE day_number = ${dayOfMonth}
           AND media_status = 'SCHEDULED'
         ORDER BY slot_order ASC, se_email ASC
-        LIMIT 10
+        LIMIT 12
       `;
       for (const row of dueRows) {
         if (!isSlotDueNowWib(Number(row.slot_order || 1), minutesOfDay)) continue;
@@ -1339,6 +1388,7 @@ export function startContentMediaScheduler(): void {
               target_media_count = ${enq.targetCount},
               hermes_job_ids = ${sql.json(enq.jobs)},
               media_error = ${enq.error || null},
+              report_date = ${dateStr}::date,
               updated_at = NOW()
           WHERE se_email = ${row.se_email} AND slot_id = ${row.slot_id}
         `;
@@ -1346,5 +1396,12 @@ export function startContentMediaScheduler(): void {
     } catch {
       /* silent */
     }
+  };
+
+  setTimeout(() => {
+    void runDailyScheduleTick();
+  }, 3000);
+  setInterval(() => {
+    void runDailyScheduleTick();
   }, 60_000);
 }

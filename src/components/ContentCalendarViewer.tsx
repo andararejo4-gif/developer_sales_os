@@ -30,6 +30,7 @@ import {
   updateSlotPosting,
   generateContentCalendarSlots,
   initProjectCalendar,
+  getWibCalendarInfo,
 } from '../lib/content-calendar/calendar-generator';
 import { generateContentCalendarDocx } from '../lib/exporters/content-calendar-docx';
 import {
@@ -80,6 +81,8 @@ export function ContentCalendarViewer({
   onDataChanged,
 }: ContentCalendarViewerProps) {
   const userScope = `${projectId}_${userEmail.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+  const wibCal = getWibCalendarInfo();
+  const totalDaysInMonth = isDemoMode ? 8 : wibCal.daysInMonth;
 
   const [track, setTrack] = useState<ContentTrack>(() =>
     loadPersistedState<ContentTrack>(
@@ -92,18 +95,20 @@ export function ContentCalendarViewer({
       `devos_cal_plan_${userScope}`,
       null
     );
-    if (saved) return saved;
+    if (saved && saved.slots.length >= totalDaysInMonth * 3) return saved;
     const base = getContentCalendar(projectId, 1, isDemoMode);
     if (!base) return null;
-    if (track === 'SALES_IN_HOUSE') {
-      const slots = generateContentCalendarSlots('SALES_IN_HOUSE', userEmail);
-      return {
-        ...base,
-        slots: isDemoMode ? slots.filter((s) => s.dayNumber <= 8) : slots,
-        postedSlotsCount: slots.filter((s) => s.status === 'SUDAH_POSTING').length,
-      };
-    }
-    return base;
+    const slots = generateContentCalendarSlots(
+      track,
+      track === 'SALES_IN_HOUSE' ? userEmail : undefined,
+      wibCal.daysInMonth
+    );
+    return {
+      ...base,
+      monthPeriod: `${wibCal.monthNameId} ${wibCal.year}`,
+      slots: isDemoMode ? slots.filter((s) => s.dayNumber <= 8) : slots,
+      postedSlotsCount: slots.filter((s) => s.status === 'SUDAH_POSTING').length,
+    };
   });
 
   useEffect(() => {
@@ -111,7 +116,7 @@ export function ContentCalendarViewer({
       `devos_cal_plan_${projectId}`,
       null
     );
-    if (saved) {
+    if (saved && saved.slots.length >= totalDaysInMonth * 3) {
       setCalendar(saved);
       return;
     }
@@ -120,19 +125,33 @@ export function ContentCalendarViewer({
       setCalendar(null);
       return;
     }
-    if (track === 'SALES_IN_HOUSE') {
-      const slots = generateContentCalendarSlots('SALES_IN_HOUSE');
-      setCalendar({ ...base, slots: isDemoMode ? slots.filter((s) => s.dayNumber <= 8) : slots });
-    } else {
-      setCalendar(base);
-    }
-  }, [projectId, track, isDemoMode]);
+    const slots = generateContentCalendarSlots(
+      track,
+      track === 'SALES_IN_HOUSE' ? userEmail : undefined,
+      wibCal.daysInMonth
+    );
+    setCalendar({
+      ...base,
+      monthPeriod: `${wibCal.monthNameId} ${wibCal.year}`,
+      slots: isDemoMode ? slots.filter((s) => s.dayNumber <= 8) : slots,
+    });
+  }, [projectId, track, isDemoMode, totalDaysInMonth, userEmail, wibCal.daysInMonth, wibCal.monthNameId, wibCal.year]);
 
   const handleInitCalendar = () => {
     const newPlan = initProjectCalendar(projectId);
-    setCalendar(newPlan);
-    savePersistedState(`devos_cal_plan_${projectId}`, newPlan);
-    setToastMessage(`Kalender konten 30 hari untuk ${projectName} berhasil diaktifkan!`);
+    const slots = generateContentCalendarSlots(
+      track,
+      track === 'SALES_IN_HOUSE' ? userEmail : undefined,
+      wibCal.daysInMonth
+    );
+    const fullPlan = {
+      ...newPlan,
+      monthPeriod: `${wibCal.monthNameId} ${wibCal.year}`,
+      slots: isDemoMode ? slots.filter((s) => s.dayNumber <= 8) : slots,
+    };
+    setCalendar(fullPlan);
+    savePersistedState(`devos_cal_plan_${projectId}`, fullPlan);
+    setToastMessage(`Kalender konten ${wibCal.daysInMonth} hari (${wibCal.monthNameId} ${wibCal.year}) berhasil diaktifkan!`);
   };
 
   const [viewMode, setViewMode] = useState<CalendarViewTab>(() => {
@@ -151,9 +170,17 @@ export function ContentCalendarViewer({
   const [selectedStatus, setSelectedStatus] = useState<'all' | PostingStatus>(() =>
     loadPersistedState<'all' | PostingStatus>(`devos_cal_status_${userScope}`, 'all')
   );
-  const [selectedDay, setSelectedDay] = useState<number>(() =>
-    loadPersistedState<number>(`devos_cal_day_${userScope}`, 1)
-  );
+  const [selectedDay, setSelectedDay] = useState<number>(() => {
+    const defaultToday = isDemoMode ? Math.min(8, wibCal.todayDate) : wibCal.todayDate;
+    const lastAutoDate = loadPersistedState<string>(`devos_cal_autodate_${userScope}`, '');
+    if (lastAutoDate !== wibCal.dateStr) {
+      savePersistedState(`devos_cal_autodate_${userScope}`, wibCal.dateStr);
+      savePersistedState(`devos_cal_day_${userScope}`, defaultToday);
+      return defaultToday;
+    }
+    const savedDay = loadPersistedState<number>(`devos_cal_day_${userScope}`, defaultToday);
+    return Math.max(1, Math.min(totalDaysInMonth, savedDay));
+  });
   const [socialAccounts, setSocialAccounts] = useState<ConnectedSocialAccount[]>([]);
   const [maxSocialAccounts, setMaxSocialAccounts] = useState<number>(4);
   const [isSocialModalOpen, setIsSocialModalOpen] = useState(false);
@@ -191,7 +218,7 @@ export function ContentCalendarViewer({
     return () => window.removeEventListener('message', onMsg);
   }, [userEmail, userRole]);
   const [selectedWeek, setSelectedWeek] = useState<number>(() =>
-    loadPersistedState<number>(`devos_cal_week_${userScope}`, 1)
+    loadPersistedState<number>(`devos_cal_week_${userScope}`, Math.ceil(wibCal.todayDate / 7))
   );
   const [activeSlotModal, setActiveSlotModal] = useState<ContentSlot | null>(null);
 
@@ -368,7 +395,7 @@ export function ContentCalendarViewer({
   // Switch Track (Official vs Sales In-House)
   const handleTrackChange = (newTrack: ContentTrack) => {
     setTrack(newTrack);
-    const slots = generateContentCalendarSlots(newTrack, userEmail);
+    const slots = generateContentCalendarSlots(newTrack, userEmail, wibCal.daysInMonth);
     setCalendar((prev) => {
       if (!prev) return null;
       const nextSlots = isDemoMode ? slots.filter((s) => s.dayNumber <= 8) : slots;
@@ -390,9 +417,9 @@ export function ContentCalendarViewer({
       })
     : [];
 
-  // Week slices (Day 1..7, 8..14, 15..21, 22..28, 29..30)
+  // Week slices (Day 1..7, 8..14, 15..21, 22..28, 29..totalDaysInMonth)
   const weekStartDay = (selectedWeek - 1) * 7 + 1;
-  const weekEndDay = Math.min(30, selectedWeek * 7);
+  const weekEndDay = Math.min(totalDaysInMonth, selectedWeek * 7);
   const weekSlots = filteredSlots.filter(
     (s) => s.dayNumber >= weekStartDay && s.dayNumber <= weekEndDay
   );
@@ -816,25 +843,33 @@ export function ContentCalendarViewer({
           </div>
         </div>
 
-        {/* Pengingat Jadwal Unggah Hari Ini (Akun Pribadi SE) */}
+        {/* Pengingat Jadwal Unggah Hari Ini (Berdasarkan Tanggal Asli WIB) */}
         <div className="px-4 sm:px-6 py-3 bg-amber-50/80 border-b border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
           <div className="flex items-start sm:items-center gap-2.5 text-xs">
             <Clock className="size-4 text-terracotta shrink-0 mt-0.5 sm:mt-0" />
             <div>
               <strong className="text-espresso">
-                Pengingat Jadwal Unggah Hari Ini (Hari ke-{selectedDay}):
+                Jadwal Tanggal {selectedDay} {wibCal.monthNameId} {wibCal.year}
+                {selectedDay === wibCal.todayDate
+                  ? ' (Hari Ini)'
+                  : selectedDay === wibCal.todayDate + 1
+                  ? ' (Besok)'
+                  : ''}:
               </strong>{' '}
               <span className="text-warmmuted">
-                {(calendar?.slots ?? []).filter((s) => s.dayNumber === selectedDay && s.status !== 'SUDAH_POSTING').length} slot belum diposting · Klik kartu slot untuk salin caption &amp; lapor link postingan ke Dashboard SE.
+                {(calendar?.slots ?? []).filter((s) => s.dayNumber === selectedDay && s.status !== 'SUDAH_POSTING').length} slot belum diposting · Otomatis mengikuti tanggal kalender asli ({wibCal.daysInMonth} hari di bulan {wibCal.monthNameId}).
               </span>
             </div>
           </div>
           <button
             type="button"
-            onClick={() => setViewMode('day')}
+            onClick={() => {
+              setSelectedDay(isDemoMode ? Math.min(8, wibCal.todayDate) : wibCal.todayDate);
+              setViewMode('day');
+            }}
             className="min-h-[44px] md:min-h-[34px] px-3.5 py-1.5 rounded-xl bg-espresso text-white text-xs font-bold shrink-0 cursor-pointer"
           >
-            Fokus Jadwal Hari Ini
+            Fokus Hari Ini (Tgl {wibCal.todayDate})
           </button>
         </div>
 
@@ -977,15 +1012,16 @@ export function ContentCalendarViewer({
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2 bg-white/90 backdrop-blur-xs px-4 py-2.5 rounded-2xl border border-warmborder text-xs">
                     <span className="font-extrabold text-espresso">
-                      Papan Bulanan (1 Kertas = 1 Hari · Klik kertas untuk zoom ke Harian)
+                      Papan Bulanan {wibCal.monthNameId} {wibCal.year} (Klik tanggal untuk buka jadwal harian)
                     </span>
                     <span className="text-warmmuted font-semibold">
-                      Total {isDemoMode ? 8 : 30} Hari
+                      Total {totalDaysInMonth} Hari
                     </span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-4 pt-2">
-                    {Array.from({ length: isDemoMode ? 8 : 30 }).map((_, idx) => {
+                    {Array.from({ length: totalDaysInMonth }).map((_, idx) => {
                       const dayNum = idx + 1;
+                      const isTodayCard = dayNum === wibCal.todayDate;
                       const daySlots = filteredSlots.filter((s) => s.dayNumber === dayNum);
                       const postedCount = daySlots.filter((s) => s.status === 'SUDAH_POSTING').length;
                       const allDone = daySlots.length > 0 && postedCount === daySlots.length;
@@ -998,6 +1034,8 @@ export function ContentCalendarViewer({
                       ];
                       const paperClass = allDone
                         ? 'bg-[#EAF8EE] border-emerald-400'
+                        : isTodayCard
+                        ? 'bg-amber-50 border-terracotta ring-2 ring-terracotta/30'
                         : paperThemes[idx % paperThemes.length];
                       const pinColors = ['bg-terracotta', 'bg-olive', 'bg-espresso', 'bg-amber-600'];
 
@@ -1021,7 +1059,10 @@ export function ContentCalendarViewer({
                       />
 
                       <div className="flex items-center justify-between gap-1 pb-2 border-b border-black/10">
-                        <span className="text-xs font-black text-espresso">Hari {dayNum}</span>
+                        <span className="text-xs font-black text-espresso">
+                          Tgl {dayNum} {wibCal.monthNameId.slice(0, 3)}
+                          {isTodayCard ? ' · Hari Ini' : ''}
+                        </span>
                         <span
                           className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-full ${
                             allDone
@@ -1054,7 +1095,7 @@ export function ContentCalendarViewer({
                       </div>
 
                       <span className="text-[10px] font-bold text-terracotta">
-                        Buka Hari {dayNum} &rarr;
+                        Buka Tgl {dayNum} &rarr;
                       </span>
                     </button>
                   );
@@ -1068,7 +1109,7 @@ export function ContentCalendarViewer({
             <div className="space-y-4">
               {/* Week Selector */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white p-3 rounded-2xl border border-warmborder">
-                <span className="text-xs font-bold text-espresso">Pilih Minggu:</span>
+                <span className="text-xs font-bold text-espresso">Pilih Minggu ({wibCal.monthNameId}):</span>
                 <div className="flex flex-wrap gap-1.5">
                   {[1, 2, 3, 4, 5].map((w) => (
                     <button
@@ -1080,7 +1121,7 @@ export function ContentCalendarViewer({
                           : 'bg-sandstone text-warmmuted hover:text-espresso'
                       }`}
                     >
-                      M{w} (H{(w - 1) * 7 + 1}–{Math.min(30, w * 7)})
+                      M{w} (Tgl {(w - 1) * 7 + 1}–{Math.min(totalDaysInMonth, w * 7)})
                     </button>
                   ))}
                 </div>
@@ -1223,11 +1264,17 @@ export function ContentCalendarViewer({
           {/* VIEW 3: HARIAN DEFAULT (3 Kertas Berpin Pagi, Siang, Malam) */}
           {viewMode === 'day' && (
             <div className="space-y-5">
-              {/* Day Navigator */}
+              {/* Day Navigator (Mengikuti Tanggal Asli Bulan Aktif) */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white p-3.5 rounded-2xl border border-warmborder shadow-xs">
                 <div className="flex items-center justify-between sm:justify-start gap-2">
                   <span className="text-xs font-extrabold text-espresso">
-                    Jadwal Hari ke-{selectedDay} (dari {isDemoMode ? '8' : '30'} Hari)
+                    Tanggal {selectedDay} {wibCal.monthNameId} {wibCal.year}
+                    {selectedDay === wibCal.todayDate
+                      ? ' · Hari Ini'
+                      : selectedDay === wibCal.todayDate + 1
+                      ? ' · Besok'
+                      : ''}{' '}
+                    <span className="text-warmmuted font-semibold">({totalDaysInMonth} Hari)</span>
                   </span>
                   <div className="flex items-center gap-1">
                     <button
@@ -1240,8 +1287,8 @@ export function ContentCalendarViewer({
                     </button>
                     <button
                       type="button"
-                      disabled={selectedDay >= (isDemoMode ? 8 : 30)}
-                      onClick={() => setSelectedDay((d) => Math.min(isDemoMode ? 8 : 30, d + 1))}
+                      disabled={selectedDay >= totalDaysInMonth}
+                      onClick={() => setSelectedDay((d) => Math.min(totalDaysInMonth, d + 1))}
                       className="min-h-[36px] px-2.5 rounded-lg bg-sandstone text-xs font-bold text-espresso disabled:opacity-40 cursor-pointer"
                     >
                       &rsaquo;
@@ -1249,19 +1296,26 @@ export function ContentCalendarViewer({
                   </div>
                 </div>
                 <div className="flex items-center gap-1 overflow-x-auto max-w-full sm:max-w-lg py-1 no-scrollbar">
-                  {Array.from({ length: isDemoMode ? 8 : 30 }).map((_, idx) => {
+                  {Array.from({ length: totalDaysInMonth }).map((_, idx) => {
                     const d = idx + 1;
+                    const isTodayBtn = d === wibCal.todayDate;
                     return (
                       <button
                         key={d}
                         onClick={() => setSelectedDay(d)}
-                        className={`size-8 rounded-lg text-xs font-bold shrink-0 transition-all cursor-pointer ${
+                        title={`Tanggal ${d} ${wibCal.monthNameId}${isTodayBtn ? ' (Hari Ini)' : ''}`}
+                        className={`relative size-8 rounded-lg text-xs font-bold shrink-0 transition-all cursor-pointer ${
                           selectedDay === d
                             ? 'bg-terracotta text-white shadow-xs'
+                            : isTodayBtn
+                            ? 'bg-amber-100 text-terracotta border border-terracotta/50'
                             : 'bg-sandstone text-espresso hover:bg-warmborder'
                         }`}
                       >
                         {d}
+                        {isTodayBtn && selectedDay !== d && (
+                          <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-500" />
+                        )}
                       </button>
                     );
                   })}
