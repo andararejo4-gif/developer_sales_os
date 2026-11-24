@@ -3,6 +3,14 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-059 | 2026-11-24 | Pemasangan Skill Unslop (UI Craft & Anti-Slop)
+- Status: selesai
+- Ubah: `~/.gemini/config/skills/unslop/` (global Antigravity), `.agents/skills/unslop/` (workspace)
+- Alasan/keputusan: Instalasi skill `unslop` dari https://github.com/heydamir/unslop.git untuk pembersihan visual AI slop (spacing 4px grid, neutral tint, tipografi, zero emoji slop, craft direction).
+- Verifikasi: File `SKILL.md`, references, dan scripts terpasang dan diverifikasi integritasnya di kedua path.
+- Berikutnya: -
+
+
 ## P-058 | 2026-11-24 | Regenerasi Laporan Harian IT DOCX dengan Tangkapan Layar 16:9 Full Monitor
 - Status: selesai
 - Ubah: `docs/laporan-harian/2026-11-24/IT-LH-24-NOV-2026.md`, `scripts/generate_daily_report_docx.ts`, folder bukti (10 tangkapan layar 1920x1080)
