@@ -3,6 +3,13 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-049 | 2026-11-24 | Proporsionalitas Panjang Balasan WA & Persona Voice Guide di AI Lead Engine
+- Status: selesai (live di `hades` & pushed ke GitHub)
+- Ubah: `server/ai-engine.ts`, `tests/playbook-v1-2-pipeline.test.ts`
+- Alasan/keputusan: Balasan WA AI sebelumnya selalu dipaksa 3–4 paragraf + bullet fitur brosur meski client hanya membalas singkat/apresiasi, dan gaya bahasa belum dibedakan per persona.
+- Verifikasi: `bun test` (111 pass, 0 fail), `npm run build` (0 error), `dist-server.mjs` deployed ke `hades` (`pm2` online)
+- Berikutnya: -
+
 ## P-048 | 2026-11-23 | Fix AI Pipeline Analysis & Rekomendasi Follow-Up Berulang (Tail-Context, Anti-Repetition & Auto-Recovery)
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `server/ai-engine.ts`, `server/wa-baileys.ts`, `server/index.ts`, `src/components/PipelinePage.tsx`

@@ -150,7 +150,25 @@ describe('Playbook v1.2 Knowledge, BANT 0-12 & Lead Clarity Guardrails', () => {
 
     const waGuidance = buildFollowupContextGuidance(waOngoingInput);
     expect(waGuidance.trackType).toBe('WA_ONGOING_CONVERSATION');
+    expect(waGuidance.replyMode).toBe('FOKUS_JAWAB');
     const waDraft = buildContextualFallbackFollowup(waOngoingInput);
     expect(waDraft).not.toContain('terima kasih sudah menghubungi');
+
+    const waShortAckInput = {
+      ...waOngoingInput,
+      stage: 'APPOINTMENT',
+      lastCustomerMessage: 'okedeh terimakasih min jadi tambah ga sabar deh',
+    };
+    const shortGuidance = buildFollowupContextGuidance(waShortAckInput);
+    expect(shortGuidance.replyMode).toBe('RINGKAS');
+    const shortDraft = buildContextualFallbackFollowup(waShortAckInput);
+    expect(shortDraft.length).toBeLessThan(240);
+    expect(shortDraft).not.toContain('•');
+
+    const waFullSpecInput = {
+      ...waOngoingInput,
+      lastCustomerMessage: 'Bisa jelaskan fasilitas dan spesifikasi bangunannya apa saja?',
+    };
+    expect(buildFollowupContextGuidance(waFullSpecInput).replyMode).toBe('LENGKAP_TERSTRUKTUR');
   });
 });

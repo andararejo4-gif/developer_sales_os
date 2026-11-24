@@ -223,12 +223,118 @@ export function formatHumanPaymentScheme(rawScheme: string): string {
   return (rawScheme || 'KPR').trim();
 }
 
+export type FollowupReplyMode = 'RINGKAS' | 'FOKUS_JAWAB' | 'LENGKAP_TERSTRUKTUR';
+
+const PERSONA_VOICE_GUIDE: Record<
+  PersonaCode,
+  { tone: string; styleRule: string; avoid: string }
+> = {
+  P1: {
+    tone: 'Hangat, ramah, membumi, dan akrab (gaya ngobrol WA profesional yang santai tapi tetap sopan).',
+    styleRule: 'Fokus pada kenyamanan keluarga, kepraktisan cicilan, dan suasana aman untuk anak. Gunakan kalimat mengalir dan ringan.',
+    avoid: 'Jangan terlalu kaku seperti surat resmi bank, dan jangan pakai slang berlebihan seperti "wkwkw" atau "haha".',
+  },
+  P2: {
+    tone: 'Lugas, respek, to-the-point, dan berwibawa.',
+    styleRule: 'Langsung ke inti angka, nilai unit, legalitas, dan efisiensi waktu. Kalimat singkat, padat, tanpa basa-basi panjang.',
+    avoid: 'Hindari basa-basi berlebihan, emoji berlebihan, atau bahasa terlalu santai.',
+  },
+  P3: {
+    tone: 'Rapi, sopan, terstruktur, dan menghormati profesi/gelar.',
+    styleRule: 'Hormati waktu mereka yang padat; sampaikan poin faktual dan fleksibilitas jadwal secara ringkas dan jelas.',
+    avoid: 'Jangan bertele-tele, jangan mengulang hal yang sudah dijelaskan sebelumnya.',
+  },
+  P4: {
+    tone: 'Hangat, menenangkan, dan membangun rasa aman serta kepercayaan.',
+    styleRule: 'Tekankan transparansi (video call lokasi, update progres, rekening resmi PT) dengan bahasa yang empatik dan mudah dipahami.',
+    avoid: 'Jangan terkesan memaksa atau terburu-buru.',
+  },
+  P5: {
+    tone: 'Sabar, penuh hormat, tenang, dan sangat sopan.',
+    styleRule: 'Gunakan tutur kata halus dan tidak mendesak; hargai pertimbangan kenyamanan dan ketenangan lingkungan.',
+    avoid: 'Hindari gaya jualan agresif (hard-selling) atau kalimat tergesa-gesa.',
+  },
+  P6: {
+    tone: 'Elegan, objektif, lugas, dan meyakinkan.',
+    styleRule: 'Soroti kualitas lingkungan, kemudahan perawatan aset, dan keamanan transaksi atas nama PT.',
+    avoid: 'Dilarang menjanjikan kenaikan harga/imbal hasil pasti atau memakai bahasa terlalu kasual.',
+  },
+  LAINNYA: {
+    tone: 'Ramah, sopan, natural seperti sales profesional di WhatsApp.',
+    styleRule: 'Sesuaikan panjang dan gaya kalimat dengan nada pesan terakhir prospek.',
+    avoid: 'Hindari gaya template robot atau terjemahan kaku.',
+  },
+};
+
+/**
+ * Mengklasifikasikan panjang & kedalaman balasan WA yang tepat berdasarkan konteks & pesan terakhir customer.
+ */
+export function classifyFollowupReplyMode(
+  trackType: 'MANUAL_POST_INTERACTION' | 'WA_FIRST_RESPONSE' | 'WA_ONGOING_CONVERSATION',
+  lastCustomerMessage: string
+): { mode: FollowupReplyMode; reason: string } {
+  const msg = (lastCustomerMessage || '').trim();
+  const lower = msg.toLowerCase();
+
+  if (trackType === 'MANUAL_POST_INTERACTION') {
+    return {
+      mode: 'LENGKAP_TERSTRUKTUR',
+      reason: 'Follow-up perdana pasca-pertemuan langsung butuh rangkuman personal yang hangat.',
+    };
+  }
+
+  const asksFullDetail =
+    /\b(fasilitas|spesifikasi|spek|detail lengkap|jelaskan|bedanya|beda cluster|perbedaan|apa saja|fitur|lingkungan|keunggulan)\b/i.test(
+      lower
+    );
+
+  if (trackType === 'WA_FIRST_RESPONSE') {
+    if (msg.length <= 35 && !asksFullDetail && !/\b(harga|cicilan|kpr|unit|lokasi|alamat|type|tipe)\b/i.test(lower)) {
+      return {
+        mode: 'FOKUS_JAWAB',
+        reason: 'Pesan pertama sangat singkat (sapaan/halo); balas hangat & ringkas tanpa brosur panjang.',
+      };
+    }
+    return {
+      mode: 'LENGKAP_TERSTRUKTUR',
+      reason: 'Respon pertama WA atas pertanyaan prospek perlu info inti yang jelas & terstruktur.',
+    };
+  }
+
+  // WA_ONGOING_CONVERSATION
+  if (asksFullDetail) {
+    return {
+      mode: 'LENGKAP_TERSTRUKTUR',
+      reason: 'Prospek secara eksplisit menanyakan rincian fasilitas/spesifikasi/perbandingan.',
+    };
+  }
+
+  const hasQuestionOrSpecificRequest =
+    msg.includes('?') ||
+    /\b(berapa|gimana|bagaimana|kapan|dimana|di mana|apa |apakah|bisa |boleh |minta|kirim|simulasi|cicilan|angsuran|dp |syarat|lokasi|alamat|shareloc|denah|harga|diskon|promo|rekening|caranya|unit mana|masih ada|ready)\b/i.test(
+      lower
+    );
+
+  if (!hasQuestionOrSpecificRequest && msg.length <= 120) {
+    return {
+      mode: 'RINGKAS',
+      reason: 'Pesan lanjutan prospek berupa respons/konfirmasi/apresiasi singkat tanpa pertanyaan baru.',
+    };
+  }
+
+  return {
+    mode: 'FOKUS_JAWAB',
+    reason: 'Pesan lanjutan prospek berisi pertanyaan spesifik, usulan jadwal, atau pertimbangan tertentu.',
+  };
+}
+
 /**
  * Menentukan panduan konteks interaksi berdasarkan asal lead (Manual vs WA Inbound) & tahap pipeline.
  */
 export function buildFollowupContextGuidance(input: LeadAnalysisInput): {
   trackType: 'MANUAL_POST_INTERACTION' | 'WA_FIRST_RESPONSE' | 'WA_ONGOING_CONVERSATION';
   trackLabel: string;
+  replyMode: FollowupReplyMode;
   guidanceText: string;
 } {
   const isWaOrigin =
@@ -248,54 +354,71 @@ export function buildFollowupContextGuidance(input: LeadAnalysisInput): {
   let stageSpecificDirective = '';
   if (stage === 'APPOINTMENT') {
     stageSpecificDirective =
-      'Prospek berada di Tahap 4 (JANJI KUNJUNGAN / APPOINTMENT). Fokuskan analisis & pesan pada penguncian kepastian hadir survei lokasi di Jombor, persiapan unit & simulasi pembayaran yang akan ditunjukkan saat survei, serta kesiapan Booking Fee Rp5 juta bila cocok di lokasi.';
+      'Prospek berada di Tahap 4 (JANJI KUNJUNGAN / APPOINTMENT). Pastikan koordinasi kunjungan ke Jombor berjalan mulus tanpa membanjiri ulang info brosur.';
   } else if (stage === 'VISITED') {
     stageSpecificDirective =
-      'Prospek berada di Tahap 5 (SUDAH SURVEI LOKASI / VISITED). Fokuskan analisis & pesan pada tindak lanjut impresi pasca-survei, pengiriman penawaran tertulis resmi, dan dorongan mengunci unit sebelum diambil pembeli lain.';
+      'Prospek berada di Tahap 5 (SUDAH SURVEI LOKASI / VISITED). Fokus pada impresi pasca-survei dan tindak lanjut penawaran/keputusan.';
   } else if (stage === 'HOT_NEGOTIATION') {
     stageSpecificDirective =
-      'Prospek berada di Tahap 6 (NEGOSIASI AKTIF / HOT NEGOTIATION). Fokuskan analisis & pesan pada penyelesaian negosiasi skema bayar, urgensi keterbatasan unit (hanya 35 unit & kenaikan bertahap Rp50 juta/bulan sesuai Playbook §2.5), dan penutupan Booking Fee Rp5 juta ke rekening resmi PT Andara Rejo Makmur.';
+      'Prospek berada di Tahap 6 (NEGOSIASI AKTIF / HOT NEGOTIATION). Fokus pada kejelasan skema bayar dan penguncian unit.';
   } else if (stage === 'BOOKING' || stage === 'DP_KPR_PROCESS' || stage === 'PPJB_AKAD') {
     stageSpecificDirective =
-      `Prospek berada di Tahap ${stage}. Fokuskan analisis & pesan pada pengawalan kelengkapan dokumen, jadwal pembayaran DP / proses SP3K KPR / jadwal PPJB & Akad secara rapi dan meyakinkan.`;
+      `Prospek berada di Tahap ${stage}. Fokus pada pendampingan proses administrasi/DP/KPR/PPJB secara rapi dan menenangkan.`;
   } else if (stage === 'QUALIFIED') {
     stageSpecificDirective =
-      'Prospek berada di Tahap 3 (QUALIFIED / BANT >= 7). Fokuskan analisis & pesan untuk mengonversi minat menjadi jadwal survei lokasi (Appointment) pada hari & jam yang spesifik.';
+      'Prospek berada di Tahap 3 (QUALIFIED / BANT >= 7). Fokus mengarahkan ke jadwal survei lokasi yang konkret.';
   }
 
   if (isWaOrigin) {
     if ((input.interactionCount || 1) > 1 || stage !== 'NEW') {
+      const { mode, reason } = classifyFollowupReplyMode('WA_ONGOING_CONVERSATION', lastCust);
+      const lengthRule =
+        mode === 'RINGKAS'
+          ? '  - MODE BALASAN: RINGKAS (WAJIB 1–2 kalimat pendek saja, ±60–220 karakter). TANPA bullet point, TANPA mengulang spesifikasi proyek/harga/clubhouse, TANPA menagih Booking Fee. Cukup balas hangat sesuai nada pesan customer.'
+          : mode === 'FOKUS_JAWAB'
+          ? '  - MODE BALASAN: FOKUS_JAWAB (1–2 paragraf singkat, maks 2–4 kalimat total). TANPA daftar bullet brosur berulang. Jawab tepat ke inti pesan/pertanyaan customer, lalu tutup dengan 1 kalimat lanjut yang natural.'
+          : '  - MODE BALASAN: LENGKAP_TERSTRUKTUR (2–3 paragraf rapi, boleh bullet • maks 3–4 poin relevan sesuai yang ditanyakan customer).';
+
       return {
         trackType: 'WA_ONGOING_CONVERSATION',
-        trackLabel: `Balasan Lanjutan Percakapan WA · Tahap ${stage}`,
+        trackLabel: `Balasan Lanjutan Percakapan WA · Tahap ${stage} (${mode})`,
+        replyMode: mode,
         guidanceText: [
           'JALUR B2 - PERCAKAPAN WHATSAPP LANJUTAN / PESAN BARU DARI PROSPEK YANG SAMA:',
           `- Tahap Pipeline Saat Ini: ${stage}. ${stageSpecificDirective}`,
+          `- Alasan Mode Balasan (${mode}): ${reason}`,
           `- Riwayat konteks terbaru (ekor percakapan): "${recentNotesTail}"`,
           lastSales
             ? `- Pesan terakhir dari Sales (${input.seName}): "${lastSales.slice(-300)}"`
             : '- Status: Prospek mengirim pesan tambahan/lanjutan.',
           `- Pesan TERBARU dari Customer yang WAJIB DITANGGAPI SEKARANG: "${lastCust || recentNotesTail}"`,
           '- ATURAN WAJIB:',
-          '  1. Analisis ulang profil BANT, Persona, Poin Kuat, Poin Lemah, dan Rekomendasi Taktis berdasarkan kalimat TERBARU customer ini dan tahap pipeline saat ini.',
-          '  2. DILARANG mengulang salam perkenalan kaku atau mengulang bahasan lama yang sudah selesai (seperti mengulang candaan kopi/jadwal lama jika customer sudah membahas topik baru seperti niat booking pasca-survei).',
-          '  3. Tangkap sinyal buying intent di pesan terbaru customer: jika customer menyatakan niat booking/ambil unit setelah survei, apresiasi antusiasmenya, pastikan unit prioritasnya disiapkan untuk dicek saat survei, dan informasikan prosedur Booking Fee resmi Rp5 juta (rekening PT Andara Rejo Makmur) agar saat survei bisa langsung dikunci.',
-          '  4. Tutup dengan 1 kalimat pengunci langkah konkret berikutnya sesuai tahap pipeline.',
+          lengthRule,
+          '  1. Analisis internal (`ringkas`, `poin_kuat`, `poin_lemah`, `rekomendasi`, `perlu_dicek_ulang`) tetap tajam & taktis untuk SE, sedangkan `followup_draft_message` wajib proporsional mengikuti MODE BALASAN di atas.',
+          '  2. DILARANG mengulang salam perkenalan kaku atau mengulang spesifikasi unit/brosur jika customer tidak menanyakannya.',
+          '  3. Sebut sapaan/nama prospek maksimal 1x di awal pesan; jangan mengulang "Bapak/Ibu" di setiap kalimat.',
         ].join('\n'),
       };
     }
 
+    const { mode, reason } = classifyFollowupReplyMode('WA_FIRST_RESPONSE', lastCust);
+    const firstTurnRule =
+      mode === 'FOKUS_JAWAB'
+        ? '  - MODE BALASAN: FOKUS_JAWAB (2–3 kalimat singkat & ramah, tanpa bullet panjang). Sapa hangat, perkenalkan diri + The Park Townhouse Sukoharjo, lalu tanya kebutuhan hunian/unit yang dicari.'
+        : '  - MODE BALASAN: LENGKAP_TERSTRUKTUR (2–3 paragraf singkat, boleh 2–3 bullet • keunggulan yang paling relevan). Jawab langsung inti pertanyaan customer + sisipkan 1 pertanyaan BANT natural.';
+
     return {
       trackType: 'WA_FIRST_RESPONSE',
-      trackLabel: 'Respon Pertama WhatsApp Inbound (Speed-to-Lead Playbook §7.2)',
+      trackLabel: `Respon Pertama WhatsApp Inbound (${mode})`,
+      replyMode: mode,
       guidanceText: [
         'JALUR B1 - PESAN MASUK WHATSAPP PERTAMA DARI CALON PEMBELI (SPEED-TO-LEAD §7.2):',
         `- Isi pesan masuk dari Customer: "${lastCust || recentNotesTail}"`,
+        `- Alasan Mode Balasan (${mode}): ${reason}`,
         '- ATURAN WAJIB:',
+        firstTurnRule,
         '  1. Sapa customer dengan hangat dan sebut nama SE + The Park Townhouse Sukoharjo.',
-        '  2. Jawab LANGSUNG inti pertanyaan customer (jika tanya harga, sebut rentang resmi mulai Rp650 juta / unit yang relevan, jangan menyembunyikan informasi).',
-        '  3. Berikan 2-3 keunggulan utama proyek yang paling relevan dengan pesan mereka (mis. 2 lantai Japandi Modern, garasi dalam, one-gate RFID + CCTV 24 jam, clubhouse kolam renang/gym/mini golf tanpa biaya membership).',
-        '  4. Sisipkan 1-2 pertanyaan kualifikasi BANT secara natural (Playbook §5.3: rencana hunian keluarga/investasi, preferensi skema KPR/cash bertahap/cash keras, dan ajakan jadwal melihat lokasi/show unit).',
+        '  2. Jawab LANGSUNG inti pertanyaan customer tanpa bertele-tele.',
       ].join('\n'),
     };
   }
@@ -318,13 +441,13 @@ export function buildFollowupContextGuidance(input: LeadAnalysisInput): {
 
   if (stage === 'APPOINTMENT') {
     cadenceRule =
-      'Cadence Penguncian Janji Survei Lokasi (Tahap 4 Appointment - Playbook §7.4): Konfirmasi hari & jam kunjungan ke Jombor, pastikan pengambil keputusan (pasangan/keluarga) ikut hadir, dan sampaikan bahwa simulasi resmi serta unit prioritas sudah disiapkan untuk ditinjau langsung.';
+      'Cadence Penguncian Janji Survei Lokasi (Tahap 4 Appointment - Playbook §7.4): Konfirmasi hari & jam kunjungan ke Jombor, pastikan pengambil keputusan (pasangan/keluarga) ikut hadir, dan sampaikan bahwa simulasi resmi serta unit prioritas sudah disiapkan.';
   } else if (stage === 'VISITED') {
     cadenceRule =
       'Cadence Pasca-Survei Lokasi (Playbook §7.5 & §7.7): Ucapkan terima kasih sudah melihat langsung lokasi & unit di Jombor, rangkum impresi unit yang disukai, tawarkan pengiriman simulasi tertulis resmi, dan dorong langkah penguncian unit.';
   } else if (stage === 'HOT_NEGOTIATION') {
     cadenceRule =
-      'Cadence Negosiasi & Penawaran Tertulis (Playbook §7.6 & §7.7 Hari 5-7): Tindak lanjuti simulasi pembayaran tertulis, atasi keberatan harga/skema (Bab 10), ingatkan ketersediaan unit terbatas (hanya 35 unit di seluruh proyek & kenaikan harga bertahap Rp50 juta/bulan sesuai §2.5), dan arahkan ke Booking Fee Rp5 juta.';
+      'Cadence Negosiasi & Penawaran Tertulis (Playbook §7.6 & §7.7 Hari 5-7): Tindak lanjuti simulasi pembayaran tertulis, atasi keberatan harga/skema (Bab 10), ingatkan keterbatasan unit (hanya 35 unit & kenaikan bertahap Rp50 juta/bulan sesuai §2.5), dan arahkan ke Booking Fee Rp5 juta.';
   } else if (stage === 'BOOKING' || stage === 'DP_KPR_PROCESS' || stage === 'PPJB_AKAD') {
     cadenceRule =
       'Cadence Pasca-Booking / Proses Pemberkasan: Ucapkan apresiasi atas kepercayaan memilih unit di The Park Townhouse, pandu kelengkapan berkas KPR / jadwal pembayaran DP / jadwal PPJB dengan ramah dan rapi.';
@@ -336,15 +459,16 @@ export function buildFollowupContextGuidance(input: LeadAnalysisInput): {
   return {
     trackType: 'MANUAL_POST_INTERACTION',
     trackLabel: `Follow-Up Pasca-Interaksi (${input.source}) · Tahap ${stage}`,
+    replyMode: 'LENGKAP_TERSTRUKTUR',
     guidanceText: [
       'JALUR A - LEAD INPUT MANUAL SE (PROSPEK SUDAH PERNAH BERTEMU / BERDISKUSI DENGAN SALES):',
       `- Konteks pertemuan awal: ${meetingContext} (Sumber: ${input.source}).`,
       `- Strategi Cadence Playbook §7.7: ${cadenceRule}`,
       '- ATURAN MUTLAK JALUR A:',
-      '  1. DILARANG KERAS menulis kalimat seperti chatbot CS: "Terima kasih sudah menghubungi The Park Townhouse Sukoharjo". Prospek ini TIDAK sedang mengirim chat pertama ke bot, melainkan sales yang melakukan FOLLOW-UP hangat setelah bertemu/berbicara!',
-      '  2. Buka dengan sapaan personal yang menghormati gelar/profesi prospek (mis. "Selamat sore, Dokter Andi" atau "Selamat siang, Pak Hendra"), lalu sebutkan apresiasi atas pertemuan/diskusi tadi.',
-      '  3. Hubungkan langsung catatan kebutuhan di lapangan (salesNotes & dimensi Persona) dengan solusi konkret unit yang diminati (harga resmi, konsep 2 lantai Japandi Modern, garasi dalam, one-gate RFID + CCTV 24 jam, clubhouse kolam renang/gym/mini golf tanpa iuran membership).',
-      '  4. Jika skor Authority < 2 (mis. datang sendiri atau harus diskusi pasangan/orang tua), WAJIB ajak prospek datang kembali bersama istri/suami/keluarga pada akhir pekan (Sabtu/Minggu) untuk melihat langsung lokasi dan clubhouse.',
+      '  1. DILARANG KERAS menulis kalimat seperti chatbot CS: "Terima kasih sudah menghubungi The Park Townhouse Sukoharjo".',
+      '  2. Buka dengan sapaan personal yang menghormati gelar/profesi prospek (maksimal 1x di awal pesan), lalu sebutkan apresiasi atas pertemuan/diskusi tadi.',
+      '  3. Hubungkan langsung catatan kebutuhan di lapangan dengan solusi konkret unit yang diminati (maks 2–3 paragraf rapi atau 3 poin singkat agar tetap nyaman dibaca di HP).',
+      '  4. Jika skor Authority < 2, ajak prospek datang kembali bersama pasangan/keluarga pada akhir pekan.',
     ].join('\n'),
   };
 }
@@ -368,42 +492,51 @@ export function buildContextualFallbackFollowup(input: LeadAnalysisInput): strin
   const prevDraft = (input.previousAnalysis?.followup_draft_message || '').trim();
 
   if (guidance.trackType === 'WA_ONGOING_CONVERSATION') {
-    if (/\b(booking|ambil| jadi|cocok|lanjut)\b/i.test(lastCust)) {
-      return [
-        `Alhamdulillah, senang sekali mendengarnya ${salutation} 🙏 Terima kasih banyak atas kepercayaannya pada The Park Townhouse Sukoharjo.`,
-        '',
-        `Untuk kunjungan survei lokasi nanti, saya sudah blokirkan waktu khusus dan menyiapkan unit prioritas ${input.unitInterest} (${priceText}, skema ${humanScheme}) beserta dokumen simulasi resminya agar ${shortCall} bisa mengecek fisik bangunan 2 lantai Japandi Modern, garasi dalam, dan fasilitas clubhouse secara langsung.`,
-        '',
-        `Jika setelah melihat unit di lokasi ${shortCall} sudah mantap, penguncian unit (Booking Fee resmi Rp5 juta) nantinya dilakukan langsung ke rekening resmi PT Andara Rejo Makmur agar unit tersebut otomatis terkunci atas nama ${shortCall}. Sampai bertemu di lokasi Jombor ya, ${shortCall}!`,
-      ].join('\n');
+    if (guidance.replyMode === 'RINGKAS') {
+      if (stage === 'APPOINTMENT') {
+        return `Sama-sama ${salutation}, senang dengarnya 🙏 Sampai ketemu di lokasi Jombor ya, nanti saya siapkan unit ${input.unitInterest} untuk dicek langsung.`;
+      }
+      if (/\b(booking|ambil|jadi|cocok|lanjut)\b/i.test(lastCust)) {
+        return `Siap ${salutation}, senang sekali dengarnya 🙏 Nanti saya siapkan unit prioritas ${input.unitInterest} agar bisa langsung dicek dan diamankan di lokasi.`;
+      }
+      return `Siap ${salutation}, terima kasih kembali 🙏 Kalau nanti ada yang ingin ditanyakan atau disesuaikan jadwalnya, kabari saya saja ya.`;
     }
 
-    if (stage === 'APPOINTMENT' && !prevDraft.includes('agenda kunjungan')) {
+    if (guidance.replyMode === 'FOKUS_JAWAB') {
+      if (/\b(jam|hari|minggu|sabtu|senin|selasa|rabu|kamis|jumat|survei|kunjung|mampir)\b/i.test(lastCust)) {
+        return [
+          `Bisa sekali ${salutation}, jadwalnya sudah saya catat 🙏`,
+          '',
+          `Nanti sekalian saya siapkan simulasi ${humanScheme} untuk ${input.unitInterest} (${priceText}) supaya saat ketemu langsung enak lihat hitungannya.`,
+        ].join('\n');
+      }
       return [
-        `Siap ${salutation}, agenda kunjungan survei ke The Park Townhouse Sukoharjo (Jombor, Bendosari) sudah saya kunci untuk ${shortCall} 🙏`,
+        `Siap ${salutation}, untuk ${input.unitInterest} saat ini menggunakan skema ${humanScheme} (${priceText}).`,
         '',
-        `Nanti di lokasi kita akan langsung meninjau fisik ${input.unitInterest} (${priceText}, skema ${humanScheme}), mengecek kualitas bangunan 2 lantai Japandi Modern, sistem keamanan one-gate RFID + CCTV 4K 24 jam, serta area clubhouse (kolam renang, gym, mini golf) tanpa biaya membership.`,
-        '',
-        `Apakah nanti ${shortCall} hadir bersama pasangan/keluarga supaya sekalian saya siapkan simulasi angka dan opsi unit pembandingnya di meja diskusi?`,
+        `Ada bagian spesifik yang ingin ${shortCall} pastikan dulu, atau mau langsung saya siapkan simulasinya untuk dicek bersama?`,
       ].join('\n');
     }
 
     return [
-      `Baik ${salutation}, menyambung pesan sebelumnya mengenai ${input.unitInterest} dengan skema ${humanScheme} (${priceText}).`,
+      `Baik ${salutation}, berikut rincian singkat untuk ${input.unitInterest} (${priceText}, skema ${humanScheme}):`,
+      `• Tata ruang 2 lantai Japandi Modern dengan garasi dalam`,
+      `• Keamanan one-gate RFID + CCTV 24 jam`,
+      `• Akses clubhouse (kolam renang, gym, mini golf) tanpa biaya membership`,
       '',
-      `Untuk memastikan semua pertimbangan ${shortCall} sekeluarga terjawab tuntas — mulai dari tata ruang 2 lantai Japandi Modern, garasi dalam, keamanan one-gate RFID & CCTV 24 jam, hingga akses clubhouse (kolam renang, gym, mini golf) tanpa biaya membership — saya sudah siapkan rincian simulasi resminya.`,
-      '',
-      `Kira-kira bagian mana yang paling ingin ${shortCall} sesuaikan lebih dulu: simulasi pembayarannya, atau kita jadwalkan melihat langsung unitnya di Jombor akhir pekan ini?`,
+      `Kira-kira bagian mana yang paling ingin ${shortCall} bahas lebih lanjut?`,
     ].join('\n');
   }
 
   if (guidance.trackType === 'WA_FIRST_RESPONSE') {
+    if (guidance.replyMode === 'FOKUS_JAWAB') {
+      return `Halo ${salutation}, salam kenal. Saya ${input.seName} dari The Park Townhouse Sukoharjo (Jombor, Bendosari). Ada rencana cari rumah di kisaran tipe atau skema pembayaran seperti apa ya?`;
+    }
     return [
       `Halo ${salutation}, salam kenal. Saya ${input.seName} dari The Park Townhouse Sukoharjo (Jombor, Bendosari).`,
       '',
-      `Menjawab pertanyaan ${shortCall}: untuk ${input.unitInterest} saat ini ditawarkan dengan harga resmi ${priceText} (tersedia skema ${humanScheme}). Setiap unit sudah mengusung desain 2 lantai Japandi Modern dengan garasi dalam, sistem keamanan one-gate RFID + CCTV 24 jam, serta fasilitas clubhouse (kolam renang, gym, mini golf) tanpa biaya membership bulanan.`,
+      `Menjawab pertanyaan ${shortCall}, untuk ${input.unitInterest} harga resminya ${priceText} (tersedia skema ${humanScheme}). Unitnya sudah 2 lantai Japandi Modern dengan garasi dalam, keamanan one-gate RFID + CCTV 24 jam, dan akses clubhouse tanpa iuran membership.`,
       '',
-      `Supaya saya kirimkan denah dan simulasi angka yang paling pas: rencananya rumah ini untuk dihuni sendiri bersama keluarga atau investasi, ${shortCall}? Dan bila berkenan, apakah akhir pekan ini ada waktu luang untuk mampir melihat lokasinya langsung?`,
+      `Rencananya untuk hunian keluarga sendiri atau investasi ya? Kalau berkenan, akhir pekan ini bisa mampir melihat lokasinya langsung.`,
     ].join('\n');
   }
 
@@ -449,11 +582,14 @@ function sanitizeFollowupDraft(draft: string, input: LeadAnalysisInput): string 
     const regex = new RegExp(forbidden, 'gi');
     clean = clean.replace(regex, 'sesuai ketentuan resmi proyek');
   }
-  // Bersihkan kebocoran kode enum mentah bila AI tidak sengaja menulisnya
+  // Bersihkan kebocoran kode enum mentah & ekspresi slang canggung bila AI tidak sengaja menulisnya
   clean = clean
     .replace(/\bCASH_KERAS\b/g, 'cash keras')
     .replace(/\bCASH_TEMPO_12\b/g, 'cash bertahap 12 bulan')
-    .replace(/\bCASH_TEMPO_24\b/g, 'cash bertahap 24 bulan');
+    .replace(/\bCASH_TEMPO_24\b/g, 'cash bertahap 24 bulan')
+    .replace(/\b(wkwk+w*|h+a+h+a+)\b[!,.?\s]*/gi, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 
   if (!clean) {
     return buildContextualFallbackFollowup(input);
@@ -618,6 +754,7 @@ export async function analyzeLeadWithAi(input: LeadAnalysisInput): Promise<LeadA
 
   const deterministicIssues = detectUnclearLeadParts(input);
   const personaRef = PLAYBOOK_BUYER_PERSONAS[input.personaCode] || PLAYBOOK_BUYER_PERSONAS.P1;
+  const personaVoice = PERSONA_VOICE_GUIDE[input.personaCode] || PERSONA_VOICE_GUIDE.LAINNYA;
   const { salutation, shortCall } = buildNaturalSalutation(input.fullName, input.personaCode);
   const humanScheme = formatHumanPaymentScheme(input.paymentScheme);
   const followupGuidance = buildFollowupContextGuidance(input);
@@ -696,8 +833,18 @@ export async function analyzeLeadWithAi(input: LeadAnalysisInput): Promise<LeadA
     '',
     'INSTRUKSI PESAN WHATSAPP (`followup_draft_message`):',
     followupGuidance.guidanceText,
-    `- Sapa dengan "${salutation}" (JANGAN tulis "Bapak/Ibu ${input.fullName}" atau enum "CASH_KERAS").`,
-    `- Skema pembayaran ditulis "${humanScheme}". Format 3-4 paragraf WhatsApp rapi (boleh bullet • untuk 3-4 keunggulan utama unit).`,
+    `- Gaya Bahasa Persona (${input.personaCode} - ${personaRef.archetype}):`,
+    `  * Nada: ${personaVoice.tone}`,
+    `  * Fokus kalimat: ${personaVoice.styleRule}`,
+    `  * Hindari: ${personaVoice.avoid}`,
+    `- Sapa dengan "${salutation}" maksimal 1x di awal pesan (JANGAN tulis "Bapak/Ibu ${input.fullName}", JANGAN ulang "Bapak/Ibu" di setiap kalimat, JANGAN tulis enum "CASH_KERAS").`,
+    `- Skema pembayaran ditulis "${humanScheme}".`,
+    `- DILARANG keras memakai ekspresi canggung/bot seperti "wkwk", "haha", "tanda positif yang sangat kami nikmati", atau kalimat terjemahan kaku.`,
+    followupGuidance.replyMode === 'RINGKAS'
+      ? '- KEPADATAN WAJIB (MODE RINGKAS): Tulis HANYA 1–2 kalimat pendek (±60–220 karakter) layaknya balasan chat WhatsApp manusia nyata. JANGAN buat paragraf panjang atau bullet point!'
+      : followupGuidance.replyMode === 'FOKUS_JAWAB'
+      ? '- KEPADATAN WAJIB (MODE FOKUS_JAWAB): Tulis 1–2 paragraf singkat (maks 2–4 kalimat total), tanpa bullet brosur berulang. Jawab langsung intinya saja.'
+      : '- KEPADATAN WAJIB (MODE LENGKAP_TERSTRUKTUR): Tulis maksimal 2–3 paragraf singkat yang nyaman dibaca di layar HP (boleh bullet • maksimal 3–4 poin relevan saja).',
     '',
     'Jika data tidak jelas (nama samar, domisili kosong, catatan <4 kata), set "clarity_status": "PERLU_DILENGKAPI" dan isi "unclear_parts".',
     'Jika dari pesan terbaru customer terdeteksi informasi baru tentang domisili, unit minat (Cluster Nagoya/Osaka/Tokyo), atau skema bayar (KPR/CASH_KERAS/CASH_TEMPO_12/CASH_TEMPO_24), sertakan di key opsional extracted_domicile, extracted_unit_interest, extracted_payment_scheme.',
