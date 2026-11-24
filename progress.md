@@ -3,6 +3,86 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-058 | 2026-11-24 | Regenerasi Laporan Harian IT DOCX dengan Tangkapan Layar 16:9 Full Monitor
+- Status: selesai
+- Ubah: `docs/laporan-harian/2026-11-24/IT-LH-24-NOV-2026.md`, `scripts/generate_daily_report_docx.ts`, folder bukti (10 tangkapan layar 1920x1080)
+- Alasan/keputusan: Pengambilan ulang 10 tangkapan layar antarmuka desktop standar monitor 16:9 penuh (1920x1080) pada Lingkungan A (http://localhost:5173) dan Lingkungan B (https://developerproperti.giivepro.com) mencakup seluruh 8 peran akun, serta kompilasi dokumen Word baru bebas pemotongan visual.
+- Verifikasi: Berkas DOCX 5,00 MB terbit di `D:\Laporan Andara Rejo Makmur\Harian\Laporan_Harian_Divisi_IT_24_November_2026_v2.docx`.
+- Berikutnya: -
+
+
+## P-057 | 2026-11-24 | Pembaruan Nomor Kontak IT Internal Developer Sales OS
+- Status: selesai
+- Ubah: `src/data.ts` (nomor WhatsApp Tim IT Internal / SUPERADMIN_IT diperbarui ke +6288980961427)
+- Alasan/keputusan: Permintaan penggantian nomor WhatsApp kontak resmi Tim IT Internal Developer Sales OS menjadi 088980961427.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (sukses).
+- Berikutnya: -
+
+
+## P-056 | 2026-11-24 | Penerapan MFA Seluruh Akun & Penyusunan Dokumen Laporan Harian IT DOCX
+- Status: selesai
+- Ubah: `src/lib/auth/dummy-accounts.ts`, `src/components/LoginModal.tsx`, `tests/auth-dummy.test.ts`, `scripts/generate_daily_report_docx.ts`, `docs/laporan-harian/2026-11-24/`
+- Alasan/keputusan: Implementasi MFA 2 langkah (OTP 6-digit WhatsApp) untuk seluruh 9 akun peran, serta penyusunan dokumen laporan harian resmi format `.docx` (1,95 MB, 15 bagian lengkap + 7 bukti screenshot embedded) disimpan ke `D:\Laporan Andara Rejo Makmur\Harian\Laporan_Harian_Divisi_IT_24_November_2026.docx`.
+- Verifikasi: `bun test` (136 pass, 0 fail), verifikasi file DOCX 1.948.499 bytes.
+- Berikutnya: -
+
+
+## P-055 | 2026-11-24 | Standardisasi Bahasa Bebas Kode Teknis & Penghapusan Emoticon UI
+- Status: selesai (lokal saja, tidak di-push sesuai instruksi pengguna)
+- Ubah: `src/components/PipelinePage.tsx`, `src/components/company/CompanyAuditLogsModal.tsx`, `src/components/FieldOpsModal.tsx`, `src/components/field/GpsLiveRadarMap.tsx`, `src/components/content/ContentSlotOverviewPage.tsx`, `src/components/superadmin/PlatformExecutiveDashboard.tsx`, `src/components/SuperadminPanel.tsx`
+- Alasan/keputusan: Mengganti label "Karantina DEV-26" menjadi "Penyaringan Spam" yang profesional dan mudah dimengerti orang awam, serta menghapus seluruh emoticon/emoji di antarmuka pengguna agar bersih dan berstandar enterprise.
+- Verifikasi: `bun test` (131 pass, 0 fail), `npm run build` (sukses).
+- Berikutnya: -
+
+## P-054 | 2026-11-24 | Uji Isolasi Multi-Tenant Komprehensif (Tenant Baru, 100 Pengguna & 100 Data Dummy)
+- Status: selesai (lokal saja, tidak di-push sesuai instruksi pengguna)
+- Ubah: `server/index.ts`, `tests/multi-tenant-leakage-isolation.test.ts`
+- Alasan/keputusan: Menutup celah kebocoran data antar developer (Multi-Tenant Scoping) pada endpoint rekening bank, audit logs, pipeline leads, lead pool claim/reassign/release, update & delete leads, serta memverifikasi zero data leakage dengan 100 pengguna dan 100 data dummy.
+- Verifikasi: `bun test tests/multi-tenant-leakage-isolation.test.ts` (8 pass, 0 fail), `bun test` (131 pass, 0 fail), `npm run build` (sukses).
+- Berikutnya: -
+
+## P-054 | 2026-11-24 | Uji Isolasi Multi-Tenant Komprehensif (Tenant Baru, 100 Pengguna & 100 Data Dummy)
+- Status: selesai (lokal saja, tidak di-push sesuai instruksi pengguna)
+- Ubah: `server/index.ts`, `tests/multi-tenant-leakage-isolation.test.ts`
+- Alasan/keputusan: Menutup celah kebocoran data antar developer (Multi-Tenant Scoping) pada endpoint rekening bank, audit logs, pipeline leads, lead pool claim/reassign/release, update & delete leads, serta memverifikasi zero data leakage dengan 100 pengguna dan 100 data dummy.
+- Verifikasi: `bun test tests/multi-tenant-leakage-isolation.test.ts` (8 pass, 0 fail), `bun test` (131 pass, 0 fail), `npm run build` (sukses).
+- Berikutnya: -
+
+## P-053 | 2026-11-24 | Pembersihan Label Kode Teknis UI Menjadi Bahasa Bisnis Awam
+- Status: selesai (lokal saja, tidak di-push sesuai instruksi pengguna)
+- Ubah: `src/components/company/CompanyBankAccountsModal.tsx`, `src/components/company/CompanyAuditLogsModal.tsx`, `src/App.tsx`, `src/components/FieldOpsModal.tsx`, `src/components/PipelinePage.tsx`, `src/components/JalurProyek.tsx`, `src/components/PricingTable.tsx`, `server/ai-engine.ts`
+- Alasan/keputusan: Menghapus/mengganti kode modul dan istilah audit internal ("(Modul Q1 & S21)", "(Temuan T2)", "Whitelist AI F93", "F100 Copilot", "Log CRUD", "Karantina DEV-26") dengan bahasa bisnis yang mudah dipahami pengguna awam.
+- Verifikasi: `bun test` (123 pass, 0 fail), `npx tsc --noEmit` (0 error), `npm run build` (sukses dalam 896ms).
+- Berikutnya: -
+
+## P-053 | 2026-11-24 | Pembersihan Label Kode Teknis UI Menjadi Bahasa Bisnis Awam
+- Status: selesai (lokal saja, tidak di-push sesuai instruksi pengguna)
+- Ubah: `src/components/company/CompanyBankAccountsModal.tsx`, `src/components/company/CompanyAuditLogsModal.tsx`, `src/App.tsx`, `src/components/FieldOpsModal.tsx`, `src/components/PipelinePage.tsx`, `src/components/JalurProyek.tsx`, `src/components/PricingTable.tsx`, `server/ai-engine.ts`
+- Alasan/keputusan: Menghapus/mengganti kode modul dan istilah audit internal ("(Modul Q1 & S21)", "(Temuan T2)", "Whitelist AI F93", "F100 Copilot", "Log CRUD", "Karantina DEV-26") dengan bahasa bisnis yang mudah dipahami pengguna awam.
+- Verifikasi: `bun test` (123 pass, 0 fail), `npx tsc --noEmit` (0 error), `npm run build` (sukses dalam 896ms).
+- Berikutnya: -
+
+## P-052 | 2026-11-24 | Rekonsiliasi Metrik Direksi (T1), Privasi WA UU PDP (T3), FinOps AIC Metering (T7) & F100 Copilot
+- Status: selesai (lokal saja, tidak di-push sesuai instruksi pengguna)
+- Ubah: `src/App.tsx`, `server/ai-engine.ts`, `server/index.ts`, `server/wa-baileys.ts`, `src/components/FieldOpsModal.tsx`, `src/components/PipelinePage.tsx`, `tests/audit-findings-remediation.test.ts`
+- Alasan/keputusan: Menutup Temuan T1 (rekonsiliasi akumulasi Net Sales & Omzet real portofolio + glosarium metrik tunggal), Temuan T3 (kepatuhan UU PDP No. 27/2022 via auto-suppression list saat opt-out STOP & disclaimer draf), Temuan T7 (FinOps AIC metering ledger, budget cap throttle saat saldo 0), dan Modul M17 F100 (interactive AI activity copilot checklist + debet 5 AIC).
+- Verifikasi: `bun test` (123 pass, 0 fail), `npx tsc --noEmit` (0 error), `npm run build` (sukses dalam 1.26s).
+- Berikutnya: -
+
+## P-051 | 2026-11-24 | Rekening Resmi Perusahaan, Audit Trail CRUD Global, Lead Ownership, Lead Pool & AI Screening DEV-26
+- Status: selesai (lokal saja, tidak di-push sesuai instruksi pengguna)
+- Ubah: `src/components/PipelinePage.tsx`, `src/components/company/CompanyBankAccountsModal.tsx`, `src/components/company/CompanyAuditLogsModal.tsx`, `src/lib/leads/dev26-screening.ts`, `server/index.ts`, `server/ai-engine.ts`, `src/App.tsx`, `tests/dev26-and-company-accounts.test.ts`
+- Alasan/keputusan: Menutup Temuan T2 (fraud rekening) dengan master data whitelist rekening resmi (CRUD oleh SM/Admin), Temuan T4 (audit data) dengan pencatatan & viewer log CRUD global, Temuan T5 (kualitas lead) dengan screening DEV-26, serta permintaan kepemilikan lead ("Milik SE Siapa") dan Lead Pool (claim SE & assign SM/Admin).
+- Verifikasi: `bun test` (116 pass, 0 fail), `npx tsc --noEmit` (0 error), `npm run build` (sukses dalam 978ms).
+- Berikutnya: -
+
+## P-050 | 2026-11-24 | Presensi Mandiri SM & Admin, Multi-Marker Live Radar SE, dan Pelacakan GPS Persisten Antar-Halaman
+- Status: selesai (lokal, siap uji coba, tidak di-push sesuai instruksi pengguna)
+- Ubah: `src/components/FieldOpsModal.tsx`, `src/components/field/GpsLiveRadarMap.tsx`
+- Alasan/keputusan: SM & Admin sebelumnya tidak dapat melakukan presensi mandiri (karena ter-bypass ke tabel monitoring), SM & Admin belum dapat melihat peta live multi-marker tim SE di tab Absen & GPS, dan radar lokasi SE mati otomatis saat berpindah tab akibat unmount lokal `watchPosition`.
+- Verifikasi: `bun test` (111 pass, 0 fail), `npx tsc --noEmit` (0 error), `npm run build` (sukses dalam 1.30s).
+- Berikutnya: -
+
 ## P-049 | 2026-11-24 | Proporsionalitas Panjang Balasan WA & Persona Voice Guide di AI Lead Engine
 - Status: selesai (live di `hades` & pushed ke GitHub)
 - Ubah: `server/ai-engine.ts`, `tests/playbook-v1-2-pipeline.test.ts`

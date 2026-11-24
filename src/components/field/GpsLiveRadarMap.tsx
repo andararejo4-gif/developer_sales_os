@@ -8,6 +8,7 @@ import {
   Navigation,
   Radio,
   AlertCircle,
+  Check,
 } from 'lucide-react';
 import osmPoisData from '../../data/osm_poi.json';
 import {
@@ -39,10 +40,35 @@ export interface RadarWaypoint extends DailyRouteWaypoint {
   visited?: boolean;
 }
 
+export interface TeamMemberLiveMarker {
+  id: string;
+  name: string;
+  email: string;
+  seId: string;
+  role: string;
+  zone: string;
+  lat: number;
+  lng: number;
+  distanceFromProjectKm: number;
+  locationLabel: string;
+  lastUpdated: string;
+  isOnline: boolean;
+  statusLabel: string;
+  avatarText?: string;
+  photoUrl?: string | null;
+}
+
 interface GpsLiveRadarMapProps {
   routeWaypoints?: RadarWaypoint[];
   onLocationResolved?: (info: LiveGpsState) => void;
   onUseLocationForCheckin?: (info: LiveGpsState, matchedWaypoint?: RadarWaypoint) => void;
+  isTracking?: boolean;
+  onToggleTracking?: (active: boolean) => void;
+  liveGpsState?: LiveGpsState | null;
+  teamLiveMarkers?: TeamMemberLiveMarker[];
+  focusedCoordinates?: { lat: number; lng: number } | null;
+  currentUserRole?: string;
+  currentUserName?: string;
 }
 
 function formatDistance(km: number): string {
@@ -54,18 +80,28 @@ export const GpsLiveRadarMap: React.FC<GpsLiveRadarMapProps> = ({
   routeWaypoints = [],
   onLocationResolved,
   onUseLocationForCheckin,
+  isTracking: isTrackingProp,
+  onToggleTracking,
+  liveGpsState,
+  teamLiveMarkers = [],
+  focusedCoordinates,
+  currentUserRole = 'SE',
+  currentUserName,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const seMarkerRef = useRef<L.Marker | null>(null);
   const accuracyCircleRef = useRef<L.Circle | null>(null);
   const routeLayerRef = useRef<L.LayerGroup | null>(null);
+  const teamLayerRef = useRef<L.LayerGroup | null>(null);
   const lastGeocodeCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
 
-  const [isTracking, setIsTracking] = useState(false);
+  const [internalIsTracking, setInternalIsTracking] = useState(false);
+  const isTracking = isTrackingProp !== undefined ? isTrackingProp : internalIsTracking;
+
   const [isLocatingOnce, setIsLocatingOnce] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
-  const [liveGps, setLiveGps] = useState<LiveGpsState | null>(null);
+  const [liveGps, setLiveGps] = useState<LiveGpsState | null>(liveGpsState || null);
   const [followMe, setFollowMe] = useState(true);
 
   const pois = useMemo(() => (osmPoisData as OsmPoiItem[]).filter((p) => p.lat && p.lng && p.name), []);
@@ -133,6 +169,7 @@ export const GpsLiveRadarMap: React.FC<GpsLiveRadarMapProps> = ({
       .bindPopup(`<b>${PROJECT_BASE_COORDS.label}</b><br/>Titik Pusat Proyek`);
 
     routeLayerRef.current = L.layerGroup().addTo(map);
+    teamLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
     return () => {
@@ -141,8 +178,89 @@ export const GpsLiveRadarMap: React.FC<GpsLiveRadarMapProps> = ({
       seMarkerRef.current = null;
       accuracyCircleRef.current = null;
       routeLayerRef.current = null;
+      teamLayerRef.current = null;
     };
   }, []);
+
+  // Update live marker ketika liveGpsState dari parent berubah
+  useEffect(() => {
+    if (liveGpsState) {
+      setLiveGps(liveGpsState);
+      updateRadarMarker(liveGpsState.lat, liveGpsState.lng, liveGpsState.accuracy);
+    }
+  }, [liveGpsState]);
+
+  // Efek fokus peta ke titik koordinat tertentu saat tombol "Fokus di Peta" ditekan
+  useEffect(() => {
+    if (!focusedCoordinates || !mapRef.current) return;
+    mapRef.current.setView([focusedCoordinates.lat, focusedCoordinates.lng], 16, { animate: true });
+  }, [focusedCoordinates]);
+
+  // Render multi-marker live SE untuk Manager (SM / Admin)
+  useEffect(() => {
+    const layer = teamLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+
+    if (!teamLiveMarkers || teamLiveMarkers.length === 0) return;
+
+    teamLiveMarkers.forEach((member) => {
+      const isOnline = member.isOnline;
+      const dotColor = isOnline ? '#16A34A' : '#64748B';
+      const haloColor = isOnline ? 'rgba(22,163,74,0.3)' : 'transparent';
+      const initials =
+        member.avatarText ||
+        member.name
+          .split(' ')
+          .slice(0, 2)
+          .map((n) => n[0])
+          .join('')
+          .toUpperCase();
+
+      const memberIcon = L.divIcon({
+        className: 'team-live-marker',
+        html: `
+          <div style="position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;">
+            <div style="position:relative;width:38px;height:38px;display:flex;align-items:center;justify-content:center;">
+              ${
+                isOnline
+                  ? `<span style="position:absolute;width:38px;height:38px;border-radius:9999px;background:${haloColor};animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></span>`
+                  : ''
+              }
+              <div style="position:relative;width:32px;height:32px;border-radius:9999px;background:#2C1E16;color:#FFFFFF;border:2.5px solid ${dotColor};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,0.35);">
+                ${initials}
+              </div>
+              <span style="position:absolute;bottom:0;right:0;width:10px;height:10px;border-radius:9999px;background:${dotColor};border:2px solid #fff;"></span>
+            </div>
+            <div style="background:rgba(44,30,22,0.92);color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px;margin-top:2px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.2);">
+              ${member.name.split(' ')[0]} (${member.role || 'SE'})
+            </div>
+          </div>
+        `,
+        iconSize: [60, 56],
+        iconAnchor: [30, 24],
+      });
+
+      L.marker([member.lat, member.lng], { icon: memberIcon, zIndexOffset: isOnline ? 900 : 500 })
+        .addTo(layer)
+        .bindPopup(`
+          <div style="font-family:sans-serif;padding:4px 2px;min-width:180px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <span style="font-size:12px;font-weight:800;color:#2C1E16;">${member.name}</span>
+              <span style="background:${isOnline ? '#DCFCE7' : '#F1F5F9'};color:${
+                isOnline ? '#15803D' : '#475569'
+              };font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;">${member.statusLabel}</span>
+            </div>
+            <div style="font-size:11px;color:#64748B;line-height:1.4;">
+              <b>Zona:</b> ${member.zone}<br/>
+              <b>Lokasi:</b> ${member.locationLabel}<br/>
+              <b>Jarak ke Proyek:</b> ${member.distanceFromProjectKm.toFixed(2)} km<br/>
+              <b>Update Terakhir:</b> ${member.lastUpdated}
+            </div>
+          </div>
+        `);
+    });
+  }, [teamLiveMarkers]);
 
   // Render pin titik rute canvassing hari ini di peta radar
   useEffect(() => {
@@ -253,7 +371,7 @@ export const GpsLiveRadarMap: React.FC<GpsLiveRadarMapProps> = ({
     if (!seMarkerRef.current) {
       seMarkerRef.current = L.marker([lat, lng], { icon: radarIcon, zIndexOffset: 1000 })
         .addTo(map)
-        .bindPopup('<b>Posisi Anda Sekarang</b>');
+        .bindPopup(`<b>${currentUserName || 'Posisi Anda Sekarang'} (${currentUserRole})</b><br/>Update radar live`);
     } else {
       seMarkerRef.current.setLatLng([lat, lng]);
     }
@@ -276,12 +394,21 @@ export const GpsLiveRadarMap: React.FC<GpsLiveRadarMapProps> = ({
     }
   };
 
-  // Live watchPosition ala ShopeeFood
+  const handleToggleTracking = () => {
+    if (onToggleTracking) {
+      onToggleTracking(!isTracking);
+    } else {
+      setInternalIsTracking(!internalIsTracking);
+    }
+  };
+
+  // Live watchPosition lokal (hanya jika parent tidak menyediakan liveGpsState)
   useEffect(() => {
-    if (!isTracking) return;
+    if (!isTracking || liveGpsState) return;
     if (!navigator.geolocation) {
       setGpsError('Browser tidak mendukung GPS / Geolocation.');
-      setIsTracking(false);
+      if (onToggleTracking) onToggleTracking(false);
+      else setInternalIsTracking(false);
       return;
     }
 
@@ -298,7 +425,8 @@ export const GpsLiveRadarMap: React.FC<GpsLiveRadarMapProps> = ({
             ? 'Izin lokasi ditolak browser. Aktifkan izin lokasi (Location) di pengaturan browser Anda.'
             : 'Gagal membaca sinyal GPS. Pastikan GPS perangkat aktif atau coba di area terbuka.'
         );
-        setIsTracking(false);
+        if (onToggleTracking) onToggleTracking(false);
+        else setInternalIsTracking(false);
       },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 }
     );
@@ -306,7 +434,7 @@ export const GpsLiveRadarMap: React.FC<GpsLiveRadarMapProps> = ({
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [isTracking, followMe]);
+  }, [isTracking, followMe, liveGpsState, onToggleTracking]);
 
   const handleLocateOnce = () => {
     if (!navigator.geolocation) {
@@ -362,7 +490,9 @@ export const GpsLiveRadarMap: React.FC<GpsLiveRadarMapProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-white/70">
-              Deteksi posisi real-time, nama jalan, landmark terdekat &amp; target rute harian.
+              {teamLiveMarkers.length > 0
+                ? `Memantau ${teamLiveMarkers.filter((m) => m.isOnline).length}/${teamLiveMarkers.length} tim SE aktif di lapangan · Update live WIB.`
+                : 'Deteksi posisi real-time, nama jalan, landmark terdekat & target rute harian.'}
             </p>
           </div>
         </div>
@@ -383,7 +513,7 @@ export const GpsLiveRadarMap: React.FC<GpsLiveRadarMapProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setIsTracking((prev) => !prev)}
+            onClick={handleToggleTracking}
             className={`min-h-[40px] inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
               isTracking
                 ? 'bg-rose-500 hover:bg-rose-600 text-white'
@@ -472,9 +602,13 @@ export const GpsLiveRadarMap: React.FC<GpsLiveRadarMapProps> = ({
                   <div className="space-y-1">
                     {nearbyContext.nearestWaypoints.slice(0, 3).map(({ wp, distKm }) => (
                       <div key={`${wp.order}-${wp.name}`} className="flex items-center justify-between text-xs gap-2">
-                        <span className="text-espresso truncate">
-                          {wp.visited ? '✅ ' : '📍 '}
-                          {wp.name}
+                        <span className="text-espresso truncate inline-flex items-center gap-1">
+                          {wp.visited ? (
+                            <Check className="size-3 text-emerald-600 shrink-0" />
+                          ) : (
+                            <MapPin className="size-3 text-terracotta shrink-0" />
+                          )}
+                          <span>{wp.name}</span>
                         </span>
                         <span className="text-[11px] font-semibold text-terracotta shrink-0">
                           {formatDistance(distKm)}

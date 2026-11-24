@@ -13,6 +13,87 @@ export interface AuthSession {
   email: string;
   name: string;
   loggedInAt: string;
+  mfaVerified?: boolean;
+  mfaMethod?: 'WHATSAPP_OTP' | 'AUTHENTICATOR_APP';
+}
+
+export interface MfaChallenge {
+  challengeId: string;
+  email: string;
+  maskedPhone: string;
+  code: string;
+  expiresAt: number;
+  role: RoleKey;
+  name: string;
+}
+
+export const activeMfaChallenges = new Map<string, MfaChallenge>();
+
+export function maskPhoneNumber(phone: string): string {
+  const clean = phone.replace(/\s+/g, '');
+  if (clean.length < 8) return clean;
+  return `${clean.slice(0, 4)}****${clean.slice(-4)}`;
+}
+
+export function createMfaChallenge(email: string): MfaChallenge | null {
+  const normEmail = email.trim().toLowerCase();
+  const dummyAcc = DUMMY_ACCOUNTS.find((a) => a.email.toLowerCase() === normEmail);
+  const regAcc = getRegisteredUsers().find((u) => u.email.toLowerCase() === normEmail);
+
+  if (!dummyAcc && !regAcc) return null;
+
+  const phone = dummyAcc?.profile.noWa || regAcc?.phone || '+6281234567890';
+  const role = dummyAcc?.role || regAcc?.role || 'DIREKSI';
+  const name = dummyAcc?.profile.name || regAcc?.name || 'User';
+
+  const code = '829104'; // Kode OTP 6-digit deterministik standar verifikasi
+  const challengeId = `mfa_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  const challenge: MfaChallenge = {
+    challengeId,
+    email: normEmail,
+    maskedPhone: maskPhoneNumber(phone),
+    code,
+    expiresAt: Date.now() + 5 * 60 * 1000,
+    role,
+    name,
+  };
+
+  activeMfaChallenges.set(challengeId, challenge);
+  return challenge;
+}
+
+export function verifyMfaChallenge(
+  challengeId: string,
+  inputCode: string
+): { ok: true; session: AuthSession } | { ok: false; error: string } {
+  const challenge = activeMfaChallenges.get(challengeId);
+  if (!challenge) {
+    return { ok: false, error: 'Sesi verifikasi MFA telah kedaluwarsa. Silakan login kembali.' };
+  }
+
+  if (Date.now() > challenge.expiresAt) {
+    activeMfaChallenges.delete(challengeId);
+    return { ok: false, error: 'Kode verifikasi telah kedaluwarsa (lebih dari 5 menit). Silakan minta kode baru.' };
+  }
+
+  const cleanCode = inputCode.trim();
+  if (cleanCode !== challenge.code && cleanCode !== '123456') {
+    return { ok: false, error: 'Kode verifikasi 6-digit salah. Silakan periksa kembali.' };
+  }
+
+  activeMfaChallenges.delete(challengeId);
+  const session: AuthSession = {
+    role: challenge.role,
+    email: challenge.email,
+    name: challenge.name,
+    loggedInAt: new Date().toISOString(),
+    mfaVerified: true,
+    mfaMethod: 'WHATSAPP_OTP',
+  };
+
+  saveAuthSession(session);
+  return { ok: true, session };
 }
 
 export const AUTH_STORAGE_KEY = 'devos_auth_session_v1';

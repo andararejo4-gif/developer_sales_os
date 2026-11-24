@@ -53,16 +53,258 @@ import {
   type PipelineStageCode,
 } from '../src/lib/kb/playbook-v1-2-knowledge';
 import { USERS_BY_ROLE, type RoleKey } from '../src/data';
+import { screenLeadQuality } from '../src/lib/leads/dev26-screening';
 
 const PORT = Number(process.env.API_PORT || 3040);
+
+async function recordAuditLog(params: {
+  tenantId?: string;
+  actorEmail: string;
+  actorName: string;
+  actorRole: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'CLAIM' | 'REASSIGN';
+  targetEntity: 'LEAD' | 'BANK_ACCOUNT' | 'UNIT' | 'ATTENDANCE' | 'SYSTEM';
+  targetId: string;
+  summary: string;
+  details?: Record<string, any>;
+}): Promise<void> {
+  try {
+    const tenantId = params.tenantId || 'andara_rejo_makmur';
+    await sql`
+      INSERT INTO sales_os.activity_audit_logs (
+        tenant_id, actor_email, actor_name, actor_role, action, target_entity, target_id, summary, details
+      ) VALUES (
+        ${tenantId},
+        ${params.actorEmail},
+        ${params.actorName},
+        ${params.actorRole},
+        ${params.action},
+        ${params.targetEntity},
+        ${params.targetId},
+        ${params.summary},
+        ${sql.json((params.details || {}) as any)}
+      )
+    `;
+  } catch (err) {
+    console.warn('[AuditLog] Gagal merekam aktivitas:', err);
+  }
+}
+
+async function getVerifiedCompanyBankAccounts(tenantId: string = 'andara_rejo_makmur'): Promise<Array<{ bankName: string; accountNumber: string; accountHolder: string }>> {
+  try {
+    const rows = await sql`
+      SELECT bank_name, account_number, account_holder
+      FROM sales_os.company_bank_accounts
+      WHERE is_active = true AND tenant_id = ${tenantId}
+      ORDER BY is_primary DESC, created_at ASC
+    `;
+    if (rows.length > 0) {
+      return rows.map((r: any) => ({
+        bankName: String(r.bank_name),
+        accountNumber: String(r.account_number),
+        accountHolder: String(r.account_holder),
+      }));
+    }
+  } catch {
+    // fallback
+  }
+  return [{ bankName: 'BCA', accountNumber: '0158829100', accountHolder: 'PT Andara Rejo Makmur' }];
+}
+
+// ============================================================================
+// KEPATUHAN UU PDP NO. 27/2022 & WA PRIVACY SUPPRESSION (Temuan T3 / F92)
+// ============================================================================
+function isOptOutKeyword(text: string): boolean {
+  if (!text) return false;
+  return /\b(stop|berhenti|batal|jangan hubungi|tidak berkenan|unsubscribe|unsub)\b/i.test(text);
+}
+
+function cleanPhoneWa(phone: string): string {
+  let cleaned = String(phone || '').replace(/\D/g, '');
+  if (cleaned.startsWith('0')) cleaned = '62' + cleaned.slice(1);
+  return cleaned;
+}
+
+async function isPhoneSuppressed(phone: string): Promise<boolean> {
+  const cleaned = cleanPhoneWa(phone);
+  if (!cleaned) return false;
+  try {
+    const rows = await sql`
+      SELECT id FROM sales_os.wa_suppression_list
+      WHERE phone_number = ${cleaned} OR phone_number = ${phone}
+      LIMIT 1
+    `;
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function addPhoneToSuppression(params: {
+  phoneNumber: string;
+  leadId?: string;
+  leadName?: string;
+  reason?: string;
+  notes?: string;
+}): Promise<void> {
+  const cleaned = cleanPhoneWa(params.phoneNumber);
+  if (!cleaned) return;
+  try {
+    await sql`
+      INSERT INTO sales_os.wa_suppression_list (
+        phone_number, lead_id, lead_name, reason, notes, opted_out_at
+      ) VALUES (
+        ${cleaned}, ${params.leadId || null}, ${params.leadName || null},
+        ${params.reason || 'USER_OPT_OUT'}, ${params.notes || 'Dicatat otomatis oleh sistem'}, NOW()
+      )
+      ON CONFLICT (phone_number) DO UPDATE SET
+        reason = EXCLUDED.reason,
+        notes = EXCLUDED.notes,
+        opted_out_at = NOW()
+    `;
+  } catch (err) {
+    console.warn('[Suppression] Gagal menambahkan nomor ke daftar:', err);
+  }
+}
+
+async function removePhoneFromSuppression(phoneNumber: string): Promise<void> {
+  const cleaned = cleanPhoneWa(phoneNumber);
+  try {
+    await sql`DELETE FROM sales_os.wa_suppression_list WHERE phone_number = ${cleaned} OR phone_number = ${phoneNumber}`;
+  } catch (err) {
+    console.warn('[Suppression] Gagal menghapus nomor:', err);
+  }
+}
+
+// ============================================================================
+// MESIN FINOPS AIC METERING & BUDGET CAPPING (Temuan T7 / F93 / Bab 11)
+// ============================================================================
+async function getTenantAicWallet(tenantId: string = 'andara_rejo_makmur'): Promise<{
+  tenantId: string;
+  planCode: string;
+  totalAicGranted: number;
+  balanceAic: number;
+  reservedAic: number;
+  validUntil: string;
+  isThrottled: boolean;
+}> {
+  try {
+    const rows = await sql`
+      SELECT * FROM sales_os.tenant_aic_wallets
+      WHERE tenant_id = ${tenantId}
+      LIMIT 1
+    `;
+    if (rows.length > 0) {
+      const r = rows[0] as any;
+      return {
+        tenantId: String(r.tenant_id),
+        planCode: String(r.plan_code),
+        totalAicGranted: Number(r.total_aic_granted),
+        balanceAic: Number(r.balance_aic),
+        reservedAic: Number(r.reserved_aic || 0),
+        validUntil: new Date(r.valid_until).toISOString(),
+        isThrottled: Boolean(r.is_throttled || r.balance_aic <= 0),
+      };
+    }
+  } catch (err) {
+    console.warn('[AIC] Gagal membaca wallet tenant:', err);
+  }
+  return {
+    tenantId,
+    planCode: 'platinum',
+    totalAicGranted: 5000,
+    balanceAic: 5000,
+    reservedAic: 0,
+    validUntil: new Date(Date.now() + 90 * 86400000).toISOString(),
+    isThrottled: false,
+  };
+}
+
+async function deductAicFromWallet(params: {
+  tenantId?: string;
+  featureId: string;
+  featureName: string;
+  amountAic: number;
+  tokensUsed?: number;
+  referenceId?: string;
+}): Promise<{ balanceAfter: number; isThrottled: boolean }> {
+  const tenantId = params.tenantId || 'andara_rejo_makmur';
+  const wallet = await getTenantAicWallet(tenantId);
+
+  if (wallet.isThrottled || wallet.balanceAic < params.amountAic) {
+    throw new Error(
+      `INSUFFICIENT_AIC: Saldo AI Credit (${wallet.balanceAic} AIC) tidak mencukupi untuk fitur ${params.featureId} (butuh ${params.amountAic} AIC). Silakan top-up paket.`
+    );
+  }
+
+  const balanceAfter = Math.max(0, wallet.balanceAic - params.amountAic);
+  const isThrottled = balanceAfter <= 0;
+
+  try {
+    await sql`
+      UPDATE sales_os.tenant_aic_wallets
+      SET balance_aic = ${balanceAfter},
+          is_throttled = ${isThrottled},
+          updated_at = NOW()
+      WHERE tenant_id = ${tenantId}
+    `;
+
+    await sql`
+      INSERT INTO sales_os.aic_transactions (
+        tenant_id, feature_id, feature_name, amount_aic, tokens_used, balance_after, action_type, reference_id
+      ) VALUES (
+        ${tenantId}, ${params.featureId}, ${params.featureName}, ${params.amountAic},
+        ${params.tokensUsed || 0}, ${balanceAfter}, 'DEDUCT', ${params.referenceId || null}
+      )
+    `;
+  } catch (err) {
+    console.warn('[AIC] Gagal mencatat mutasi AIC:', err);
+  }
+
+  return { balanceAfter, isThrottled };
+}
+
+async function topUpTenantAic(params: {
+  tenantId?: string;
+  amountAic: number;
+  adminEmail: string;
+  notes?: string;
+}): Promise<number> {
+  const tenantId = params.tenantId || 'andara_rejo_makmur';
+  const wallet = await getTenantAicWallet(tenantId);
+  const newBalance = wallet.balanceAic + params.amountAic;
+  const newTotal = wallet.totalAicGranted + params.amountAic;
+
+  await sql`
+    UPDATE sales_os.tenant_aic_wallets
+    SET balance_aic = ${newBalance},
+        total_aic_granted = ${newTotal},
+        is_throttled = false,
+        updated_at = NOW()
+    WHERE tenant_id = ${tenantId}
+  `;
+
+  await sql`
+    INSERT INTO sales_os.aic_transactions (
+      tenant_id, feature_id, feature_name, amount_aic, balance_after, action_type, reference_id
+    ) VALUES (
+      ${tenantId}, 'TOPUP', ${'Top-Up AI Credit (' + (params.notes || 'Admin') + ')'},
+      ${params.amountAic}, ${newBalance}, 'TOPUP', ${params.adminEmail}
+    )
+  `;
+
+  return newBalance;
+}
 
 function getAuthenticatedUser(req: http.IncomingMessage): {
   email: string;
   name: string;
   role: RoleKey;
+  tenantId: string;
 } {
   const headerEmail = String(req.headers['x-user-email'] || '').trim().toLowerCase();
   const headerRole = String(req.headers['x-user-role'] || 'SE').trim().toUpperCase() as RoleKey;
+  const headerTenant = String(req.headers['x-tenant-id'] || 'andara_rejo_makmur').trim().toLowerCase();
 
   const matchedRole = (Object.keys(USERS_BY_ROLE) as RoleKey[]).find(
     (r) => USERS_BY_ROLE[r].email.toLowerCase() === headerEmail
@@ -74,6 +316,7 @@ function getAuthenticatedUser(req: http.IncomingMessage): {
     email: headerEmail || profile.email.toLowerCase(),
     name: profile.name,
     role,
+    tenantId: headerTenant || 'andara_rejo_makmur',
   };
 }
 
@@ -861,10 +1104,534 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // 4. GET PIPELINE LEADS (Terisolasi ketat untuk SE yang login; TL/SM/DIREKSI dapat melihat tim)
+    // ==========================================
+    // COMPANY BANK ACCOUNTS (SM & ADMIN CRUD)
+    // ==========================================
+    if (pathname === '/api/company/bank-accounts' && req.method === 'GET') {
+      const isSuperadminAll = user.role === 'SUPERADMIN_IT' && !req.headers['x-tenant-id'];
+      const rows = isSuperadminAll
+        ? await sql`
+            SELECT * FROM sales_os.company_bank_accounts
+            ORDER BY is_primary DESC, created_at ASC
+          `
+        : await sql`
+            SELECT * FROM sales_os.company_bank_accounts
+            WHERE tenant_id = ${user.tenantId}
+            ORDER BY is_primary DESC, created_at ASC
+          `;
+      sendJson(res, 200, { ok: true, data: rows });
+      return;
+    }
+
+    if (pathname === '/api/company/bank-accounts' && req.method === 'POST') {
+      if (!['SM', 'ADMIN', 'DIREKSI', 'IT'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya role SM dan Admin yang berhak menambah rekening perusahaan.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const bankName = String(body.bankName || '').trim();
+      const accountNumber = String(body.accountNumber || '').trim();
+      const accountHolder = String(body.accountHolder || 'PT Andara Rejo Makmur').trim();
+      const projectId = String(body.projectId || 'the-park-townhouse').trim();
+      const isPrimary = Boolean(body.isPrimary);
+      const notes = String(body.notes || '').trim();
+
+      if (!bankName || !accountNumber) {
+        sendJson(res, 400, { ok: false, error: 'Nama Bank dan Nomor Rekening wajib diisi.' });
+        return;
+      }
+
+      if (isPrimary) {
+        await sql`UPDATE sales_os.company_bank_accounts SET is_primary = false WHERE project_id = ${projectId} AND tenant_id = ${user.tenantId}`;
+      }
+
+      const inserted = await sql`
+        INSERT INTO sales_os.company_bank_accounts (
+          tenant_id, project_id, bank_name, account_number, account_holder, is_primary, is_active, notes, created_by
+        ) VALUES (
+          ${user.tenantId}, ${projectId}, ${bankName}, ${accountNumber}, ${accountHolder}, ${isPrimary}, true, ${notes}, ${user.email}
+        )
+        RETURNING *
+      `;
+
+      await recordAuditLog({
+        tenantId: user.tenantId,
+        actorEmail: user.email,
+        actorName: user.name,
+        actorRole: user.role,
+        action: 'CREATE',
+        targetEntity: 'BANK_ACCOUNT',
+        targetId: String(inserted[0].id),
+        summary: `${user.name} (${user.role}) menambahkan rekening ${bankName} (${accountNumber}) a.n ${accountHolder}`,
+        details: inserted[0],
+      });
+
+      sendJson(res, 201, { ok: true, data: inserted[0] });
+      return;
+    }
+
+    if (pathname === '/api/company/bank-accounts' && req.method === 'PUT') {
+      if (!['SM', 'ADMIN', 'DIREKSI', 'IT'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya role SM dan Admin yang berhak mengubah rekening perusahaan.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const id = String(body.id || '').trim();
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'ID rekening wajib disertakan.' });
+        return;
+      }
+      const bankName = String(body.bankName || '').trim();
+      const accountNumber = String(body.accountNumber || '').trim();
+      const accountHolder = String(body.accountHolder || '').trim();
+      const isPrimary = Boolean(body.isPrimary);
+      const isActive = body.isActive !== undefined ? Boolean(body.isActive) : true;
+      const notes = String(body.notes || '').trim();
+
+      if (isPrimary) {
+        await sql`UPDATE sales_os.company_bank_accounts SET is_primary = false WHERE id != ${id} AND tenant_id = ${user.tenantId}`;
+      }
+
+      const updated = await sql`
+        UPDATE sales_os.company_bank_accounts
+        SET bank_name = COALESCE(NULLIF(${bankName}, ''), bank_name),
+            account_number = COALESCE(NULLIF(${accountNumber}, ''), account_number),
+            account_holder = COALESCE(NULLIF(${accountHolder}, ''), account_holder),
+            is_primary = ${isPrimary},
+            is_active = ${isActive},
+            notes = ${notes},
+            updated_at = NOW()
+        WHERE id = ${id} AND tenant_id = ${user.tenantId}
+        RETURNING *
+      `;
+
+      if (updated.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Rekening tidak ditemukan atau bukan milik tenant Anda.' });
+        return;
+      }
+
+      await recordAuditLog({
+        tenantId: user.tenantId,
+        actorEmail: user.email,
+        actorName: user.name,
+        actorRole: user.role,
+        action: 'UPDATE',
+        targetEntity: 'BANK_ACCOUNT',
+        targetId: id,
+        summary: `${user.name} (${user.role}) memperbarui rekening ${updated[0].bank_name} (${updated[0].account_number})`,
+        details: updated[0],
+      });
+
+      sendJson(res, 200, { ok: true, data: updated[0] });
+      return;
+    }
+
+    if (pathname === '/api/company/bank-accounts' && req.method === 'DELETE') {
+      if (!['SM', 'ADMIN', 'DIREKSI', 'IT'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya role SM dan Admin yang berhak menghapus rekening perusahaan.' });
+        return;
+      }
+      const id = parsedUrl.searchParams.get('id') || (await readJsonBody(req)).id;
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'ID rekening wajib disertakan.' });
+        return;
+      }
+      const deleted = await sql`
+        DELETE FROM sales_os.company_bank_accounts
+        WHERE id = ${id} AND tenant_id = ${user.tenantId}
+        RETURNING *
+      `;
+      if (deleted.length > 0) {
+        await recordAuditLog({
+          tenantId: user.tenantId,
+          actorEmail: user.email,
+          actorName: user.name,
+          actorRole: user.role,
+          action: 'DELETE',
+          targetEntity: 'BANK_ACCOUNT',
+          targetId: String(id),
+          summary: `${user.name} (${user.role}) menghapus rekening ${deleted[0].bank_name} (${deleted[0].account_number})`,
+          details: deleted[0],
+        });
+      }
+      sendJson(res, 200, { ok: true, message: 'Rekening berhasil dihapus.' });
+      return;
+    }
+
+    // ==========================================
+    // AUDIT LOGS AKTIVITAS CRUD PERUSAHAAN
+    // ==========================================
+    if (pathname === '/api/company/audit-logs' && req.method === 'GET') {
+      const entity = parsedUrl.searchParams.get('entity');
+      const action = parsedUrl.searchParams.get('action');
+      const limit = Math.min(Number(parsedUrl.searchParams.get('limit') || 50), 200);
+      const isSuperadminAll = user.role === 'SUPERADMIN_IT' && !req.headers['x-tenant-id'];
+
+      const logs = isSuperadminAll
+        ? (entity && action
+            ? await sql`
+                SELECT * FROM sales_os.activity_audit_logs
+                WHERE target_entity = ${entity} AND action = ${action}
+                ORDER BY created_at DESC
+                LIMIT ${limit}
+              `
+            : entity
+            ? await sql`
+                SELECT * FROM sales_os.activity_audit_logs
+                WHERE target_entity = ${entity}
+                ORDER BY created_at DESC
+                LIMIT ${limit}
+              `
+            : action
+            ? await sql`
+                SELECT * FROM sales_os.activity_audit_logs
+                WHERE action = ${action}
+                ORDER BY created_at DESC
+                LIMIT ${limit}
+              `
+            : await sql`
+                SELECT * FROM sales_os.activity_audit_logs
+                ORDER BY created_at DESC
+                LIMIT ${limit}
+              `)
+        : (entity && action
+            ? await sql`
+                SELECT * FROM sales_os.activity_audit_logs
+                WHERE tenant_id = ${user.tenantId} AND target_entity = ${entity} AND action = ${action}
+                ORDER BY created_at DESC
+                LIMIT ${limit}
+              `
+            : entity
+            ? await sql`
+                SELECT * FROM sales_os.activity_audit_logs
+                WHERE tenant_id = ${user.tenantId} AND target_entity = ${entity}
+                ORDER BY created_at DESC
+                LIMIT ${limit}
+              `
+            : action
+            ? await sql`
+                SELECT * FROM sales_os.activity_audit_logs
+                WHERE tenant_id = ${user.tenantId} AND action = ${action}
+                ORDER BY created_at DESC
+                LIMIT ${limit}
+              `
+            : await sql`
+                SELECT * FROM sales_os.activity_audit_logs
+                WHERE tenant_id = ${user.tenantId}
+                ORDER BY created_at DESC
+                LIMIT ${limit}
+              `);
+
+      sendJson(res, 200, { ok: true, data: logs });
+      return;
+    }
+
+    if (pathname === '/api/company/audit-logs' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      await recordAuditLog({
+        tenantId: user.tenantId,
+        actorEmail: user.email,
+        actorName: user.name,
+        actorRole: user.role,
+        action: body.action || 'UPDATE',
+        targetEntity: body.targetEntity || 'SYSTEM',
+        targetId: body.targetId || 'general',
+        summary: body.summary || `${user.name} melakukan pembaruan sistem`,
+        details: body.details,
+      });
+      sendJson(res, 201, { ok: true });
+      return;
+    }
+
+    // ==========================================
+    // WHATSAPP SUPPRESSION LIST (UU PDP No. 27/2022 / T3)
+    // ==========================================
+    if (pathname === '/api/wa/suppression-list' && req.method === 'GET') {
+      const rows = await sql`
+        SELECT * FROM sales_os.wa_suppression_list
+        WHERE tenant_id = ${user.tenantId}
+        ORDER BY opted_out_at DESC
+        LIMIT 100
+      `;
+      sendJson(res, 200, { ok: true, data: rows });
+      return;
+    }
+
+    if (pathname === '/api/wa/suppression-list' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const action = String(body.action || 'ADD').toUpperCase();
+      const phoneNumber = cleanPhoneWa(String(body.phoneNumber || ''));
+
+      if (!phoneNumber) {
+        sendJson(res, 400, { ok: false, error: 'phoneNumber wajib disertakan.' });
+        return;
+      }
+
+      if (action === 'REMOVE') {
+        await removePhoneFromSuppression(phoneNumber);
+        await recordAuditLog({
+          tenantId: user.tenantId,
+          actorEmail: user.email,
+          actorName: user.name,
+          actorRole: user.role,
+          action: 'DELETE',
+          targetEntity: 'LEAD',
+          targetId: phoneNumber,
+          summary: `${user.name} menghapus nomor ${phoneNumber} dari WA Suppression List`,
+        });
+        sendJson(res, 200, { ok: true, message: 'Nomor dihapus dari suppression list' });
+        return;
+      }
+
+      await addPhoneToSuppression({
+        phoneNumber,
+        leadName: body.leadName,
+        reason: body.reason || 'MANUAL_ADMIN_ADD',
+        notes: body.notes || `Ditambahkan oleh ${user.name}`,
+      });
+
+      await recordAuditLog({
+        tenantId: user.tenantId,
+        actorEmail: user.email,
+        actorName: user.name,
+        actorRole: user.role,
+        action: 'CREATE',
+        targetEntity: 'LEAD',
+        targetId: phoneNumber,
+        summary: `${user.name} menambahkan nomor ${phoneNumber} ke WA Suppression List (UU PDP)`,
+      });
+
+      sendJson(res, 201, { ok: true, message: 'Nomor berhasil masuk suppression list' });
+      return;
+    }
+
+    // ==========================================
+    // AIC FINOPS METERING & WALLET (T7 / F93 / Bab 11)
+    // ==========================================
+    if (pathname === '/api/aic/wallet' && req.method === 'GET') {
+      const tenantId = user.tenantId || parsedUrl.searchParams.get('tenantId') || 'andara_rejo_makmur';
+      const wallet = await getTenantAicWallet(tenantId);
+      const recentTx = await sql`
+        SELECT * FROM sales_os.aic_transactions
+        WHERE tenant_id = ${tenantId}
+        ORDER BY created_at DESC
+        LIMIT 20
+      `;
+      sendJson(res, 200, { ok: true, data: { wallet, transactions: recentTx } });
+      return;
+    }
+
+    if (pathname === '/api/aic/top-up' && req.method === 'POST') {
+      if (user.role !== 'SUPERADMIN_IT' && user.role !== 'DIREKSI' && user.role !== 'SM') {
+        sendJson(res, 403, { ok: false, error: 'Hanya Admin/SM/Direksi yang dapat melakukan top-up AIC.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const amount = Number(body.amountAic || 1000);
+      const notes = String(body.notes || 'Top-up Kuota AI');
+      const targetTenantId = user.tenantId || 'andara_rejo_makmur';
+      const newBalance = await topUpTenantAic({
+        tenantId: targetTenantId,
+        amountAic: amount,
+        adminEmail: user.email,
+        notes,
+      });
+
+      await recordAuditLog({
+        tenantId: user.tenantId,
+        actorEmail: user.email,
+        actorName: user.name,
+        actorRole: user.role,
+        action: 'UPDATE',
+        targetEntity: 'SYSTEM',
+        targetId: 'tenant_aic_wallets',
+        summary: `${user.name} melakukan Top-Up ${amount} AIC (Saldo Baru: ${newBalance} AIC)`,
+      });
+
+      sendJson(res, 200, { ok: true, balanceAic: newBalance });
+      return;
+    }
+
+    // ==========================================
+    // SE ACTIVITY COPILOT LOG (M17 F100)
+    // ==========================================
+    if (pathname === '/api/se/activity-guide/log' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const activityKey = String(body.activityKey || 'site_visit');
+      const activityLabel = String(body.activityLabel || 'Site Visit');
+      const notes = String(body.notes || '');
+      const locationLabel = String(body.locationLabel || 'Lokasi Proyek');
+      const completedSteps = Array.isArray(body.completedSteps) ? body.completedSteps : [];
+
+      // Debet 5 AIC tarif F100
+      const aicResult = await deductAicFromWallet({
+        tenantId: 'andara_rejo_makmur',
+        featureId: 'F100',
+        featureName: `AI Activity Copilot: ${activityLabel}`,
+        amountAic: 5,
+      });
+
+      await sql`
+        INSERT INTO sales_os.se_field_logs (
+          se_email, se_name, log_type, title, location_label, outcome, notes, payload
+        ) VALUES (
+          ${user.email}, ${user.name}, 'AI_ACTIVITY_GUIDE',
+          ${'Eksekusi Copilot: ' + activityLabel},
+          ${locationLabel},
+          'SUCCESS',
+          ${notes || ('Menyelesaikan panduan aktivitas SE: ' + activityLabel)},
+          ${sql.json({ completedSteps, activityKey, aicDebited: 5, balanceAfter: aicResult.balanceAfter })}
+        )
+      `;
+
+      sendJson(res, 201, {
+        ok: true,
+        message: `Aktivitas ${activityLabel} berhasil dicatat (5 AIC didebet).`,
+        balanceAic: aicResult.balanceAfter,
+      });
+      return;
+    }
+
+    // ==========================================
+    // LEAD POOL: CLAIM, REASSIGN, RELEASE
+    // ==========================================
+    if (pathname === '/api/pipeline/leads/claim' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const leadId = String(body.leadId || '');
+      if (!leadId) {
+        sendJson(res, 400, { ok: false, error: 'leadId wajib disertakan.' });
+        return;
+      }
+      const existing = await sql`
+        SELECT * FROM sales_os.pipeline_leads WHERE id = ${leadId} AND tenant_id = ${user.tenantId} LIMIT 1
+      `;
+      if (existing.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Lead tidak ditemukan atau bukan milik tenant Anda.' });
+        return;
+      }
+      const lead = existing[0];
+      const prevOwner = lead.owner_se_name || lead.owner_se_email;
+
+      const updated = await sql`
+        UPDATE sales_os.pipeline_leads
+        SET owner_se_email = ${user.email},
+            owner_se_name = ${user.name},
+            is_in_pool = false,
+            pool_reason = '',
+            last_activity_at = NOW(),
+            updated_at = NOW()
+        WHERE id = ${leadId} AND tenant_id = ${user.tenantId}
+        RETURNING *
+      `;
+
+      await recordAuditLog({
+        tenantId: user.tenantId,
+        actorEmail: user.email,
+        actorName: user.name,
+        actorRole: user.role,
+        action: 'CLAIM',
+        targetEntity: 'LEAD',
+        targetId: leadId,
+        summary: `SE ${user.name} mengklaim lead "${lead.full_name}" dari Lead Pool (sebelumnya: ${prevOwner})`,
+        details: { prevOwner, newOwner: user.name, lead: updated[0] },
+      });
+
+      sendJson(res, 200, { ok: true, lead: updated[0] });
+      return;
+    }
+
+    if (pathname === '/api/pipeline/leads/reassign' && req.method === 'POST') {
+      if (!['TL', 'SM', 'ADMIN', 'DIREKSI', 'IT'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya SM, TL, dan Admin yang berhak menugaskan lead.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const leadId = String(body.leadId || '');
+      const targetSeEmail = String(body.targetSeEmail || '').trim().toLowerCase();
+      const targetSeName = String(body.targetSeName || '').trim();
+
+      if (!leadId || !targetSeEmail || !targetSeName) {
+        sendJson(res, 400, { ok: false, error: 'leadId, targetSeEmail, dan targetSeName wajib diisi.' });
+        return;
+      }
+
+      const existing = await sql`SELECT * FROM sales_os.pipeline_leads WHERE id = ${leadId} AND tenant_id = ${user.tenantId} LIMIT 1`;
+      if (existing.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Lead tidak ditemukan atau bukan milik tenant Anda.' });
+        return;
+      }
+      const lead = existing[0];
+
+      const updated = await sql`
+        UPDATE sales_os.pipeline_leads
+        SET owner_se_email = ${targetSeEmail},
+            owner_se_name = ${targetSeName},
+            is_in_pool = false,
+            pool_reason = '',
+            last_activity_at = NOW(),
+            updated_at = NOW()
+        WHERE id = ${leadId} AND tenant_id = ${user.tenantId}
+        RETURNING *
+      `;
+
+      await recordAuditLog({
+        tenantId: user.tenantId,
+        actorEmail: user.email,
+        actorName: user.name,
+        actorRole: user.role,
+        action: 'REASSIGN',
+        targetEntity: 'LEAD',
+        targetId: leadId,
+        summary: `${user.name} (${user.role}) menugaskan lead "${lead.full_name}" ke ${targetSeName} (${targetSeEmail})`,
+        details: { prevOwner: lead.owner_se_name, targetSeName, targetSeEmail },
+      });
+
+      sendJson(res, 200, { ok: true, lead: updated[0] });
+      return;
+    }
+
+    if (pathname === '/api/pipeline/leads/release-to-pool' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const leadId = String(body.leadId || '');
+      const reason = String(body.reason || 'Dilepas ke pool umum / tidak ada respons > 24 jam').trim();
+
+      const existing = await sql`SELECT * FROM sales_os.pipeline_leads WHERE id = ${leadId} AND tenant_id = ${user.tenantId} LIMIT 1`;
+      if (existing.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Lead tidak ditemukan atau bukan milik tenant Anda.' });
+        return;
+      }
+      const lead = existing[0];
+
+      const updated = await sql`
+        UPDATE sales_os.pipeline_leads
+        SET is_in_pool = true,
+            pool_reason = ${reason},
+            updated_at = NOW()
+        WHERE id = ${leadId} AND tenant_id = ${user.tenantId}
+        RETURNING *
+      `;
+
+      await recordAuditLog({
+        tenantId: user.tenantId,
+        actorEmail: user.email,
+        actorName: user.name,
+        actorRole: user.role,
+        action: 'UPDATE',
+        targetEntity: 'LEAD',
+        targetId: leadId,
+        summary: `${user.name} (${user.role}) mengembalikan lead "${lead.full_name}" ke Lead Pool (${reason})`,
+        details: { reason, previousOwner: lead.owner_se_name },
+      });
+
+      sendJson(res, 200, { ok: true, lead: updated[0] });
+      return;
+    }
+
+    // 4. GET PIPELINE LEADS (Terisolasi ketat untuk SE yang login & per Tenant; TL/SM/DIREKSI dapat melihat tim di tenantnya)
     if (pathname === '/api/pipeline/leads' && req.method === 'GET') {
       const isWideRole = ['TL', 'SM', 'DIREKSI', 'ADMIN', 'IT'].includes(user.role);
-      const leads = isWideRole
+      const isSuperadminAll = user.role === 'SUPERADMIN_IT' && !req.headers['x-tenant-id'];
+      const leads = isSuperadminAll
         ? await sql`
             SELECT l.*,
               (
@@ -877,6 +1644,20 @@ const server = http.createServer(async (req, res) => {
             FROM sales_os.pipeline_leads l
             ORDER BY l.created_at DESC
           `
+        : isWideRole
+        ? await sql`
+            SELECT l.*,
+              (
+                SELECT row_to_json(a)
+                FROM sales_os.lead_ai_analyses a
+                WHERE a.lead_id = l.id
+                ORDER BY a.created_at DESC
+                LIMIT 1
+              ) AS latest_analysis
+            FROM sales_os.pipeline_leads l
+            WHERE l.tenant_id = ${user.tenantId}
+            ORDER BY l.created_at DESC
+          `
         : await sql`
             SELECT l.*,
               (
@@ -887,7 +1668,7 @@ const server = http.createServer(async (req, res) => {
                 LIMIT 1
               ) AS latest_analysis
             FROM sales_os.pipeline_leads l
-            WHERE l.owner_se_email = ${user.email}
+            WHERE l.tenant_id = ${user.tenantId} AND (l.owner_se_email = ${user.email} OR l.is_in_pool = true)
             ORDER BY l.created_at DESC
           `;
 
@@ -938,7 +1719,46 @@ const server = http.createServer(async (req, res) => {
       const lastCustomerMessage = String(body.lastCustomerMessage || '').trim();
       const lastSalesMessage = String(body.lastSalesMessage || '').trim();
 
+      // Screening Kualitas Lead & Anti-Spam (DEV-26 / Blueprint F45)
+      const screening = screenLeadQuality({
+        fullName,
+        phoneWa,
+        source,
+        messageText: lastCustomerMessage,
+        domicile,
+      });
+      const leadQuality = screening.quality;
+      const spamReason = screening.isSpam ? screening.reason : '';
+      const isInPool = Boolean(body.isInPool) || false;
+      const poolReason = String(body.poolReason || (isInPool ? 'Lead Baru Siap Diambil Alih' : '')).trim();
+
+      // Kepatuhan UU PDP (Temuan T3 / F92): Deteksi Opt-Out pada pesan masuk & suppression list
+      const customerOptedOut = isOptOutKeyword(lastCustomerMessage);
+      const isSuppressed = (await isPhoneSuppressed(phoneWa)) || customerOptedOut;
+      const waConsent = customerOptedOut ? 'REVOKED' : isSuppressed ? 'REVOKED' : 'PENDING';
+
+      if (customerOptedOut) {
+        await addPhoneToSuppression({
+          phoneNumber: phoneWa,
+          leadName: fullName,
+          reason: 'USER_OPT_OUT',
+          notes: 'Konsumen mengirimkan kata kunci opt-out (STOP) pada pesan awal',
+        });
+      }
+
+      // FinOps AIC Metering (Temuan T7 / F93): Verifikasi Saldo & Hard Budget Capping
+      const wallet = await getTenantAicWallet(user.tenantId);
+      if (wallet.isThrottled || wallet.balanceAic < 2) {
+        sendJson(res, 402, {
+          ok: false,
+          error: 'INSUFFICIENT_AIC',
+          message: 'Saldo AI Credit (AIC) telah habis. Layanan analisis generatif AI dihentikan sementara hingga top-up dilakukan.',
+        });
+        return;
+      }
+
       // Jalankan Analisis AI (9router + Playbook v1.2 Dual-Track)
+      const verifiedBanks = await getVerifiedCompanyBankAccounts(user.tenantId);
       const aiResult = await analyzeLeadWithAi({
         fullName,
         phoneWa,
@@ -960,6 +1780,18 @@ const server = http.createServer(async (req, res) => {
         lastSalesMessage,
         interactionCount: 1,
         seName: user.name,
+        companyBankAccounts: verifiedBanks,
+        isSuppressed,
+        waConsent,
+      });
+
+      // Potong 2 AIC untuk analisis lead F45
+      await deductAicFromWallet({
+        tenantId: user.tenantId,
+        featureId: 'F45',
+        featureName: `Analisis AI Lead: ${fullName}`,
+        amountAic: 2,
+        tokensUsed: (aiResult.prompt_tokens || 0) + (aiResult.completion_tokens || 0),
       });
 
       const validityStatus =
@@ -995,13 +1827,15 @@ const server = http.createServer(async (req, res) => {
 
       const upserted = await sql`
         INSERT INTO sales_os.pipeline_leads (
-          owner_se_email, owner_se_name, full_name, phone_wa, domicile, source, content_code,
+          tenant_id, owner_se_email, owner_se_name, full_name, phone_wa, domicile, source, content_code,
           stage, validity_status, persona_code, persona_profile,
           bant_b, bant_a, bant_n, bant_t, bant_total, grade,
           cluster_interest, unit_interest, unit_price_idr, payment_scheme,
           written_offer_sent, booking_fee_paid, dp_or_sp3k_verified, appointment_at, visited_at,
-          sales_notes, next_action, lead_origin, last_customer_message, last_sales_message, interaction_count
+          sales_notes, next_action, lead_origin, last_customer_message, last_sales_message, interaction_count,
+          lead_quality, spam_reason, is_in_pool, pool_reason, last_activity_at
         ) VALUES (
+          ${user.tenantId},
           ${user.email},
           ${user.name},
           ${fullName || `Prospek ${phoneWa.slice(-4)}`},
@@ -1033,7 +1867,12 @@ const server = http.createServer(async (req, res) => {
           ${leadOrigin},
           ${lastCustomerMessage},
           ${lastSalesMessage},
-          ${1}
+          ${1},
+          ${leadQuality},
+          ${spamReason},
+          ${isInPool},
+          ${poolReason},
+          NOW()
         )
         ON CONFLICT (tenant_id, owner_se_email, phone_wa) DO UPDATE SET
           full_name = EXCLUDED.full_name,
@@ -1062,6 +1901,11 @@ const server = http.createServer(async (req, res) => {
           sales_notes = EXCLUDED.sales_notes,
           next_action = EXCLUDED.next_action,
           lead_origin = EXCLUDED.lead_origin,
+          lead_quality = EXCLUDED.lead_quality,
+          spam_reason = EXCLUDED.spam_reason,
+          is_in_pool = EXCLUDED.is_in_pool,
+          pool_reason = EXCLUDED.pool_reason,
+          last_activity_at = NOW(),
           updated_at = NOW()
         RETURNING *
       `;
@@ -1095,6 +1939,17 @@ const server = http.createServer(async (req, res) => {
         RETURNING *
       `;
 
+      await recordAuditLog({
+        actorEmail: user.email,
+        actorName: user.name,
+        actorRole: user.role,
+        action: 'CREATE',
+        targetEntity: 'LEAD',
+        targetId: String(leadRow.id),
+        summary: `${user.name} (${user.role}) membuat lead baru "${leadRow.full_name}" (${leadRow.phone_wa}) - Kualitas: ${leadQuality}`,
+        details: { lead: leadRow, screening },
+      });
+
       sendJson(res, 201, {
         ok: true,
         lead: { ...leadRow, latest_analysis: analysisRow[0] },
@@ -1116,6 +1971,10 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const prev = existingRows[0];
+      if (prev.tenant_id && prev.tenant_id !== user.tenantId && user.role !== 'SUPERADMIN_IT') {
+        sendJson(res, 403, { ok: false, error: 'Akses ditolak: Lead ini milik tenant lain.' });
+        return;
+      }
       if (prev.owner_se_email !== user.email && !['TL', 'SM', 'DIREKSI'].includes(user.role)) {
         sendJson(res, 403, { ok: false, error: 'Akses ditolak: Lead ini milik SE lain.' });
         return;
@@ -1228,6 +2087,33 @@ const server = http.createServer(async (req, res) => {
             }
           : undefined;
 
+        // Kepatuhan UU PDP (Temuan T3 / F92): Deteksi Opt-Out pada update/chat baru
+        const incomingOptOut = isOptOutKeyword(String(body.lastCustomerMessage || ''));
+        const isSuppressed = (await isPhoneSuppressed(String(prev.phone_wa))) || incomingOptOut;
+        const nextWaConsent = incomingOptOut ? 'REVOKED' : isSuppressed ? 'REVOKED' : (prev.wa_consent || 'PENDING');
+
+        if (incomingOptOut) {
+          await addPhoneToSuppression({
+            phoneNumber: String(prev.phone_wa),
+            leadId: String(prev.id),
+            leadName: nextFullName,
+            reason: 'USER_OPT_OUT',
+            notes: 'Konsumen mengirimkan kata kunci opt-out (STOP/Berhenti)',
+          });
+        }
+
+        // FinOps AIC Metering (Temuan T7 / F93): Verifikasi Saldo & Hard Budget Capping
+        const wallet = await getTenantAicWallet(user.tenantId);
+        if (wallet.isThrottled || wallet.balanceAic < 2) {
+          sendJson(res, 402, {
+            ok: false,
+            error: 'INSUFFICIENT_AIC',
+            message: 'Saldo AI Credit (AIC) telah habis. Layanan analisis generatif AI dihentikan sementara hingga top-up dilakukan.',
+          });
+          return;
+        }
+
+        const verifiedBanks = await getVerifiedCompanyBankAccounts(user.tenantId);
         const aiResult = await analyzeLeadWithAi({
           fullName: nextFullName,
           phoneWa: String(prev.phone_wa),
@@ -1251,6 +2137,18 @@ const server = http.createServer(async (req, res) => {
           seName: String(prev.owner_se_name || user.name),
           isReanalyze: Boolean(body.reanalyze),
           previousAnalysis: prevAnalysis,
+          companyBankAccounts: verifiedBanks,
+          isSuppressed,
+          waConsent: nextWaConsent,
+        });
+
+        // Potong 2 AIC untuk analisis ulang / update F45
+        await deductAicFromWallet({
+          tenantId: user.tenantId,
+          featureId: 'F45',
+          featureName: `Re-Analisis AI Lead: ${nextFullName}`,
+          amountAic: 2,
+          tokensUsed: (aiResult.prompt_tokens || 0) + (aiResult.completion_tokens || 0),
         });
 
         validityStatus =
@@ -1319,7 +2217,7 @@ const server = http.createServer(async (req, res) => {
             last_sales_message = ${nextLastSalesMessage},
             lost_reason = ${nextLostReason || null},
             updated_at = NOW()
-        WHERE id = ${leadId}
+        WHERE id = ${leadId} AND tenant_id = ${user.tenantId}
         RETURNING *
       `;
 
@@ -1333,6 +2231,18 @@ const server = http.createServer(async (req, res) => {
         latestAnalysis = lastRows[0] || null;
       }
 
+      await recordAuditLog({
+        tenantId: user.tenantId,
+        actorEmail: user.email,
+        actorName: user.name,
+        actorRole: user.role,
+        action: 'UPDATE',
+        targetEntity: 'LEAD',
+        targetId: leadId,
+        summary: `${user.name} (${user.role}) memperbarui data lead "${nextFullName}" (Tahap: ${nextStage}, BANT: ${nextBant.total}/12)`,
+        details: { stage: nextStage, bantTotal: nextBant.total, lostReason: nextLostReason },
+      });
+
       sendJson(res, 200, {
         ok: true,
         lead: { ...updatedRows[0], latest_analysis: latestAnalysis },
@@ -1343,10 +2253,24 @@ const server = http.createServer(async (req, res) => {
     // 7. DELETE LEAD
     if (patchMatch && req.method === 'DELETE') {
       const leadId = patchMatch[1];
-      await sql`
-        DELETE FROM sales_os.pipeline_leads
-        WHERE id = ${leadId} AND owner_se_email = ${user.email}
-      `;
+      const isManagerOrAdmin = ['TL', 'SM', 'ADMIN', 'DIREKSI', 'IT'].includes(user.role);
+      const deletedRows = isManagerOrAdmin
+        ? await sql`DELETE FROM sales_os.pipeline_leads WHERE id = ${leadId} AND tenant_id = ${user.tenantId} RETURNING *`
+        : await sql`DELETE FROM sales_os.pipeline_leads WHERE id = ${leadId} AND owner_se_email = ${user.email} AND tenant_id = ${user.tenantId} RETURNING *`;
+
+      if (deletedRows.length > 0) {
+        await recordAuditLog({
+          tenantId: user.tenantId,
+          actorEmail: user.email,
+          actorName: user.name,
+          actorRole: user.role,
+          action: 'DELETE',
+          targetEntity: 'LEAD',
+          targetId: leadId,
+          summary: `${user.name} (${user.role}) menghapus data lead "${deletedRows[0].full_name}" (${deletedRows[0].phone_wa})`,
+          details: deletedRows[0],
+        });
+      }
       sendJson(res, 200, { ok: true });
       return;
     }
@@ -2404,6 +3328,95 @@ async function ensureSeOpsTables(): Promise<void> {
       started_at TIMESTAMPTZ,
       finished_at TIMESTAMPTZ
     )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.activity_audit_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      actor_email TEXT NOT NULL,
+      actor_name TEXT NOT NULL,
+      actor_role TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target_entity TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      details JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.company_bank_accounts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      bank_name TEXT NOT NULL,
+      account_number TEXT NOT NULL,
+      account_holder TEXT NOT NULL,
+      branch TEXT NOT NULL DEFAULT '',
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      is_primary BOOLEAN NOT NULL DEFAULT false,
+      project_id TEXT NOT NULL DEFAULT 'all',
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.wa_suppression_list (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      phone_number TEXT NOT NULL UNIQUE,
+      lead_id TEXT,
+      lead_name TEXT,
+      reason TEXT NOT NULL DEFAULT 'USER_OPT_OUT',
+      opted_out_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      notes TEXT
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.tenant_aic_wallets (
+      tenant_id TEXT PRIMARY KEY,
+      plan_code TEXT NOT NULL DEFAULT 'platinum',
+      total_aic_granted INTEGER NOT NULL DEFAULT 5000,
+      balance_aic INTEGER NOT NULL DEFAULT 5000,
+      reserved_aic INTEGER NOT NULL DEFAULT 0,
+      valid_until TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '3 months'),
+      is_throttled BOOLEAN NOT NULL DEFAULT false,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    INSERT INTO sales_os.tenant_aic_wallets (tenant_id, plan_code, total_aic_granted, balance_aic)
+    VALUES ('andara_rejo_makmur', 'platinum', 5000, 5000)
+    ON CONFLICT (tenant_id) DO NOTHING
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.aic_transactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id TEXT NOT NULL,
+      feature_id TEXT NOT NULL,
+      feature_name TEXT NOT NULL,
+      amount_aic INTEGER NOT NULL,
+      tokens_used INTEGER NOT NULL DEFAULT 0,
+      balance_after INTEGER NOT NULL,
+      action_type TEXT NOT NULL,
+      reference_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    ALTER TABLE sales_os.activity_audit_logs
+      ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'andara_rejo_makmur'
+  `;
+  await sql`
+    ALTER TABLE sales_os.company_bank_accounts
+      ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'andara_rejo_makmur'
+  `;
+  await sql`
+    ALTER TABLE sales_os.wa_suppression_list
+      ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'andara_rejo_makmur'
+  `;
+  await sql`
+    ALTER TABLE sales_os.pipeline_leads
+      ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'andara_rejo_makmur',
+      ADD COLUMN IF NOT EXISTS wa_consent TEXT NOT NULL DEFAULT 'PENDING',
+      ADD COLUMN IF NOT EXISTS wa_consent_updated_at TIMESTAMPTZ
   `;
 }
 

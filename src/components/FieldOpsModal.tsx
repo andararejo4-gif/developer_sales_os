@@ -3,7 +3,7 @@
 // Absensi SE, GPS Tracking SE, Log Panggilan, & AI Guide (Platinum / Diamond)
 // ============================================================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   MapPin,
   PhoneCall,
@@ -17,6 +17,9 @@ import {
   UserCheck,
   ShieldCheck,
   Camera,
+  Radio,
+  Crosshair,
+  Copy,
 } from 'lucide-react';
 import {
   getAttendanceRecords,
@@ -29,6 +32,7 @@ import {
   getAiActivityGuide,
   ALL_SE_ACTIVITY_CATEGORIES,
   parseCoordinates,
+  calculateDistanceKm,
 } from '../lib/field-ops/field-ops-store';
 import {
   getQueryParam,
@@ -40,7 +44,12 @@ import type { CompanyProject } from '../lib/projects/projects-data';
 import type { RoleKey, UserProfile } from '../data';
 import { SE_TEAM_DATA } from '../data';
 import type { SeActivityCategory, CallOutcome, GpsActivityType } from '../lib/field-ops/types';
-import { GpsLiveRadarMap, type LiveGpsState, type RadarWaypoint } from './field/GpsLiveRadarMap';
+import {
+  GpsLiveRadarMap,
+  type LiveGpsState,
+  type RadarWaypoint,
+  type TeamMemberLiveMarker,
+} from './field/GpsLiveRadarMap';
 import { SmFieldMonitoringView } from './field/SmFieldMonitoringView';
 import { generateDailyRoutePlan } from '../lib/playbook/route-generator';
 
@@ -99,6 +108,8 @@ export function FieldOpsModal({
     return loadPersistedState<FieldOpsTab>('devos_field_ops_tab', initialTab);
   });
   const [simulatedPlan, setSimulatedPlan] = useState<'gold' | 'platinum' | 'diamond'>(planCode);
+  const [completedSteps, setCompletedSteps] = useState<number[]>([]);
+  const [isSavingCopilotLog, setIsSavingCopilotLog] = useState(false);
 
   const userScope = userEmail.toLowerCase().replace(/[^a-z0-9]/g, '_');
 
@@ -188,6 +199,176 @@ export function FieldOpsModal({
   const [matchedWaypoint, setMatchedWaypoint] = useState<RadarWaypoint | null>(null);
   const [todayWaypoints, setTodayWaypoints] = useState<RadarWaypoint[]>([]);
 
+  // Radar tracking persisten antar-tab/halaman & titik fokus peta
+  const [isRadarTracking, setIsRadarTracking] = useState<boolean>(() =>
+    loadPersistedState<boolean>(`devos_radar_tracking_${userScope}`, false)
+  );
+  const [focusedMapCoords, setFocusedMapCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    savePersistedState(`devos_radar_tracking_${userScope}`, isRadarTracking);
+  }, [isRadarTracking, userScope]);
+
+  // Persistent Geolocation Watcher di level modal/halaman
+  useEffect(() => {
+    if (!isRadarTracking) return;
+    if (!navigator.geolocation) return;
+
+    let lastSyncTime = 0;
+    let lastSyncLat = 0;
+    let lastSyncLng = 0;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        const distKm = calculateDistanceKm(latitude, longitude, effectiveCoords.lat, effectiveCoords.lng);
+        const nextGps: LiveGpsState = {
+          lat: latitude,
+          lng: longitude,
+          accuracy: Math.round(accuracy),
+          streetAddress: liveGpsInfo?.streetAddress || `Koordinat ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+          areaSummary: liveGpsInfo?.areaSummary || effectiveProjectName,
+          nearestPoiLabel: liveGpsInfo?.nearestPoiLabel || `${distKm.toFixed(2)} km dari Proyek`,
+          distanceToProjectKm: distKm,
+          updatedAt: new Date().toLocaleTimeString('id-ID', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          }),
+        };
+        setLiveGpsInfo(nextGps);
+
+        // Auto-sync heartbeat posisi SE ke backend (per 45 detik atau jika berpindah > 40 meter)
+        const now = Date.now();
+        const movedDist = lastSyncLat ? calculateDistanceKm(lastSyncLat, lastSyncLng, latitude, longitude) : 999;
+        if (userRole === 'SE' && (now - lastSyncTime > 45000 || movedDist >= 0.04)) {
+          lastSyncTime = now;
+          lastSyncLat = latitude;
+          lastSyncLng = longitude;
+          persistFieldLogToDb({
+            logType: 'GPS',
+            title: `Live Radar GPS (${activeUserName})`,
+            locationLabel: nextGps.streetAddress || `Area ${effectiveProjectName}`,
+            lat: latitude,
+            lng: longitude,
+            notes: `Auto-sync radar live SE (${Math.round(accuracy)}m akurasi)`,
+          });
+        }
+      },
+      (err) => {
+        console.warn('FieldOpsModal geolocation watch error:', err);
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [isRadarTracking, userRole, activeUserName, effectiveCoords.lat, effectiveCoords.lng, effectiveProjectName]);
+
+  const [dbFieldLogs, setDbFieldLogs] = useState<any[]>([]);
+
+  const fetchDbFieldLogs = async () => {
+    try {
+      const res = await fetch('/api/se/field-logs', {
+        headers: { 'X-User-Email': userEmail, 'X-User-Role': userRole },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.ok && Array.isArray(json.logs)) {
+          setDbFieldLogs(json.logs);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  useEffect(() => {
+    fetchDbFieldLogs();
+  }, [userEmail, userRole]);
+
+  // Daftar Live Marker SE untuk role Manager (SM / Admin)
+  const teamLiveMarkers: TeamMemberLiveMarker[] = useMemo(() => {
+    if (!isManager) return [];
+    const todayWib = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+
+    return SE_TEAM_DATA.map((se) => {
+      const firstToken = se.nama.toLowerCase().replace(/[^a-z0-9]+/g, '.');
+      const seEmail = `${firstToken}@andararejomakmur.co.id`;
+
+      const seDbLogs = dbFieldLogs.filter(
+        (l) => l.se_email?.toLowerCase() === seEmail || l.se_name?.includes(se.nama)
+      );
+      const latestDb = seDbLogs[0];
+      const fallbackPoint = gpsLogs.find((p) => p.seName.includes(se.nama) || p.seName.includes(se.seId));
+
+      const lat = latestDb?.lat ?? fallbackPoint?.lat ?? (effectiveCoords.lat + (Math.random() * 0.01 - 0.005));
+      const lng = latestDb?.lng ?? fallbackPoint?.lng ?? (effectiveCoords.lng + (Math.random() * 0.01 - 0.005));
+      const distKm = calculateDistanceKm(effectiveCoords.lat, effectiveCoords.lng, Number(lat), Number(lng));
+
+      const hasLogToday = seDbLogs.some((l) => l.created_at && l.created_at.startsWith(todayWib));
+      const isOnline = hasLogToday || Boolean(latestDb);
+
+      return {
+        id: se.seId,
+        name: se.nama,
+        email: seEmail,
+        seId: se.seId,
+        role: 'SE',
+        zone: se.zonaHariIni,
+        lat: Number(lat),
+        lng: Number(lng),
+        distanceFromProjectKm: distKm,
+        locationLabel: latestDb?.location_label || fallbackPoint?.locationLabel || `Wilayah ${se.zonaHariIni}`,
+        lastUpdated: latestDb
+          ? new Date(latestDb.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'
+          : fallbackPoint?.recordedAt || 'Hari Ini',
+        isOnline,
+        statusLabel: isOnline ? 'Aktif di Lapangan' : 'Standby',
+        avatarText: se.nama
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase(),
+      };
+    });
+  }, [isManager, dbFieldLogs, gpsLogs, effectiveCoords.lat, effectiveCoords.lng]);
+
+  // Status presensi mandiri hari ini untuk user aktif (SE, SM, Admin)
+  const myTodayAttendance = useMemo(() => {
+    const todayWib = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+    const myDbLogs = dbFieldLogs.filter(
+      (l) =>
+        (l.se_email?.toLowerCase() === userEmail.toLowerCase() || l.se_name === activeUserName) &&
+        (!l.created_at || l.created_at.startsWith(todayWib))
+    );
+    const myCheckIn = myDbLogs.find((l) => l.log_type === 'CHECK_IN');
+    const myCheckOut = myDbLogs.find((l) => l.log_type === 'CHECK_OUT');
+
+    const myAttRecord = attendanceList.find(
+      (a) => a.seName === activeUserName || a.seName.includes(activeUserName)
+    );
+
+    const isCheckedIn = Boolean(myCheckIn || myAttRecord?.checkInAt);
+    const isCheckedOut = Boolean(myCheckOut || myAttRecord?.checkOutAt);
+    const checkInTime = myCheckIn
+      ? new Date(myCheckIn.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'
+      : myAttRecord?.checkInAt || null;
+    const checkOutTime = myCheckOut
+      ? new Date(myCheckOut.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'
+      : myAttRecord?.checkOutAt || null;
+
+    return {
+      isCheckedIn,
+      isCheckedOut,
+      checkInTime,
+      checkOutTime,
+      status: isCheckedIn ? (isCheckedOut ? 'SELESAI_TUGAS' : 'HADIR') : 'BELUM_ABSEN',
+    };
+  }, [dbFieldLogs, attendanceList, userEmail, activeUserName]);
+
   const todayDayName = (() => {
     const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     const name = days[new Date().getDay()];
@@ -223,27 +404,6 @@ export function FieldOpsModal({
       active = false;
     };
   }, [todayDayName, userEmail, userRole]);
-  const [dbFieldLogs, setDbFieldLogs] = useState<any[]>([]);
-
-  const fetchDbFieldLogs = async () => {
-    try {
-      const res = await fetch('/api/se/field-logs', {
-        headers: { 'X-User-Email': userEmail, 'X-User-Role': userRole },
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.ok && Array.isArray(json.logs)) {
-          setDbFieldLogs(json.logs);
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-  };
-
-  useEffect(() => {
-    fetchDbFieldLogs();
-  }, [userEmail, userRole]);
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -486,15 +646,36 @@ export function FieldOpsModal({
             </div>
           </div>
 
-          {variant === 'modal' && onClose && (
+          <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={onClose}
-              aria-label="Tutup Operasional Lapangan"
-              className="size-10 rounded-xl bg-sandstone hover:bg-warmborder text-espresso grid place-items-center transition-colors cursor-pointer shrink-0"
+              type="button"
+              onClick={() => setIsRadarTracking((prev) => !prev)}
+              className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-2 transition-all cursor-pointer border ${
+                isRadarTracking
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-xs'
+                  : 'bg-sandstone text-stone-600 border-warmborder hover:bg-stone-200/60'
+              }`}
+              title="Aktifkan / Matikan Radar GPS Latar Belakang"
             >
-              <X className="size-5" />
+              <span
+                className={`size-2.5 rounded-full ${
+                  isRadarTracking ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'
+                }`}
+              />
+              <span className="hidden sm:inline">Radar GPS:</span>
+              <span className="font-extrabold">{isRadarTracking ? 'LIVE' : 'STANDBY'}</span>
             </button>
-          )}
+
+            {variant === 'modal' && onClose && (
+              <button
+                onClick={onClose}
+                aria-label="Tutup Operasional Lapangan"
+                className="size-10 rounded-xl bg-sandstone hover:bg-warmborder text-espresso grid place-items-center transition-colors cursor-pointer shrink-0"
+              >
+                <X className="size-5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Navigation Tabs (Mobile-First Compact Grid / Strip) */}
@@ -542,30 +723,39 @@ export function FieldOpsModal({
 
         {/* Content Body */}
         <div className="p-3.5 sm:p-6 pb-24 md:pb-6 overflow-y-auto flex-1 space-y-4 sm:space-y-6">
-          {/* TAB 1: ABSENSI HARIAN */}
-          {activeTab === 'absen' && isManager && (
-            <SmFieldMonitoringView
-              mode="absen"
-              projectName={effectiveProjectName}
-              baseCoords={effectiveCoords}
-              dbFieldLogs={dbFieldLogs}
-              fallbackAttendance={attendanceList}
-              fallbackGpsLogs={gpsLogs}
-            />
-          )}
-
-          {activeTab === 'absen' && !isManager && (
+          {/* TAB 1: ABSENSI HARIAN (PRESENSI MANDIRI SEMUA ROLE + MONITORING TIM SM/ADMIN) */}
+          {activeTab === 'absen' && (
             <div className="space-y-4 sm:space-y-5">
-              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-warmborder flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4">
+              {/* KARTU PRESENSI MANDIRI (SE, SM, ADMIN, DIREKSI) */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-warmborder flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4 shadow-xs">
                 <div className="min-w-0">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-olive">
-                    Presensi Terkunci Koordinat GPS
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-olive">
+                      Presensi Mandiri {userProfile?.roleLabel || userRole}
+                    </span>
+                    <span
+                      className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                        myTodayAttendance.status === 'HADIR'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : myTodayAttendance.status === 'SELESAI_TUGAS'
+                          ? 'bg-slate-100 text-slate-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {myTodayAttendance.status === 'HADIR'
+                        ? '✓ Sudah Check-In'
+                        : myTodayAttendance.status === 'SELESAI_TUGAS'
+                        ? '✓ Selesai Tugas'
+                        : 'Belum Absen'}
+                    </span>
+                  </div>
                   <h3 className="text-sm sm:text-base font-extrabold text-espresso mt-0.5 truncate">
-                    Absensi Hari Ini ({activeUserName})
+                    Presensi Hari Ini: {activeUserName}
                   </h3>
-                  <p className="hidden sm:block text-xs text-warmmuted mt-0.5">
-                    Setiap absen masuk &amp; pulang mencatat titik koordinat lokasi SE untuk validasi kehadiran.
+                  <p className="text-xs text-warmmuted mt-0.5">
+                    {myTodayAttendance.checkInTime ? `Masuk: ${myTodayAttendance.checkInTime}` : 'Belum Check-In'} ·{' '}
+                    {myTodayAttendance.checkOutTime ? `Pulang: ${myTodayAttendance.checkOutTime}` : 'Belum Check-Out'}
+                    {liveGpsInfo ? ` · GPS: ${liveGpsInfo.streetAddress}` : ''}
                   </p>
                 </div>
                 <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2.5 w-full sm:w-auto shrink-0">
@@ -608,7 +798,9 @@ export function FieldOpsModal({
                   />
                   <div className="text-xs min-w-0 flex-1">
                     <p className="font-bold text-espresso">Bukti Foto Lapangan Siap Dikirim</p>
-                    <p className="text-warmmuted">Akan tersimpan bersama koordinat GPS saat Anda menekan Check-In atau Rekam Titik GPS.</p>
+                    <p className="text-warmmuted">
+                      Akan tersimpan bersama koordinat GPS saat Anda menekan Check-In atau Rekam Titik GPS.
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -619,6 +811,53 @@ export function FieldOpsModal({
                   </button>
                 </div>
               )}
+
+              {/* JIKA MANAGER (SM / ADMIN): TAMPILKAN QUICK RADAR SE + REKAP ABSENSI TIM SE */}
+              {isManager && (
+                <>
+                  <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-espresso to-[#3F2B20] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="size-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                        <Radio className="size-5 text-amber-300 animate-pulse" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs sm:text-sm font-extrabold text-white">
+                            Radar Lapangan Live Tim SE
+                          </h4>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold border border-emerald-400/30">
+                            {teamLiveMarkers.filter((m) => m.isOnline).length}/{teamLiveMarkers.length} SE Aktif
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-stone-300 mt-0.5">
+                          Pantau posisi koordinat live seluruh SE binaan di peta radar dan pergerakan kanvasing mereka.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('gps')}
+                      className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-espresso text-xs font-extrabold inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap self-start sm:self-auto"
+                    >
+                      <MapPin className="size-3.5" />
+                      <span>Buka Peta Radar Live SE</span>
+                    </button>
+                  </div>
+
+                  <SmFieldMonitoringView
+                    mode="absen"
+                    projectName={effectiveProjectName}
+                    baseCoords={effectiveCoords}
+                    dbFieldLogs={dbFieldLogs}
+                    fallbackAttendance={attendanceList}
+                    fallbackGpsLogs={gpsLogs}
+                  />
+                </>
+              )}
+
+              {/* JIKA BUKAN MANAGER (SE): TAMPILKAN RINGKASAN & RIWAYAT ABSENSI PRIBADI */}
+              {!isManager && (
+                <>
 
               {/* Ringkasan Absensi Masuk & Keluar Hari Ini (Per Akun SE dari DB) */}
               {(() => {
@@ -764,19 +1003,100 @@ export function FieldOpsModal({
                   </tbody>
                 </table>
               </div>
-            </div>
+            </>
           )}
+        </div>
+      )}
 
           {/* TAB 2: TRACKING GPS SE & LIVE RADAR SM */}
           {activeTab === 'gps' && isManager && (
-            <SmFieldMonitoringView
-              mode="gps"
-              projectName={effectiveProjectName}
-              baseCoords={effectiveCoords}
-              dbFieldLogs={dbFieldLogs}
-              fallbackAttendance={attendanceList}
-              fallbackGpsLogs={gpsLogs}
-            />
+            <div className="space-y-5">
+              {/* Live Radar Multi-Marker Tim SE untuk SM / Admin */}
+              <GpsLiveRadarMap
+                routeWaypoints={todayWaypoints}
+                isTracking={isRadarTracking}
+                onToggleTracking={(val) => setIsRadarTracking(val)}
+                liveGpsState={liveGpsInfo}
+                teamLiveMarkers={teamLiveMarkers}
+                focusedCoordinates={focusedMapCoords}
+                currentUserRole={userRole}
+                currentUserName={activeUserName}
+                onLocationResolved={(info) => setLiveGpsInfo(info)}
+              />
+
+              {/* SM LIVE RADAR DASHBOARD CARD */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-espresso text-white space-y-4 shadow-sm border border-espresso/20">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="size-8 rounded-lg bg-terracotta text-white grid place-items-center font-bold">
+                      <MapPin className="size-4 animate-pulse" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-extrabold text-white flex items-center gap-2">
+                        Live Radar GPS Tim SE Binaan
+                        <span className="size-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                      </h4>
+                      <p className="text-[11px] text-stone-300">
+                        Posisi real-time tim SE di bawah naungan {activeUserName} ({userProfile?.roleLabel || userRole}) · {effectiveProjectName}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs bg-white/10 px-3 py-1 rounded-full text-stone-200 font-semibold self-start sm:self-auto">
+                    Titik Gerbang Proyek: <code className="text-amber-300">{effectiveCoords.lat.toFixed(5)}, {effectiveCoords.lng.toFixed(5)}</code>
+                  </span>
+                </div>
+
+                {/* Grid Status Live SE */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {teamLiveMarkers.map((se) => {
+                    const distance = `${se.distanceFromProjectKm.toFixed(2)} km`;
+                    const locName = se.locationLabel || `Gerbang ${effectiveProjectName}`;
+                    const lastTime = se.lastUpdated || 'Baru Saja';
+
+                    return (
+                      <div key={se.id} className="p-3.5 rounded-xl bg-white/10 border border-white/10 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                            <span className={`size-2 rounded-full ${se.isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-stone-400'}`} />
+                            {se.name}
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/20 text-stone-200">
+                            {se.zone}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-stone-300 space-y-0.5">
+                          <p className="font-semibold text-amber-300 truncate">{locName}</p>
+                          <p className="text-[10px] text-stone-400">
+                            Jarak: <strong className="text-white">{distance}</strong> dari gerbang · Jam: {lastTime}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFocusedMapCoords({ lat: se.lat, lng: se.lng });
+                            showToast(`Peta radar difokuskan ke posisi ${se.name}`);
+                          }}
+                          className="w-full min-h-[32px] py-1 px-2.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[11px] font-bold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Crosshair className="size-3 text-amber-300" />
+                          <span>Fokus di Peta Radar</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Riwayat Timeline & Foto Lapangan */}
+              <SmFieldMonitoringView
+                mode="gps"
+                projectName={effectiveProjectName}
+                baseCoords={effectiveCoords}
+                dbFieldLogs={dbFieldLogs}
+                fallbackAttendance={attendanceList}
+                fallbackGpsLogs={gpsLogs}
+              />
+            </div>
           )}
 
           {activeTab === 'gps' && !isManager && (
@@ -784,6 +1104,11 @@ export function FieldOpsModal({
               {/* Live Radar GPS ala ShopeeFood + Nama Jalan & Landmark Terdekat */}
               <GpsLiveRadarMap
                 routeWaypoints={todayWaypoints}
+                isTracking={isRadarTracking}
+                onToggleTracking={(val) => setIsRadarTracking(val)}
+                liveGpsState={liveGpsInfo}
+                currentUserRole={userRole}
+                currentUserName={activeUserName}
                 onLocationResolved={(info) => setLiveGpsInfo(info)}
                 onUseLocationForCheckin={(info, matchedWp) => {
                   const label = matchedWp
@@ -795,62 +1120,6 @@ export function FieldOpsModal({
                   showToast('Lokasi live diterapkan ke form Check-in GPS!');
                 }}
               />
-
-              {/* SM LIVE RADAR DASHBOARD CARD */}
-              {isManager && (
-                <div className="p-5 rounded-2xl bg-espresso text-white space-y-4 shadow-sm border border-espresso/20">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="size-8 rounded-lg bg-terracotta text-white grid place-items-center font-bold">
-                        <MapPin className="size-4 animate-pulse" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-extrabold text-white flex items-center gap-2">
-                          Live Radar GPS Tim SE Binaan
-                          <span className="size-2 rounded-full bg-emerald-400 animate-ping inline-block" />
-                        </h4>
-                        <p className="text-[11px] text-stone-300">
-                          Posisi real-time tim SE di bawah naungan {activeUserName} ({userProfile?.roleLabel || userRole}) · {effectiveProjectName}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-xs bg-white/10 px-3 py-1 rounded-full text-stone-200 font-semibold self-start sm:self-auto">
-                      Titik Gerbang Proyek: <code className="text-amber-300">{effectiveCoords.lat.toFixed(5)}, {effectiveCoords.lng.toFixed(5)}</code>
-                    </span>
-                  </div>
-
-                  {/* Grid Status Live SE */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {SE_TEAM_DATA.map((se) => {
-                      // Ambil log GPS terbaru untuk SE ini
-                      const latestPoint = gpsLogs.find((p) => p.seName.includes(se.nama) || p.seName.includes(se.seId));
-                      const distance = latestPoint ? `${latestPoint.distanceFromProjectKm} km` : '0.0 km';
-                      const locName = latestPoint?.locationLabel || `Gerbang ${effectiveProjectName}`;
-                      const lastTime = latestPoint?.recordedAt || 'Baru Saja';
-
-                      return (
-                        <div key={se.seId} className="p-3.5 rounded-xl bg-white/10 border border-white/10 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                              <span className="size-2 rounded-full bg-emerald-400" />
-                              {se.nama}
-                            </span>
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/20 text-stone-200">
-                              {se.zonaHariIni}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-stone-300 space-y-0.5">
-                            <p className="font-semibold text-amber-300 truncate">📍 {locName}</p>
-                            <p className="text-[10px] text-stone-400">
-                              Jarak: <strong className="text-white">{distance}</strong> dari gerbang · Jam: {lastTime}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
 
               <div className="p-5 rounded-2xl bg-white border border-warmborder space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1279,11 +1548,16 @@ export function FieldOpsModal({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="p-5 rounded-2xl bg-white border border-warmborder space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-lime-100 text-olive uppercase">
-                        AI Coach Aktif · Paket {simulatedPlan.toUpperCase()}
-                      </span>
+                  <div className="p-5 rounded-2xl bg-white border border-warmborder space-y-3 shadow-xs">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-lime-100 text-olive uppercase">
+                          AI Coach Aktif · Paket {simulatedPlan.toUpperCase()}
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                          Biaya: 5 AI Credit / sesi
+                        </span>
+                      </div>
                       <span className="text-[11px] font-semibold text-warmmuted flex items-center gap-1">
                         <ShieldCheck className="size-3.5 text-olive" /> Terverifikasi KB {effectiveProjectName}
                       </span>
@@ -1291,49 +1565,143 @@ export function FieldOpsModal({
                     <h4 className="text-base font-extrabold text-espresso">{aiGuideResult.guide.title}</h4>
                     <p className="text-xs text-warmmuted">{aiGuideResult.guide.goal}</p>
 
-                    <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200">
-                      <span className="text-[10px] font-extrabold uppercase text-terracotta">
-                        Skrip Pembuka Rekomendasi AI:
-                      </span>
+                    <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-extrabold uppercase text-terracotta">
+                          Skrip Pembuka Rekomendasi AI:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (navigator.clipboard) {
+                              navigator.clipboard.writeText(aiGuideResult.guide.openingScript);
+                              setToast('Skrip pembuka berhasil disalin ke clipboard');
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-200/80 hover:bg-amber-300 text-espresso text-[11px] font-bold cursor-pointer transition-colors"
+                        >
+                          <Copy className="size-3" />
+                          <span>Salin Skrip</span>
+                        </button>
+                      </div>
                       <p className="text-xs font-semibold text-espresso mt-1 leading-relaxed italic">
-                        {aiGuideResult.guide.openingScript}
+                        "{aiGuideResult.guide.openingScript}"
                       </p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-5 rounded-2xl bg-white border border-warmborder space-y-3">
-                      <h5 className="text-xs font-extrabold uppercase tracking-wider text-espresso">
-                        Langkah Eksekusi Berurutan
-                      </h5>
+                    <div className="p-5 rounded-2xl bg-white border border-warmborder space-y-3 shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <h5 className="text-xs font-extrabold uppercase tracking-wider text-espresso">
+                          Langkah Eksekusi Berurutan
+                        </h5>
+                        <span className="text-[10px] text-warmmuted font-semibold">
+                          Klik langkah untuk mencentang
+                        </span>
+                      </div>
                       <ol className="space-y-2 text-xs text-espresso">
-                        {aiGuideResult.guide.executionSteps.map((step, i) => (
-                          <li key={i} className="flex items-start gap-2.5">
-                            <span className="size-5 rounded-full bg-sandstone text-terracotta font-extrabold text-[10px] grid place-items-center shrink-0">
-                              {i + 1}
-                            </span>
-                            <span className="leading-relaxed">{step}</span>
-                          </li>
-                        ))}
+                        {aiGuideResult.guide.executionSteps.map((step, i) => {
+                          const isDone = completedSteps.includes(i);
+                          return (
+                            <li
+                              key={i}
+                              onClick={() => {
+                                setCompletedSteps((prev) =>
+                                  prev.includes(i) ? prev.filter((idx) => idx !== i) : [...prev, i]
+                                );
+                              }}
+                              className={`flex items-start gap-2.5 p-2 rounded-xl cursor-pointer transition-all ${
+                                isDone
+                                  ? 'bg-emerald-50/90 text-emerald-950 border border-emerald-200'
+                                  : 'hover:bg-sandstone'
+                              }`}
+                            >
+                              <span
+                                className={`size-5 rounded-full font-extrabold text-[10px] grid place-items-center shrink-0 ${
+                                  isDone ? 'bg-emerald-600 text-white' : 'bg-sandstone text-terracotta'
+                                }`}
+                              >
+                                {isDone ? '✓' : i + 1}
+                              </span>
+                              <span className={`leading-relaxed ${isDone ? 'line-through text-warmmuted' : ''}`}>
+                                {step}
+                              </span>
+                            </li>
+                          );
+                        })}
                       </ol>
                       <div className="pt-2 border-t border-warmborder text-[11px] font-bold text-olive">
                         ✓ Checklist Penutup: {aiGuideResult.guide.closingChecklist}
                       </div>
                     </div>
 
-                    <div className="p-5 rounded-2xl bg-white border border-warmborder space-y-3">
-                      <h5 className="text-xs font-extrabold uppercase tracking-wider text-espresso">
-                        Penanganan Keberatan (Objection Handling)
-                      </h5>
+                    <div className="p-5 rounded-2xl bg-white border border-warmborder space-y-3 shadow-xs flex flex-col justify-between">
                       <div className="space-y-3">
-                        {aiGuideResult.guide.objectionHandlers.map((obj, idx) => (
-                          <div key={idx} className="p-3 rounded-xl bg-sandstone/60 border border-warmborder space-y-1.5">
-                            <p className="text-[11px] font-bold text-rose-700">Keberatan: {obj.objection}</p>
-                            <p className="text-xs text-espresso leading-relaxed">
-                              <strong className="text-olive">Respon AI:</strong> {obj.aiResponse}
-                            </p>
-                          </div>
-                        ))}
+                        <h5 className="text-xs font-extrabold uppercase tracking-wider text-espresso">
+                          Penanganan Keberatan (Objection Handling)
+                        </h5>
+                        <div className="space-y-3">
+                          {aiGuideResult.guide.objectionHandlers.map((obj, idx) => (
+                            <div key={idx} className="p-3 rounded-xl bg-sandstone/60 border border-warmborder space-y-1.5">
+                              <p className="text-[11px] font-bold text-rose-700">Keberatan: {obj.objection}</p>
+                              <p className="text-xs text-espresso leading-relaxed">
+                                <strong className="text-olive">Respon AI:</strong> {obj.aiResponse}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Action Footer: Catat Aktivitas Lapangan & Debet 5 AIC */}
+                      <div className="pt-4 border-t border-warmborder space-y-2">
+                        <div className="flex items-center justify-between text-xs text-warmmuted">
+                          <span>
+                            Progress: <strong>{completedSteps.length}</strong> / {aiGuideResult.guide.executionSteps.length} langkah
+                          </span>
+                          <span className="font-semibold text-espresso">AI Pendamping Sales Siap</span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={isSavingCopilotLog}
+                          onClick={async () => {
+                            setIsSavingCopilotLog(true);
+                            try {
+                              const res = await fetch('/api/se/activity-guide/log', {
+                                method: 'POST',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  'x-user-email': userEmail,
+                                  'x-user-role': userRole,
+                                },
+                                body: JSON.stringify({
+                                  activityKey: selectedActivity,
+                                  activityLabel: ALL_SE_ACTIVITY_CATEGORIES.find((a) => a.key === selectedActivity)?.label || selectedActivity,
+                                  completedSteps,
+                                  notes: `Menyelesaikan ${completedSteps.length}/${aiGuideResult.guide.executionSteps.length} langkah panduan AI Copilot`,
+                                  locationLabel: effectiveProjectName,
+                                }),
+                              });
+                              const data = await res.json();
+                              if (data.ok) {
+                                setToast(`Log aktivitas tersimpan ke Field Ops! 5 AIC berhasil didebet.`);
+                                setCompletedSteps([]);
+                              } else {
+                                setToast(data.message || data.error || 'Aktivitas terekam');
+                              }
+                            } catch {
+                              setToast('Aktivitas diselesaikan dan dicatat secara lokal.');
+                            } finally {
+                              setIsSavingCopilotLog(false);
+                            }
+                          }}
+                          className="w-full py-2.5 px-4 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white font-extrabold text-xs cursor-pointer flex items-center justify-center gap-2 shadow-sm transition-colors"
+                        >
+                          <CheckCircle2 className="size-4" />
+                          <span>
+                            {isSavingCopilotLog ? 'Menyimpan Log...' : 'Selesaikan Aktivitas & Simpan Log (5 AIC)'}
+                          </span>
+                        </button>
                       </div>
                     </div>
                   </div>

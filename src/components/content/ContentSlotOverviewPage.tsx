@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   Send,
   Share2,
+  Clock,
 } from 'lucide-react';
 import type { ContentSlot } from '../../lib/content-calendar/types';
 import type { ConnectedSocialAccount } from './SocialConnectModal';
@@ -482,8 +483,9 @@ export const ContentSlotOverviewPage: React.FC<ContentSlotOverviewPageProps> = (
               )}
 
               {queueInfo && queueInfo.itemsAhead > 0 && (
-                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 font-semibold">
-                  🕒 Antrean FIFO Global: ada <strong>{queueInfo.itemsAhead}</strong> item dari SE lain yang masuk lebih dulu (tanpa interupsi). Giliran Anda akan diproses setelahnya dengan jeda aman minimal <strong>1 menit</strong> (estimasi tunggu ±{queueInfo.estimatedWaitMinutes} menit).
+                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 font-semibold flex items-start gap-1.5">
+                  <Clock className="size-4 shrink-0 text-blue-700 mt-0.5" />
+                  <span>Antrean FIFO Global: ada <strong>{queueInfo.itemsAhead}</strong> item dari SE lain yang masuk lebih dulu (tanpa interupsi). Giliran Anda akan diproses setelahnya dengan jeda aman minimal <strong>1 menit</strong> (estimasi tunggu ±{queueInfo.estimatedWaitMinutes} menit).</span>
                 </div>
               )}
 

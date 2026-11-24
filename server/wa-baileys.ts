@@ -239,6 +239,25 @@ export async function processInboundWaMessageForSe(params: {
     VALUES (${seEmail}, ${cleanPhone}, ${params.contactName || cleanPhone}, ${encryptedMsg}, ${now.toISOString()})
   `;
 
+  // Deteksi UU PDP No. 27/2022: Otomatis tandai suppression list bila customer membalas STOP / opt-out
+  const isOptOut = /\b(stop|berhenti|batal|jangan hubungi|tidak berkenan|unsubscribe|unsub)\b/i.test(params.messageText);
+  if (isOptOut) {
+    try {
+      await sql`
+        INSERT INTO sales_os.wa_suppression_list (phone_number, lead_name, reason, notes, opted_out_at)
+        VALUES (${cleanPhone}, ${params.contactName || cleanPhone}, 'USER_OPT_OUT', 'Pelanggan membalas kata kunci opt-out via WhatsApp (UU PDP No. 27/2022)', NOW())
+        ON CONFLICT (phone_number) DO UPDATE SET opted_out_at = NOW()
+      `;
+      await sql`
+        UPDATE sales_os.pipeline_leads
+        SET wa_consent = 'REVOKED', wa_consent_updated_at = NOW()
+        WHERE phone_wa = ${cleanPhone}
+      `;
+    } catch (err) {
+      console.warn('[WA-Baileys] Gagal mencatat opt-out suppression:', err);
+    }
+  }
+
   // Bersihkan buffer yang sudah kadaluarsa (>24 jam)
   await sql`DELETE FROM sales_os.wa_inbound_temp_buffer WHERE expires_at < NOW()`;
 

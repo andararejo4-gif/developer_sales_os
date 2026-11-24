@@ -109,7 +109,7 @@ export const USERS_BY_ROLE: Record<RoleKey, UserProfile> = {
     role: 'SUPERADMIN_IT',
     roleLabel: 'Tim IT Internal Developer Sales OS',
     email: 'it.internal@developersalesos.com',
-    noWa: '+6281299988002',
+    noWa: '+6288980961427',
     avatarText: 'IT',
     badge: 'IT Core Platform · Multi-Tenant & AI Engine',
     proyek: 'Developer Sales OS (Core Multi-Tenant)',

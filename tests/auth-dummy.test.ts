@@ -3,6 +3,8 @@ import {
   DUMMY_ACCOUNTS,
   authenticateDummyUser,
   registerDeveloperAccount,
+  createMfaChallenge,
+  verifyMfaChallenge,
 } from '../src/lib/auth/dummy-accounts';
 
 describe('Dummy Auth Per Role', () => {
@@ -63,5 +65,65 @@ describe('Dummy Auth Per Role', () => {
     if (loginRes.ok) {
       expect(loginRes.session.role).toBe('DIREKSI');
     }
+  });
+
+  describe('Multi-Factor Authentication (MFA) untuk Seluruh Akun', () => {
+    it('menghasilkan MFA Challenge dengan nomor telepon tersamarkan untuk seluruh 9 akun role', () => {
+      for (const acc of DUMMY_ACCOUNTS) {
+        const challenge = createMfaChallenge(acc.email);
+        expect(challenge).not.toBeNull();
+        if (challenge) {
+          expect(challenge.email).toBe(acc.email.toLowerCase());
+          expect(challenge.code).toBe('829104');
+          expect(challenge.maskedPhone).toContain('****');
+          expect(challenge.expiresAt).toBeGreaterThan(Date.now());
+          expect(challenge.role).toBe(acc.role);
+        }
+      }
+    });
+
+    it('berhasil memverifikasi OTP resmi (829104) dan menerbitkan sesi dengan mfaVerified: true', () => {
+      const direksi = DUMMY_ACCOUNTS.find((a) => a.role === 'DIREKSI')!;
+      const challenge = createMfaChallenge(direksi.email)!;
+      expect(challenge).not.toBeNull();
+
+      const verifyRes = verifyMfaChallenge(challenge.challengeId, '829104');
+      expect(verifyRes.ok).toBe(true);
+      if (verifyRes.ok) {
+        expect(verifyRes.session.mfaVerified).toBe(true);
+        expect(verifyRes.session.mfaMethod).toBe('WHATSAPP_OTP');
+        expect(verifyRes.session.role).toBe('DIREKSI');
+        expect(verifyRes.session.email).toBe(direksi.email);
+      }
+    });
+
+    it('berhasil memverifikasi menggunakan master developer OTP bypass (123456)', () => {
+      const se = DUMMY_ACCOUNTS.find((a) => a.role === 'SE')!;
+      const challenge = createMfaChallenge(se.email)!;
+      expect(challenge).not.toBeNull();
+
+      const verifyRes = verifyMfaChallenge(challenge.challengeId, '123456');
+      expect(verifyRes.ok).toBe(true);
+      if (verifyRes.ok) {
+        expect(verifyRes.session.mfaVerified).toBe(true);
+        expect(verifyRes.session.role).toBe('SE');
+      }
+    });
+
+    it('menolak verifikasi jika kode OTP salah', () => {
+      const sm = DUMMY_ACCOUNTS.find((a) => a.role === 'SM')!;
+      const challenge = createMfaChallenge(sm.email)!;
+
+      const wrongRes = verifyMfaChallenge(challenge.challengeId, '000000');
+      expect(wrongRes.ok).toBe(false);
+      if (!wrongRes.ok) {
+        expect(wrongRes.error).toContain('Kode verifikasi 6-digit salah');
+      }
+    });
+
+    it('menolak verifikasi jika challenge ID tidak valid atau sudah dipakai', () => {
+      const fakeRes = verifyMfaChallenge('invalid_challenge_id', '829104');
+      expect(fakeRes.ok).toBe(false);
+    });
   });
 });

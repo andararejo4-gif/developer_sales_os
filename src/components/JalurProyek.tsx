@@ -326,7 +326,7 @@ export function JalurProyek({
                 <span className="size-2 rounded-full bg-slate-300 shrink-0" />
                 <div>
                   <p className="font-bold text-xs text-espresso">G3 · Transaction</p>
-                  <p className="text-[10px] text-warmmuted">Whitelist Rekening</p>
+                  <p className="text-[10px] text-warmmuted">Rekening Resmi Sah</p>
                 </div>
               </div>
             </div>

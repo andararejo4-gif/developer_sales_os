@@ -304,7 +304,7 @@ export function PlatformExecutiveDashboard({
           </div>
 
           <div className="p-3.5 bg-sandstone/50 rounded-2xl border border-warmborder text-[11px] text-espresso leading-relaxed">
-            🚀 <strong>Insight Bisnis:</strong> Fitur <em>"Surat Cinta 99 Keunggulan Gratis"</em> di beranda publik menghasilkan <strong>684 kontak nomor WhatsApp pemilik developer</strong> dalam 30 hari terakhir.
+            <strong>Insight Bisnis:</strong> Fitur <em>"Surat Cinta 99 Keunggulan Gratis"</em> di beranda publik menghasilkan <strong>684 kontak nomor WhatsApp pemilik developer</strong> dalam 30 hari terakhir.
           </div>
         </div>
 
@@ -359,7 +359,7 @@ export function PlatformExecutiveDashboard({
           </div>
 
           <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 text-[11px] text-emerald-900 leading-relaxed">
-            💎 <strong>Retensi 100%:</strong> Nol pembatalan langganan (churn rate 0%). Rata-rata developer menggunakan sistem lebih dari 9 bulan sampai proyek sold out.
+            <strong>Retensi 100%:</strong> Nol pembatalan langganan (churn rate 0%). Rata-rata developer menggunakan sistem lebih dari 9 bulan sampai proyek sold out.
           </div>
         </div>
 

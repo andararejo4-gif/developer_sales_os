@@ -25,6 +25,7 @@ import {
   ChevronDown,
   ChevronUp,
   CheckCheck,
+  Inbox,
 } from 'lucide-react';
 import {
   PLAYBOOK_PIPELINE_STAGES,
@@ -78,6 +79,12 @@ export interface PipelineLeadRecord {
   lost_reason?: string | null;
   response_time_seconds?: number | null;
   is_ai_analyzing?: boolean;
+  lead_quality?: 'HIGH' | 'WARM' | 'JUNK';
+  spam_reason?: string;
+  is_in_pool?: boolean;
+  pool_reason?: string;
+  wa_consent?: 'PENDING' | 'GRANTED' | 'REVOKED';
+  last_activity_at?: string;
   created_at: string;
   updated_at: string;
   latest_analysis?: {
@@ -220,6 +227,126 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>(() =>
     loadPersistedState<string>(`devos_pipeline_search_${user.email}`, '')
   );
+
+  // Filter Penugasan SE (Khusus role SM, ADMIN, TL, DIREKSI)
+  const [selectedSeEmail, setSelectedSeEmail] = useState<string>('ALL');
+  const [reassignTargetLead, setReassignTargetLead] = useState<PipelineLeadRecord | null>(null);
+  const [reassignSelectedEmail, setReassignSelectedEmail] = useState<string>('raka@andararejomakmur.co.id');
+  const [reassigning, setReassigning] = useState<boolean>(false);
+  const [claimingLeadId, setClaimingLeadId] = useState<string | null>(null);
+  const [releasingLeadId, setReleasingLeadId] = useState<string | null>(null);
+
+  const isManagerOrAdmin = ['TL', 'SM', 'ADMIN', 'DIREKSI', 'IT'].includes(role);
+
+  const availableSeList = useMemo(() => {
+    const list: Array<{ email: string; name: string }> = [
+      { email: 'raka@andararejomakmur.co.id', name: 'Raka Pratama' },
+      { email: 'siti@andararejomakmur.co.id', name: 'Siti Rahma' },
+      { email: 'budi@andararejomakmur.co.id', name: 'Budi Santoso' },
+    ];
+    for (const l of leads) {
+      if (l.owner_se_email && !list.some((s) => s.email.toLowerCase() === l.owner_se_email.toLowerCase())) {
+        list.push({ email: l.owner_se_email, name: l.owner_se_name || l.owner_se_email });
+      }
+    }
+    return list;
+  }, [leads]);
+
+  const handleClaimLead = async (leadId: string) => {
+    try {
+      setClaimingLeadId(leadId);
+      const res = await fetch('/api/pipeline/leads/claim', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({ leadId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        showToast(data.error || 'Gagal mengklaim lead.');
+        return;
+      }
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === leadId
+            ? { ...l, owner_se_email: user.email, owner_se_name: user.name, is_in_pool: false, pool_reason: '' }
+            : l
+        )
+      );
+      showToast(`Berhasil mengambil alih lead "${data.lead?.full_name || 'Prospek'}" ke pipeline Anda!`);
+      if (onDataChanged) onDataChanged();
+    } catch {
+      showToast('Gagal terhubung ke server saat mengklaim lead.');
+    } finally {
+      setClaimingLeadId(null);
+    }
+  };
+
+  const handleConfirmReassign = async () => {
+    if (!reassignTargetLead || !reassignSelectedEmail) return;
+    const targetSe = availableSeList.find((s) => s.email === reassignSelectedEmail);
+    if (!targetSe) return;
+
+    try {
+      setReassigning(true);
+      const res = await fetch('/api/pipeline/leads/reassign', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({
+          leadId: reassignTargetLead.id,
+          targetSeEmail: targetSe.email,
+          targetSeName: targetSe.name,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        showToast(data.error || 'Gagal menugaskan lead.');
+        return;
+      }
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === reassignTargetLead.id
+            ? { ...l, owner_se_email: targetSe.email, owner_se_name: targetSe.name, is_in_pool: false, pool_reason: '' }
+            : l
+        )
+      );
+      showToast(`Lead "${reassignTargetLead.full_name}" berhasil ditugaskan ke ${targetSe.name}!`);
+      setReassignTargetLead(null);
+      if (onDataChanged) onDataChanged();
+    } catch {
+      showToast('Gagal terhubung ke server saat menugaskan lead.');
+    } finally {
+      setReassigning(false);
+    }
+  };
+
+  const handleReleaseToPool = async (leadId: string) => {
+    try {
+      setReleasingLeadId(leadId);
+      const res = await fetch('/api/pipeline/leads/release-to-pool', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({ leadId, reason: 'Dilepas ke Lead Pool / Idle > 24 jam' }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        showToast(data.error || 'Gagal mengembalikan lead ke pool.');
+        return;
+      }
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === leadId
+            ? { ...l, is_in_pool: true, pool_reason: 'Dilepas ke Lead Pool / Idle > 24 jam' }
+            : l
+        )
+      );
+      showToast('Lead berhasil dikembalikan ke Lead Pool!');
+      if (onDataChanged) onDataChanged();
+    } catch {
+      showToast('Gagal terhubung ke server.');
+    } finally {
+      setReleasingLeadId(null);
+    }
+  };
 
   // Form Tambah / Edit Lead (Disimpan di localStorage agar tidak hilang saat reload)
   const [isLeadFormOpen, setIsLeadFormOpen] = useState<boolean>(() =>
@@ -997,16 +1124,28 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
 
   const filteredLeads = useMemo(() => {
     const filtered = leads.filter((l) => {
+      // Filter per Penugasan SE (khusus SM/Admin/TL/Direksi)
+      if (selectedSeEmail !== 'ALL' && l.owner_se_email !== selectedSeEmail) {
+        return false;
+      }
       if (activeFilter === 'PERLU_DITANGANI' && !isLeadNeedsHandling(l)) return false;
       else if (activeFilter === 'PERLU_DILENGKAPI' && l.validity_status !== 'PERLU_DILENGKAPI') return false;
       else if (activeFilter === 'GRADE_A' && l.grade !== 'A') return false;
       else if (activeFilter === 'GRADE_B' && l.grade !== 'B') return false;
+      else if (activeFilter === 'LEAD_POOL' && !l.is_in_pool) return false;
+      else if (activeFilter === 'DEV26_QUARANTINE' && l.lead_quality !== 'JUNK') return false;
+      else if (activeFilter === 'ALL') {
+        // Jangan tampilkan lead spam / junk di tab ALL utama
+        if (l.lead_quality === 'JUNK') return false;
+      }
       else if (
         activeFilter !== 'ALL' &&
         activeFilter !== 'PERLU_DITANGANI' &&
         activeFilter !== 'PERLU_DILENGKAPI' &&
         activeFilter !== 'GRADE_A' &&
         activeFilter !== 'GRADE_B' &&
+        activeFilter !== 'LEAD_POOL' &&
+        activeFilter !== 'DEV26_QUARANTINE' &&
         l.stage !== activeFilter
       ) {
         return false;
@@ -1018,7 +1157,8 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
           l.full_name.toLowerCase().includes(q) ||
           l.phone_wa.toLowerCase().includes(q) ||
           l.domicile.toLowerCase().includes(q) ||
-          l.unit_interest.toLowerCase().includes(q);
+          l.unit_interest.toLowerCase().includes(q) ||
+          (l.owner_se_name || '').toLowerCase().includes(q);
         if (!match) return false;
       }
       return true;
@@ -1030,13 +1170,15 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
       const bUrgent = isLeadNeedsHandling(b) ? 1 : 0;
       return bUrgent - aUrgent;
     });
-  }, [leads, activeFilter, searchQuery]);
+  }, [leads, activeFilter, searchQuery, selectedSeEmail]);
 
   const needsHandlingCount = leads.filter(isLeadNeedsHandling).length;
   const validCount = leads.filter((l) => l.validity_status === 'VALID').length;
   const unclearCount = leads.filter((l) => l.validity_status === 'PERLU_DILENGKAPI').length;
   const qualifiedCount = leads.filter((l) => l.validity_status === 'VALID' && l.bant_total >= 7).length;
   const hotCount = leads.filter((l) => l.validity_status === 'VALID' && (l.grade === 'A' || l.stage === 'HOT_NEGOTIATION')).length;
+  const leadPoolCount = leads.filter((l) => l.is_in_pool).length;
+  const junkCount = leads.filter((l) => l.lead_quality === 'JUNK').length;
 
   const previewBant = evaluatePlaybookBant(
     effectiveBantB,
@@ -1871,6 +2013,23 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
               className="w-full min-h-[44px] pl-9 pr-3 rounded-xl border border-warmborder text-xs focus:border-terracotta focus:outline-none"
             />
           </div>
+          {isManagerOrAdmin && (
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[11px] font-bold text-warmmuted">Filter SE:</span>
+              <select
+                value={selectedSeEmail}
+                onChange={(e) => setSelectedSeEmail(e.target.value)}
+                className="min-h-[44px] px-3 rounded-xl border border-warmborder bg-sandstone text-espresso text-xs font-bold focus:border-terracotta focus:outline-none cursor-pointer"
+              >
+                <option value="ALL">Semua Tim SE ({leads.length})</option>
+                {availableSeList.map((se) => (
+                  <option key={se.email} value={se.email}>
+                    {se.name} ({leads.filter((l) => l.owner_se_email === se.email).length})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <span className="text-xs font-bold text-warmmuted shrink-0">
             Menampilkan {filteredLeads.length} dari {leads.length} prospek
           </span>
@@ -1878,19 +2037,31 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
 
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar snap-x pb-1">
           {[
-            { id: 'ALL', label: `Semua (${leads.length})`, isUrgentTab: false, count: 0 },
+            { id: 'ALL', label: `Semua (${leads.filter((l) => l.lead_quality !== 'JUNK').length})`, isUrgentTab: false, count: 0 },
             {
               id: 'PERLU_DITANGANI',
               label: `Perlu Ditangani`,
               isUrgentTab: true,
               count: needsHandlingCount,
             },
+            {
+              id: 'LEAD_POOL',
+              label: `Lead Pool (${leadPoolCount})`,
+              isUrgentTab: leadPoolCount > 0,
+              count: leadPoolCount,
+            },
+            {
+              id: 'DEV26_QUARANTINE',
+              label: `Penyaringan Spam (${junkCount})`,
+              isUrgentTab: false,
+              count: junkCount,
+            },
             { id: 'PERLU_DILENGKAPI', label: `Perlu Dilengkapi (${unclearCount})`, isUrgentTab: false, count: 0 },
             { id: 'GRADE_A', label: `Hot Grade A (${hotCount})`, isUrgentTab: false, count: 0 },
             { id: 'GRADE_B', label: `Warm Grade B (${qualifiedCount})`, isUrgentTab: false, count: 0 },
             ...PLAYBOOK_PIPELINE_STAGES.map((st) => ({
               id: st.code,
-              label: `${st.shortLabel} (${leads.filter((l) => l.stage === st.code).length})`,
+              label: `${st.shortLabel} (${leads.filter((l) => l.stage === st.code && l.lead_quality !== 'JUNK').length})`,
               isUrgentTab: false,
               count: 0,
             })),
@@ -2041,9 +2212,30 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                           Perlu Ditangani
                         </span>
                       )}
+                      {lead.is_in_pool && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-amber-500 text-white whitespace-nowrap animate-pulse">
+                          Lead Pool
+                        </span>
+                      )}
+                      {lead.lead_quality === 'JUNK' && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-rose-600 text-white whitespace-nowrap">
+                          Terindikasi Spam
+                        </span>
+                      )}
+                      {lead.wa_consent === 'REVOKED' && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide bg-stone-800 text-white whitespace-nowrap">
+                          Berhenti Kontak (Opt-Out)
+                        </span>
+                      )}
                       <h3 className="text-sm sm:text-base font-extrabold text-espresso truncate max-w-full">
                         {lead.full_name}
                       </h3>
+                      {isManagerOrAdmin && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-espresso border border-amber-300 whitespace-nowrap shadow-2xs">
+                          <UserCheck className="size-3 text-terracotta" />
+                          <span>Milik SE: <strong>{lead.owner_se_name || lead.owner_se_email}</strong></span>
+                        </span>
+                      )}
                       <span className="px-2 py-0.5 rounded-full text-[11px] sm:text-xs font-extrabold bg-amber-50 text-terracotta border border-amber-200 whitespace-nowrap">
                         BANT {lead.bant_total}/12 · {lead.grade}
                       </span>
@@ -2089,7 +2281,58 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                       <ChevronDown className="size-3.5 shrink-0 opacity-75" />
                     </button>
 
-                    <div className="grid grid-cols-4 lg:flex items-center gap-1.5 w-full lg:w-auto">
+                    <div className="flex flex-wrap items-center gap-1.5 w-full lg:w-auto">
+                      {lead.is_in_pool ? (
+                        role === 'SE' ? (
+                          <button
+                            type="button"
+                            onClick={() => handleClaimLead(lead.id)}
+                            disabled={claimingLeadId === lead.id}
+                            className="min-h-[44px] px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold inline-flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap shadow-xs"
+                          >
+                            <span>{claimingLeadId === lead.id ? 'Mengklaim...' : 'Ambil Alih'}</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReassignTargetLead(lead);
+                              setReassignSelectedEmail(availableSeList[0]?.email || '');
+                            }}
+                            className="min-h-[44px] px-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-extrabold inline-flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap shadow-xs"
+                          >
+                            <Users className="size-3.5" />
+                            <span>Tugaskan SE</span>
+                          </button>
+                        )
+                      ) : (
+                        isManagerOrAdmin ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReassignTargetLead(lead);
+                              setReassignSelectedEmail(availableSeList[0]?.email || '');
+                            }}
+                            className="min-h-[44px] px-2.5 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-[11px] font-bold inline-flex items-center justify-center gap-1 cursor-pointer"
+                            title="Tugaskan / Alihkan Lead ke SE lain"
+                          >
+                            <Users className="size-3.5" />
+                            <span className="hidden sm:inline">Alihkan</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleReleaseToPool(lead.id)}
+                            disabled={releasingLeadId === lead.id}
+                            className="min-h-[44px] px-2 rounded-xl bg-sandstone hover:bg-warmborder text-warmmuted hover:text-espresso text-[11px] font-semibold inline-flex items-center justify-center gap-1 cursor-pointer"
+                            title="Kembalikan ke Lead Pool jika idle > 24 jam"
+                          >
+                            <Inbox className="size-3.5" />
+                            <span className="hidden sm:inline">Ke Pool</span>
+                          </button>
+                        )
+                      )}
+
                       <button
                         type="button"
                         onClick={() => toggleLeadDetail(lead.id)}
@@ -2677,6 +2920,80 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                   </button>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Penugasan / Alihkan Lead ke SE (Khusus SM/Admin/TL) */}
+      {reassignTargetLead && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-warmborder space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="size-8 rounded-lg bg-amber-50 text-terracotta flex items-center justify-center">
+                  <Users className="size-4" />
+                </div>
+                <h3 className="text-base font-extrabold text-espresso">Tugaskan Lead ke SE</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReassignTargetLead(null)}
+                className="size-8 rounded-lg bg-sandstone hover:bg-warmborder text-espresso flex items-center justify-center cursor-pointer"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-sandstone/60 text-xs text-warmmuted space-y-1">
+              <p>
+                Lead: <strong className="text-espresso">{reassignTargetLead.full_name}</strong> ({reassignTargetLead.phone_wa})
+              </p>
+              <p>
+                Unit Minat: <strong className="text-terracotta">{reassignTargetLead.unit_interest}</strong>
+              </p>
+              <p>
+                Pemilik Saat Ini:{' '}
+                <strong className="text-espresso">
+                  {reassignTargetLead.owner_se_name || reassignTargetLead.owner_se_email || 'Lead Pool (Belum Ada PIC)'}
+                </strong>
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-espresso mb-1.5">
+                Pilih Sales Executive Penerima:
+              </label>
+              <select
+                value={reassignSelectedEmail}
+                onChange={(e) => setReassignSelectedEmail(e.target.value)}
+                className="w-full min-h-[44px] px-3 rounded-xl border border-warmborder bg-sandstone text-espresso text-xs font-bold focus:border-terracotta focus:outline-none cursor-pointer"
+              >
+                {availableSeList.map((se) => (
+                  <option key={se.email} value={se.email}>
+                    {se.name} ({se.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setReassignTargetLead(null)}
+                className="min-h-[40px] px-4 rounded-xl bg-sandstone text-espresso text-xs font-bold cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReassign}
+                disabled={reassigning}
+                className="min-h-[40px] px-5 rounded-xl bg-terracotta text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
+              >
+                <CheckCircle2 className="size-4" />
+                <span>{reassigning ? 'Menugaskan...' : 'Konfirmasi Penugasan'}</span>
+              </button>
             </div>
           </div>
         </div>

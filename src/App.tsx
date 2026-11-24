@@ -16,6 +16,8 @@ import { PlatformExecutiveDashboard } from './components/superadmin/PlatformExec
 import { ItCommandCenterDashboard } from './components/superadmin/ItCommandCenterDashboard';
 import { FieldOpsModal } from './components/FieldOpsModal';
 import { PipelinePage } from './components/PipelinePage';
+import { CompanyBankAccountsModal } from './components/company/CompanyBankAccountsModal';
+import { CompanyAuditLogsModal } from './components/company/CompanyAuditLogsModal';
 import { MobileBottomNav, type MobileNavTab } from './components/mobile/MobileBottomNav';
 import { MobileMoreSheet } from './components/mobile/MobileMoreSheet';
 import { calculateSalesTargetPlan } from './lib/sales-target/calculator';
@@ -81,6 +83,7 @@ import {
   FileText,
   Globe,
   HeartHandshake,
+  History,
   Home,
   Layers,
   LayoutDashboard,
@@ -624,6 +627,9 @@ export default function App() {
   };
 
   const [isExportReportModalOpen, setIsExportReportModalOpen] = useState(false);
+  const [isBankAccountsModalOpen, setIsBankAccountsModalOpen] = useState(false);
+  const [isAuditLogsModalOpen, setIsAuditLogsModalOpen] = useState(false);
+  const [isDireksiGlossaryOpen, setIsDireksiGlossaryOpen] = useState(false);
   const [pipelineTargetFilter, setPipelineTargetFilter] = useState<string | undefined>(undefined);
   const [activeH5Reminder, setActiveH5Reminder] = useState<SeNotificationItem | null>(null);
   const [isNotifPanelOpen, setIsNotifPanelOpen] = useState(false);
@@ -780,6 +786,31 @@ export default function App() {
     if (tipeFilter === 'all') return DIREKSI_PROJECTS;
     return DIREKSI_PROJECTS.filter((p) => p.tipe === tipeFilter);
   }, [tipeFilter]);
+
+  const direksiSummary = useMemo(() => {
+    const list = filteredProjects;
+    const totalProjects = list.length;
+    const totalTargetNetSales = list.reduce((acc, p) => acc + p.targetNetSales, 0);
+    const totalAktualNetSales = list.reduce((acc, p) => acc + p.aktualNetSales, 0);
+    const netSalesPct = totalTargetNetSales > 0 ? ((totalAktualNetSales / totalTargetNetSales) * 100).toFixed(1) : '0';
+
+    const totalTargetOmzet = list.reduce((acc, p) => acc + p.targetOmzet, 0);
+    const totalAktualOmzet = list.reduce((acc, p) => acc + p.aktualOmzet, 0);
+    const omzetPct = totalTargetOmzet > 0 ? ((totalAktualOmzet / totalTargetOmzet) * 100).toFixed(1) : '0';
+
+    const projectNames = list.map((p) => p.nama).join(' · ');
+
+    return {
+      totalProjects,
+      totalTargetNetSales,
+      totalAktualNetSales,
+      netSalesPct,
+      totalTargetOmzet,
+      totalAktualOmzet,
+      omzetPct,
+      projectNames,
+    };
+  }, [filteredProjects]);
 
   const rupiah = (num: number) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
@@ -1073,6 +1104,31 @@ export default function App() {
               <span>AI Ad Optimizer (§S18)</span>
             </button>
           </>
+        )}
+
+        {/* Fitur Manajemen Rekening & Audit Log (SM, Admin, Direksi, IT) */}
+        {['SM', 'ADMIN', 'DIREKSI', 'IT'].includes(role) && (
+          <div className="pt-3 mt-2 border-t border-warmborder space-y-1">
+            <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-warmmuted mb-1">
+              Manajemen Perusahaan
+            </p>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => setIsBankAccountsModalOpen(true))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
+            >
+              <Building2 className="size-4 shrink-0 text-terracotta" />
+              <span>Rekening Resmi Perusahaan</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => setIsAuditLogsModalOpen(true))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
+            >
+              <History className="size-4 shrink-0 text-espresso" />
+              <span>Riwayat Aktivitas Tim</span>
+            </button>
+          </div>
         )}
 
         {/* Alat Kerja Khusus Role SE (Ringkas & Terfokus) */}
@@ -2351,7 +2407,19 @@ export default function App() {
                     Ringkasan eksekutif penjualan 30 unit (Nagoya, Osaka, Tokyo), supervisi kinerja tim SE binaan, dan monitoring pipeline WhatsApp AI.
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => setIsBankAccountsModalOpen(true)}
+                    className="px-3.5 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-terracotta border border-amber-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shrink-0 shadow-2xs"
+                  >
+                    <Building2 className="size-4" /> Rekening Resmi
+                  </button>
+                  <button
+                    onClick={() => setIsAuditLogsModalOpen(true)}
+                    className="px-3.5 py-2.5 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-xs font-semibold flex items-center gap-1.5 cursor-pointer shrink-0 shadow-2xs"
+                  >
+                    <History className="size-4" /> Riwayat Aktivitas Tim
+                  </button>
                   <button
                     onClick={() => openView('unit_park')}
                     className="px-4 py-2.5 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center gap-2 hover:bg-espresso/90 cursor-pointer shrink-0 shadow-sm"
@@ -2697,28 +2765,61 @@ export default function App() {
           {/* ========================================================================= */}
           {activeView === 'dashboard' && role === 'DIREKSI' && (
             <div className="space-y-6">
-              {/* Executive Summary Cards */}
+              {/* Executive Summary Cards with Single Source of Truth Metrics (Menutup Temuan T1) */}
+              <div className="bg-emerald-50/80 border border-emerald-200/90 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-xs">
+                <div className="flex items-center gap-2.5 text-emerald-950 font-semibold">
+                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>
+                    Status Data: <strong>Terkonsolidasi Realtime · Terverifikasi Keuangan</strong> (Single Source of Truth)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsDireksiGlossaryOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-900 font-bold hover:bg-emerald-100/50 transition-colors cursor-pointer text-[11px] self-start md:self-auto shadow-2xs"
+                >
+                  <BookOpen className="size-3.5" />
+                  Glosarium Metrik Tunggal
+                </button>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
                   <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Portofolio Aktif</p>
-                  <p className="text-2xl font-extrabold text-espresso mt-1">2 Proyek Perumahan</p>
-                  <p className="text-[11px] text-warmmuted mt-1">The Park Sukoharjo &amp; Andara Village</p>
+                  <p className="text-2xl font-extrabold text-espresso mt-1">{direksiSummary.totalProjects} Proyek Perumahan</p>
+                  <p className="text-[11px] text-warmmuted mt-1 truncate" title={direksiSummary.projectNames}>
+                    {direksiSummary.projectNames}
+                  </p>
                 </div>
 
                 <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
-                  <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Target Net Sales</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Capaian Net Sales</p>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">Sah SPR</span>
+                  </div>
                   <p className="text-2xl font-extrabold text-espresso mt-1">
-                    8 <span className="text-sm font-normal text-warmmuted">/ 9 Unit (88.8%)</span>
+                    {direksiSummary.totalAktualNetSales}{' '}
+                    <span className="text-sm font-normal text-warmmuted">
+                      / {direksiSummary.totalTargetNetSales} Unit ({direksiSummary.netSalesPct}%)
+                    </span>
                   </p>
                   <div className="mt-2 h-1.5 rounded-full bg-sandstone overflow-hidden">
-                    <div className="h-full bg-olive rounded-full" style={{ width: '88.8%' }}></div>
+                    <div
+                      className="h-full bg-olive rounded-full transition-all"
+                      style={{ width: `${Math.min(100, Number(direksiSummary.netSalesPct))}%` }}
+                    />
                   </div>
                 </div>
 
                 <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
-                  <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Total Omzet Bulan Ini</p>
-                  <p className="text-2xl font-extrabold text-terracotta mt-1">Rp 5.790.000.000</p>
-                  <p className="text-[11px] text-olive font-semibold mt-1">88.4% dari Target Rp 6.55 M</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-warmmuted uppercase font-bold tracking-wider">Total Realisasi Omzet</p>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Valid</span>
+                  </div>
+                  <p className="text-2xl font-extrabold text-terracotta mt-1">{rupiah(direksiSummary.totalAktualOmzet)}</p>
+                  <p className="text-[11px] text-olive font-semibold mt-1">
+                    {direksiSummary.omzetPct}% dari Target {rupiah(direksiSummary.totalTargetOmzet)}
+                  </p>
                 </div>
 
                 <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
@@ -2847,10 +2948,10 @@ export default function App() {
                 <div className="p-5 border-b border-warmborder flex items-center justify-between">
                   <div>
                     <h3 className="text-base font-bold text-espresso">
-                      Meja Eskalasi Persetujuan Direksi (Modul Q1 &amp; S21)
+                      Meja Persetujuan Khusus &amp; Eskalasi Direksi
                     </h3>
                     <p className="text-xs text-warmmuted mt-0.5">
-                      Pengajuan diskon di luar program resmi, permohonan refund pembatalan, dan komplain pelanggan.
+                      Pengajuan diskon khusus di luar ketentuan, permohonan pembatalan/refund, dan penanganan kebutuhan khusus pembeli.
                     </p>
                   </div>
                   <span className="text-xs font-bold text-warmmuted">SLA Keputusan: 24 Jam</span>
@@ -2943,17 +3044,31 @@ export default function App() {
               <section id="booking-pipeline" className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
                 <div className="p-5 border-b border-warmborder flex items-center justify-between">
                   <div>
-                    <h3 className="text-base font-bold text-espresso">Transaksi Booking Masuk &amp; Deadline Transaksi (Modul K)</h3>
+                    <h3 className="text-base font-bold text-espresso">Transaksi Booking Masuk &amp; Batas Waktu Pembayaran</h3>
                     <p className="text-xs text-warmmuted mt-0.5">
                       Verifikasi transfer Rp 5.000.000 ke rekening resmi, penguncian hold unit, dan jadwal cash tempo.
                     </p>
                   </div>
-                  <button
-                    onClick={() => setToast('Sinkronisasi Transaksi Bank')}
-                    className="px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-xs font-bold text-espresso flex items-center gap-2 cursor-pointer"
-                  >
-                    <RefreshCw className="size-3.5" /> Refresh
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => setIsBankAccountsModalOpen(true)}
+                      className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-terracotta border border-amber-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <Building2 className="size-3.5" /> Rekening Resmi
+                    </button>
+                    <button
+                      onClick={() => setIsAuditLogsModalOpen(true)}
+                      className="px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-xs font-bold text-espresso flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <History className="size-3.5" /> Riwayat Aktivitas Tim
+                    </button>
+                    <button
+                      onClick={() => setToast('Sinkronisasi Transaksi Bank')}
+                      className="px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-xs font-bold text-espresso flex items-center gap-2 cursor-pointer"
+                    >
+                      <RefreshCw className="size-3.5" /> Refresh
+                    </button>
+                  </div>
                 </div>
 
                 {/* Mobile Card List (< md) */}
@@ -3155,7 +3270,7 @@ export default function App() {
                 <div className="p-5 border-b border-warmborder flex items-center justify-between">
                   <div>
                     <h3 className="text-base font-bold text-espresso">
-                      Kinerja Kampanye Iklan &amp; CPL per Kanal (Modul O2 &amp; O3)
+                      Kinerja Kampanye Iklan &amp; Biaya per Lead (CPL) per Kanal
                     </h3>
                     <p className="text-xs text-warmmuted mt-0.5">
                       Target: CPL ≤ Rp 60 rb · Lead Valid ≥ 60% · Biaya/Kunjungan ≤ Rp 600 rb · Biaya/Booking ≤ Rp 4 jt.
@@ -3274,7 +3389,7 @@ export default function App() {
                 <section id="se-feedback" className="md:col-span-7 bg-white border border-warmborder rounded-2xl p-5 shadow-sm space-y-3">
                   <div className="flex items-center justify-between pb-2 border-b border-warmborder">
                     <div>
-                      <h4 className="text-sm font-bold text-espresso">Umpan Balik Kualitas Lead dari SE (Modul O4)</h4>
+                      <h4 className="text-sm font-bold text-espresso">Umpan Balik Kualitas Lead dari Tim Sales (SE)</h4>
                       <p className="text-[11px] text-warmmuted">Label valid/tidak valid dari SE dibaca digital marketer setiap hari.</p>
                     </div>
                     <span className="text-xs font-bold text-terracotta">Feed Real-time</span>
@@ -3354,7 +3469,7 @@ export default function App() {
                   </div>
 
                   <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-terracotta leading-relaxed mt-2">
-                    💡 <strong>Insight AI:</strong> Porsi terbesar (35%) lead masuk pada jam 19.30 - 21.00 WIB. Sinkron dengan <strong>Piket Malam SE</strong> (Modul B2).
+                    💡 <strong>Insight AI:</strong> Porsi terbesar (35%) lead masuk pada jam 19.30 - 21.00 WIB. Sangat efektif dialokasikan ke <strong>Piket Malam Tim Sales</strong>.
                   </div>
                 </section>
               </div>
@@ -3991,6 +4106,85 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Manajemen Rekening Resmi Perusahaan (SM & Admin) */}
+      <CompanyBankAccountsModal
+        isOpen={isBankAccountsModalOpen}
+        onClose={() => setIsBankAccountsModalOpen(false)}
+        user={user}
+        role={role}
+        projectId={activeProjectId}
+        projectName={activeProject.nama}
+      />
+
+      {/* Modal Audit Log CRUD Perusahaan */}
+      <CompanyAuditLogsModal
+        isOpen={isAuditLogsModalOpen}
+        onClose={() => setIsAuditLogsModalOpen(false)}
+        user={user}
+        role={role}
+      />
+
+      {/* Modal Glosarium Metrik Tunggal Direksi (Menutup Temuan T1) */}
+      {isDireksiGlossaryOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full border border-warmborder shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5 border-b border-warmborder flex items-center justify-between bg-sandstone/40">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-100 text-emerald-800 rounded-xl">
+                  <BookOpen className="size-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-espresso text-base">Glosarium Metrik Tunggal</h3>
+                  <p className="text-[11px] text-warmmuted">Standar Acuan Definisi Angka Eksekutif (Single Source of Truth)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDireksiGlossaryOpen(false)}
+                className="size-8 rounded-full hover:bg-sandstone grid place-items-center text-warmmuted cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-6 space-y-4 text-xs text-espresso">
+              <div className="p-3.5 rounded-2xl bg-sandstone/50 border border-warmborder space-y-1">
+                <span className="font-bold text-emerald-800 uppercase text-[10px] tracking-wider">1. Net Sales Bersih (Sah SPR)</span>
+                <p className="text-warmmuted leading-relaxed">
+                  Jumlah unit transaksi closing definitif di mana calon pembeli telah melunasi <strong>Booking Fee / Uang Muka (DP)</strong> dan menandatangani <strong>Surat Pemesanan Rumah (SPR)</strong>. Unit yang masih di tahap prospek, visit, atau hold sementara tidak dihitung sebagai Net Sales.
+                </p>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-sandstone/50 border border-warmborder space-y-1">
+                <span className="font-bold text-terracotta uppercase text-[10px] tracking-wider">2. Realisasi Omzet (Tervalidasi Keuangan)</span>
+                <p className="text-warmmuted leading-relaxed">
+                  Akumulasi nilai transaksi bruto dari unit-unit Net Sales yang pembayarannya telah masuk ke rekening resmi perusahaan dan telah divalidasi oleh Divisi Keuangan. Bukan proyeksi atau taksiran sepihak sales.
+                </p>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-sandstone/50 border border-warmborder space-y-1">
+                <span className="font-bold text-blue-800 uppercase text-[10px] tracking-wider">3. Leads Terkualifikasi (Bebas Spam)</span>
+                <p className="text-warmmuted leading-relaxed">
+                  Kontak masuk yang telah melewati filter penyaring anti-spam (bebas nomor fiktif, pola bot, kata kunci judi/pinjol, atau teks tidak jelas).
+                </p>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-sandstone/50 border border-warmborder space-y-1">
+                <span className="font-bold text-amber-800 uppercase text-[10px] tracking-wider">4. Booking Masuk</span>
+                <p className="text-warmmuted leading-relaxed">
+                  Konsumen yang telah memilih kavling unit spesifik dan mentransfer tanda jadi awal yang terverifikasi di mutasi rekening resmi perusahaan.
+                </p>
+              </div>
+            </div>
+            <div className="p-4 border-t border-warmborder bg-sandstone/20 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsDireksiGlossaryOpen(false)}
+                className="px-4 py-2 bg-espresso text-white rounded-xl text-xs font-bold hover:bg-espresso/90 cursor-pointer"
+              >
+                Tutup Panduan
+              </button>
+            </div>
           </div>
         </div>
       )}

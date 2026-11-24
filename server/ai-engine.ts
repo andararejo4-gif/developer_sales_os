@@ -76,6 +76,9 @@ export interface LeadAnalysisInput {
   interactionCount?: number;
   seName: string;
   isReanalyze?: boolean;
+  isSuppressed?: boolean;
+  waConsent?: 'PENDING' | 'GRANTED' | 'REVOKED';
+  companyBankAccounts?: Array<{ bankName: string; accountNumber: string; accountHolder: string }>;
   previousAnalysis?: {
     ringkas?: string;
     rekomendasi?: string[];
@@ -577,6 +580,10 @@ export function buildContextualFallbackFollowup(input: LeadAnalysisInput): strin
 }
 
 function sanitizeFollowupDraft(draft: string, input: LeadAnalysisInput): string {
+  if (input.isSuppressed || input.waConsent === 'REVOKED') {
+    return '';
+  }
+
   let clean = draft.trim();
   for (const forbidden of FORBIDDEN_CLAIMS) {
     const regex = new RegExp(forbidden, 'gi');
@@ -592,8 +599,14 @@ function sanitizeFollowupDraft(draft: string, input: LeadAnalysisInput): string 
     .trim();
 
   if (!clean) {
-    return buildContextualFallbackFollowup(input);
+    clean = buildContextualFallbackFollowup(input);
   }
+
+  // Kepatuhan UU PDP No. 27/2022 (Temuan T3 / F92): Disclaimer Opt-Out eksplisit pada pesan awal
+  if (clean && !clean.includes('STOP') && (input.stage === 'LEAD_BARU' || (input.interactionCount || 1) <= 1)) {
+    clean += '\n\n*(Balas "STOP" jika Bapak/Ibu tidak berkenan menerima info berkala dari kami - UU PDP No. 27/2022)*';
+  }
+
   return clean;
 }
 
@@ -748,6 +761,38 @@ function parseRouterCompletionBody(rawBody: string, fallbackModel: string): {
 }
 
 export async function analyzeLeadWithAi(input: LeadAnalysisInput): Promise<LeadAiEvaluation> {
+  // Kepatuhan UU PDP No. 27/2022 (Temuan T3 / F92):
+  // Jika kontak telah meminta opt-out (STOP) atau masuk suppression list, hentikan AI follow-up otomatis!
+  if (input.isSuppressed || input.waConsent === 'REVOKED') {
+    return {
+      skor: 0,
+      label: 'PERLU_PEMBINAAN',
+      clarity_status: 'VALID',
+      unclear_parts: [],
+      ringkas: 'Kontak telah meminta berhenti/opt-out (STOP) sesuai UU PDP No. 27/2022. Komunikasi follow-up dinonaktifkan.',
+      poin_kuat: ['Pernah berinteraksi dengan sales'],
+      poin_lemah: ['Konsumen mencabut persetujuan komunikasi WA (Opt-Out)'],
+      perlu_dicek_ulang: [],
+      rekomendasi: [
+        'Hormati hak privasi konsumen sesuai UU Perlindungan Data Pribadi (UU PDP No. 27/2022).',
+        'Dilarang mengirim pesan atau follow-up otomatis ke nomor ini kecuali konsumen meminta informasi kembali.',
+      ],
+      recommended_persona: input.personaCode || 'P1',
+      recommended_bant: {
+        b: input.bantB || 0,
+        a: input.bantA || 0,
+        n: input.bantN || 0,
+        t: input.bantT || 0,
+        total: (input.bantB || 0) + (input.bantA || 0) + (input.bantN || 0) + (input.bantT || 0),
+        grade: 'D',
+      },
+      followup_draft_message: '',
+      model: 'PDP-SUPPRESSION-GUARD',
+      prompt_tokens: 0,
+      completion_tokens: 0,
+    };
+  }
+
   const routerUrl = (process.env.AI_ROUTER_URL || 'https://9router.giivepro.com/v1').replace(/\/+$/, '');
   const apiKey = process.env.AI_ROUTER_API_KEY || '';
   const configuredModel = process.env.AI_ROUTER_MODEL || 'andararejomakmurjosjis';
@@ -769,9 +814,15 @@ export async function analyzeLeadWithAi(input: LeadAnalysisInput): Promise<LeadA
     if (t) compactPersona[k] = t.slice(0, 180);
   }
 
+  const bankWhitelistInfo =
+    input.companyBankAccounts && input.companyBankAccounts.length > 0
+      ? `REKENING RESMI SAH DEVELOPER: Segala transaksi booking atau DP HANYA BOLEH diarahkan ke rekening resmi berikut: ${input.companyBankAccounts.map((b) => `${b.bankName} ${b.accountNumber} a.n ${b.accountHolder}`).join(' | ')}. DILARANG MENYEBUT REKENING PRIBADI ATAU REKENING LAIN!`
+      : 'REKENING RESMI SAH DEVELOPER: Booking fee resmi Rp5.000.000 hanya transfer ke rekening BCA 0158829100 a.n PT Andara Rejo Makmur. DILARANG MENYEBUT REKENING PRIBADI!';
+
   const systemPrompt = [
     'Kamu adalah Analis Senior Properti & Copywriter Sales WhatsApp Terbaik untuk PT Andara Rejo Makmur (Proyek: The Park Townhouse Sukoharjo, Jombor, Bendosari).',
-    'Fakta Proyek (Playbook v1.2): 35 unit boutique 2 lantai Japandi Modern, garasi dalam, one-gate RFID + CCTV 4K 24 jam + smart door lock, clubhouse di Cluster Nagoya (kolam renang, gym, cafe, mini golf 9 hole, game station) TANPA biaya membership. Cluster Nagoya (Jl. Tentara Pelajar, mulai Rp650 jt), Osaka & Tokyo (Koridor Jl. Jenderal Sudirman, Rp775 jt - Rp1,15 M). Skema: Cash Keras, Cash Tempo 12/24 bln, KPR DP 10%. Booking fee resmi Rp5 juta ke rekening PT Andara Rejo Makmur. Dilarang klaim "pasti naik harga/untung/bebas banjir/pasti KPR".',
+    'Fakta Proyek & Ketentuan Resmi: 35 unit boutique 2 lantai Japandi Modern, garasi dalam, one-gate RFID + CCTV 4K 24 jam + smart door lock, clubhouse di Cluster Nagoya (kolam renang, gym, cafe, mini golf 9 hole, game station) TANPA biaya membership. Cluster Nagoya (Jl. Tentara Pelajar, mulai Rp650 jt), Osaka & Tokyo (Koridor Jl. Jenderal Sudirman, Rp775 jt - Rp1,15 M). Skema: Cash Keras, Cash Tempo 12/24 bln, KPR DP 10%. Dilarang klaim "pasti naik harga/untung/bebas banjir/pasti KPR".',
+    bankWhitelistInfo,
     'ATURAN EFISIENSI: Jangan bertele-tele di internal reasoning; langsung hasilkan objek JSON final yang ringkas, akurat, dan pesan `followup_draft_message` Bahasa Indonesia yang sangat hangat, manusiawi, persuasif, dan TIDAK KAKU SEPERTI BOT.',
   ].join('\n');
 

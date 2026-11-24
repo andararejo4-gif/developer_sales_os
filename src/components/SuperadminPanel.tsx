@@ -170,14 +170,14 @@ Salam hangat dari Tim Developer Sales OS.
 Kami telah menginisialisasi sistem operasional & penjualan digital siap pakai khusus untuk proyek Anda: *${projectName}* (${projectLocation}).
 
 Aset proyek yang sudah kami siapkan lengkap:
-✨ *Surat Cinta 99 Keunggulan*: Faktual dari titik koordinat GPS (${gpsCoord})
-🌐 *Website Landing Page & KPR*: ${webPreviewLink}
-🎯 *Riset Pasar Radius 25 km & 5 Profil Persona Pembeli*
-📊 *Target Penjualan 100% Sold Out (${totalUnit} Unit)*
-📱 *Playbook Sales, SOP & Kualifikasi BANT >= 7*
+- *Surat Cinta 99 Keunggulan*: Faktual dari titik koordinat GPS (${gpsCoord})
+- *Website Landing Page & KPR*: ${webPreviewLink}
+- *Riset Pasar Radius 25 km & 5 Profil Persona Pembeli*
+- *Target Penjualan 100% Sold Out (${totalUnit} Unit)*
+- *Playbook Sales, SOP & Kualifikasi BANT >= 7*
 
 Bapak/Ibu dapat langsung mencoba dashboard eksekutif proyek Anda di sini:
-👉 *Akses Preview VIP*: ${magicLink}
+- *Akses Preview VIP*: ${magicLink}
 
 Semua data telah disesuaikan dengan profil ${projectName}. Anda tinggal memilih paket langganan untuk menghubungkan nomor WhatsApp tim sales dan langsung jualan hari ini!`;
 

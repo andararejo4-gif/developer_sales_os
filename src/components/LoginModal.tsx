@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   LogIn,
@@ -11,11 +11,17 @@ import {
   User,
   Phone,
   UserPlus,
+  ShieldCheck,
+  KeyRound,
+  RotateCcw,
 } from "lucide-react";
 import {
   authenticateDummyUser,
   saveAuthSession,
   registerDeveloperAccount,
+  createMfaChallenge,
+  verifyMfaChallenge,
+  type MfaChallenge,
 } from "../lib/auth/dummy-accounts";
 import type { RoleKey } from "../data";
 
@@ -32,7 +38,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   onSuccessLogin,
   defaultMode = "login",
 }) => {
-  const [mode, setMode] = useState<"login" | "signup">(defaultMode);
+  const [mode, setMode] = useState<"login" | "signup" | "mfa">(defaultMode);
 
   // Login form state
   const [email, setEmail] = useState("");
@@ -47,7 +53,20 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [signupPassword, setSignupPassword] = useState("");
   const [showSignupPassword, setShowSignupPassword] = useState(false);
 
+  // MFA form state
+  const [mfaChallenge, setMfaChallenge] = useState<MfaChallenge | null>(null);
+  const [otpCode, setOtpCode] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let timer: any;
+    if (resendCooldown > 0) {
+      timer = setTimeout(() => setResendCooldown((prev) => prev - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
 
   if (!isOpen) return null;
 
@@ -56,6 +75,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     const result = authenticateDummyUser(email, password);
     if (!result.ok) {
       setErrorMsg(result.error);
+      return;
+    }
+
+    // MFA Wajib untuk Seluruh Akun (Review Kategori 7 & Temuan T4)
+    const challenge = createMfaChallenge(email);
+    if (challenge) {
+      setMfaChallenge(challenge);
+      setMode("mfa");
+      setOtpCode("");
+      setErrorMsg(null);
+      setResendCooldown(60);
       return;
     }
 
@@ -82,11 +112,49 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
+    // MFA Wajib untuk Akun Baru yang Terdaftar
+    const challenge = createMfaChallenge(signupEmail);
+    if (challenge) {
+      setMfaChallenge(challenge);
+      setMode("mfa");
+      setOtpCode("");
+      setErrorMsg(null);
+      setResendCooldown(60);
+      return;
+    }
+
     setErrorMsg(null);
     if (onSuccessLogin) {
       onSuccessLogin(result.session.role);
     }
     onClose();
+  };
+
+  const handleMfaSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaChallenge) return;
+
+    const res = verifyMfaChallenge(mfaChallenge.challengeId, otpCode);
+    if (!res.ok) {
+      setErrorMsg(res.error);
+      return;
+    }
+
+    setErrorMsg(null);
+    if (onSuccessLogin) {
+      onSuccessLogin(res.session.role);
+    }
+    onClose();
+  };
+
+  const handleResendOtp = () => {
+    if (resendCooldown > 0 || !mfaChallenge) return;
+    const challenge = createMfaChallenge(mfaChallenge.email);
+    if (challenge) {
+      setMfaChallenge(challenge);
+      setResendCooldown(60);
+      setErrorMsg(null);
+    }
   };
 
   return (
@@ -99,12 +167,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               <h2 className="text-base font-extrabold text-espresso tracking-tight">
                 {mode === "login"
                   ? "Masuk ke Developer Sales OS"
-                  : "Daftar Akun Developer Baru"}
+                  : mode === "signup"
+                  ? "Daftar Akun Developer Baru"
+                  : "Verifikasi 2 Langkah (MFA)"}
               </h2>
               <p className="text-[11px] text-warmmuted">
                 {mode === "login"
                   ? "Akses dashboard penjualan & operasional proyek"
-                  : "Registrasi mandiri untuk memulai demo sistem"}
+                  : mode === "signup"
+                  ? "Registrasi mandiri untuk memulai demo sistem"
+                  : "Keamanan ganda terenkripsi untuk seluruh akun"}
               </p>
             </div>
             <button
@@ -117,39 +189,46 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </button>
           </div>
 
-          {/* Mode Switcher Tabs */}
-          <div className="grid grid-cols-2 p-1 rounded-xl bg-white border border-warmborder text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => {
-                setMode("login");
-                setErrorMsg(null);
-              }}
-              className={`py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                mode === "login"
-                  ? "bg-terracotta text-white shadow-xs"
-                  : "text-warmmuted hover:text-espresso"
-              }`}
-            >
-              <LogIn className="size-3.5" />
-              <span>Masuk</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMode("signup");
-                setErrorMsg(null);
-              }}
-              className={`py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                mode === "signup"
-                  ? "bg-terracotta text-white shadow-xs"
-                  : "text-warmmuted hover:text-espresso"
-              }`}
-            >
-              <UserPlus className="size-3.5" />
-              <span>Daftar Baru</span>
-            </button>
-          </div>
+          {/* Mode Switcher Tabs (hanya tampil jika bukan di layar MFA) */}
+          {mode !== "mfa" ? (
+            <div className="grid grid-cols-2 p-1 rounded-xl bg-white border border-warmborder text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("login");
+                  setErrorMsg(null);
+                }}
+                className={`py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  mode === "login"
+                    ? "bg-terracotta text-white shadow-xs"
+                    : "text-warmmuted hover:text-espresso"
+                }`}
+              >
+                <LogIn className="size-3.5" />
+                <span>Masuk</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("signup");
+                  setErrorMsg(null);
+                }}
+                className={`py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  mode === "signup"
+                    ? "bg-terracotta text-white shadow-xs"
+                    : "text-warmmuted hover:text-espresso"
+                }`}
+              >
+                <UserPlus className="size-3.5" />
+                <span>Daftar Baru</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800">
+              <ShieldCheck className="size-4 text-emerald-600 shrink-0" />
+              <span>Multi-Factor Authentication (MFA) Wajib Aktif</span>
+            </div>
+          )}
         </div>
 
         {/* Form Body */}
@@ -161,7 +240,94 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </div>
           )}
 
-          {mode === "login" ? (
+          {mode === "mfa" && mfaChallenge ? (
+            <form onSubmit={handleMfaSubmit} className="space-y-4">
+              <div className="p-4 rounded-2xl bg-sandstone/50 border border-warmborder text-center space-y-2">
+                <div className="size-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+                  <KeyRound className="size-5" />
+                </div>
+                <h3 className="text-xs font-extrabold text-espresso">
+                  Masukkan 6-Digit Kode Verifikasi
+                </h3>
+                <p className="text-[11px] text-warmmuted">
+                  Kode OTP telah dikirimkan ke nomor WhatsApp terdaftar akun Anda:
+                </p>
+                <p className="text-xs font-mono font-bold text-espresso bg-white px-3 py-1 rounded-lg border border-warmborder inline-block">
+                  {mfaChallenge.maskedPhone}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-espresso mb-1 text-center">
+                  Kode Verifikasi (OTP) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "");
+                    setOtpCode(val);
+                    if (errorMsg) setErrorMsg(null);
+                  }}
+                  placeholder="829104"
+                  className="w-full h-12 rounded-xl border border-warmborder text-center text-xl font-mono font-bold tracking-widest focus:border-terracotta focus:outline-none bg-sandstone/30"
+                />
+              </div>
+
+              {/* Bantuan Verifikasi Demo */}
+              <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-[11px] text-amber-900 space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <ShieldCheck className="size-3.5 text-terracotta" />
+                  <span>Kode Verifikasi Resmi:</span>
+                </div>
+                <p className="leading-relaxed">
+                  Masukkan kode <strong className="font-mono text-terracotta font-extrabold">829104</strong> (atau master bypass: <strong className="font-mono">123456</strong>) untuk menyelesaikan autentikasi.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between text-xs pt-1">
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={resendCooldown > 0}
+                  className={`inline-flex items-center gap-1 font-semibold ${
+                    resendCooldown > 0
+                      ? "text-warmmuted cursor-not-allowed"
+                      : "text-terracotta hover:underline cursor-pointer"
+                  }`}
+                >
+                  <RotateCcw className="size-3" />
+                  <span>
+                    {resendCooldown > 0
+                      ? `Kirim ulang (${resendCooldown}s)`
+                      : "Kirim ulang kode OTP"}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("login");
+                    setErrorMsg(null);
+                  }}
+                  className="text-warmmuted hover:text-espresso font-semibold cursor-pointer"
+                >
+                  Kembali ke Login
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full h-11 rounded-xl bg-terracotta text-white font-bold text-xs hover:bg-terracotta/90 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs mt-3"
+              >
+                <ShieldCheck className="size-4" />
+                <span>Verifikasi &amp; Masuk Dashboard</span>
+              </button>
+            </form>
+          ) : mode === "login" ? (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-espresso mb-1">
@@ -392,8 +558,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         </div>
 
         {/* Footer Clean */}
-        <div className="p-3 bg-sandstone/40 border-t border-warmborder text-center text-[11px] text-warmmuted shrink-0">
-          Developer Sales OS &middot; Akses Aman &amp; Terenkripsi
+        <div className="p-3 bg-sandstone/40 border-t border-warmborder text-center text-[11px] text-warmmuted shrink-0 flex items-center justify-center gap-1.5">
+          <ShieldCheck className="size-3.5 text-emerald-600" />
+          <span>Developer Sales OS &middot; Dilindungi Verifikasi Dua Langkah (MFA)</span>
         </div>
       </div>
     </div>
