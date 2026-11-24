@@ -95,15 +95,15 @@ export const RailNavV3: React.FC<RailNavV3Props> = ({
                 <button
                   key={ch.id}
                   onClick={() => jumpTo(ch.id)}
-                  className={`min-h-[38px] px-2.5 xl:px-3 rounded-full text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  className={`min-h-[36px] px-3 rounded-lg text-xs font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors cursor-pointer ${
                     isActive
-                      ? 'bg-[#EAF4D3] text-[#0B3D2E] font-bold'
+                      ? 'bg-[#EAF4D3] text-[#0B3D2E] font-semibold'
                       : 'text-[#3B5E50] hover:bg-[#F6FAF7] hover:text-[#0B3D2E]'
                   }`}
                 >
                   <span
-                    className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                      isActive ? 'bg-[#C6F432] text-[#0B3D2E]' : 'text-[#3B5E50]/75'
+                    className={`font-mono text-[10px] px-1 py-0.5 rounded ${
+                      isActive ? 'bg-[#0B3D2E] text-white font-semibold' : 'text-[#3B5E50]/75'
                     }`}
                   >
                     {ch.num}
@@ -118,7 +118,7 @@ export const RailNavV3: React.FC<RailNavV3Props> = ({
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={onOpenCommandPalette}
-              className="min-h-[44px] px-3 rounded-full bg-[#F6FAF7] border border-[#CFE1D5] text-xs font-medium text-[#3B5E50] hover:border-[#2F9E5B] hover:text-[#0B3D2E] transition-colors cursor-pointer flex items-center gap-1.5"
+              className="min-h-[38px] px-3 rounded-lg bg-[#F6FAF7] border border-[#CFE1D5] text-xs font-medium text-[#3B5E50] hover:border-[#2F9E5B] hover:text-[#0B3D2E] transition-colors cursor-pointer flex items-center gap-1.5"
               title="Cari fitur atau studi kasus (Ctrl+K)"
               aria-label="Cari cepat"
             >
@@ -128,17 +128,16 @@ export const RailNavV3: React.FC<RailNavV3Props> = ({
 
             <button
               onClick={onOpenLogin}
-              className="hidden md:inline-flex min-h-[44px] px-4 rounded-full border border-[#CFE1D5] bg-white text-[#0B3D2E] text-xs font-bold hover:bg-[#F6FAF7] transition-colors cursor-pointer items-center justify-center"
+              className="hidden md:inline-flex min-h-[38px] px-3.5 rounded-lg border border-[#CFE1D5] bg-white text-[#0B3D2E] text-xs font-semibold hover:bg-[#F6FAF7] transition-colors cursor-pointer items-center justify-center"
             >
               Masuk
             </button>
 
             <button
               onClick={onOpenWizard}
-              className="min-h-[44px] px-4 rounded-full bg-[#0B3D2E] text-white text-xs font-bold hover:bg-[#135440] transition-colors cursor-pointer inline-flex items-center gap-2"
+              className="min-h-[38px] px-3.5 rounded-lg bg-[#0B3D2E] text-white text-xs font-semibold hover:bg-[#135440] transition-colors cursor-pointer inline-flex items-center gap-2 shadow-2xs"
             >
               <span>Buat Surat Cinta</span>
-              <span className="size-2 rounded-full bg-[#C6F432]" />
             </button>
           </div>
         </div>

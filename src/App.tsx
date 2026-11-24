@@ -1100,8 +1100,8 @@ export default function App() {
               onClick={() => handleItemClick(() => openDashboardSection('ai-ad-optimizer'))}
               className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
-              <Sparkles className="size-4 shrink-0" />
-              <span>AI Ad Optimizer (§S18)</span>
+              <TrendingUp className="size-4 shrink-0" />
+              <span>Optimasi Iklan Otomatis</span>
             </button>
           </>
         )}
@@ -1562,8 +1562,8 @@ export default function App() {
         {isImpersonating() && (
           <div className="bg-espresso text-white px-4 py-2.5 border-b-2 border-amber-400 flex items-center justify-between z-30 sticky top-0 shadow-md">
             <div className="flex items-center gap-2 text-xs">
-              <span className="size-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
-              <strong className="text-amber-300 uppercase tracking-wider">Mode Bantuan IT Aktif:</strong>
+              <span className="size-2 rounded-full bg-amber-400 shrink-0" />
+              <strong className="text-amber-300 font-semibold tracking-wide">Mode Bantuan IT Aktif:</strong>
               <span className="text-stone-300 hidden sm:inline">
                 Mengakses dashboard sebagai <strong>{user.name}</strong> ({user.roleLabel}) &middot; Proyek: {activeProject.nama}
               </span>
@@ -1571,7 +1571,7 @@ export default function App() {
             <button
               type="button"
               onClick={handleExitImpersonation}
-              className="px-3 py-1 rounded-xl bg-amber-400 hover:bg-amber-300 text-espresso font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors shrink-0"
+              className="px-3 py-1 rounded-xl bg-amber-400 hover:bg-amber-300 text-espresso font-semibold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors shrink-0"
             >
               <ArrowRight className="size-3.5 rotate-180" />
               <span>Kembali ke IT Superadmin</span>
@@ -1659,7 +1659,7 @@ export default function App() {
               />
             )}
             <div className="flex items-center gap-2 bg-sandstone px-3 py-1.5 rounded-xl border border-warmborder text-xs">
-              <span className="size-2 rounded-full bg-olive animate-pulse"></span>
+              <span className="size-2 rounded-full bg-olive"></span>
               <span className="font-semibold text-espresso">Online</span>
               <span className="text-warmmuted text-[11px]">({user.name})</span>
             </div>
@@ -2268,9 +2268,9 @@ export default function App() {
               <div className="bg-espresso text-white rounded-2xl p-6 border border-white/10 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <span className="size-2 rounded-full bg-amber-400 animate-ping"></span>
-                    <span className="text-xs font-bold uppercase tracking-wider text-amber-400">
-                      AI Morning Huddle 07.25 (§7.1, §12.1)
+                    <span className="size-2 rounded-full bg-amber-400"></span>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">
+                      AI Morning Huddle 07.25
                     </span>
                   </div>
                   <h2 className="text-lg font-extrabold text-white">Briefing Otomatis ke Tim 3 SE Hari Ini</h2>
@@ -2768,9 +2768,9 @@ export default function App() {
               {/* Executive Summary Cards with Single Source of Truth Metrics (Menutup Temuan T1) */}
               <div className="bg-emerald-50/80 border border-emerald-200/90 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-xs">
                 <div className="flex items-center gap-2.5 text-emerald-950 font-semibold">
-                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="size-2 rounded-full bg-emerald-500" />
                   <span>
-                    Status Data: <strong>Terkonsolidasi Realtime · Terverifikasi Keuangan</strong> (Single Source of Truth)
+                    Status Data: <strong>Terkonsolidasi Realtime · Terverifikasi Keuangan</strong>
                   </span>
                 </div>
                 <button
@@ -3172,7 +3172,7 @@ export default function App() {
               <section id="audit-log" className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
                 <div className="p-5 border-b border-warmborder flex items-center justify-between">
                   <div>
-                    <h3 className="text-base font-bold text-espresso">Audit Log 100% (Append-Only Trigger Q5)</h3>
+                    <h3 className="text-base font-bold text-espresso">Audit Log 100% (Pencatatan Riwayat Data)</h3>
                     <p className="text-xs text-warmmuted mt-0.5">
                       Merekam seluruh modifikasi data pengguna, status unit, harga, lead, dan booking.
                     </p>

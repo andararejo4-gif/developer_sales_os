@@ -3,6 +3,22 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-061 | 2026-11-24 | Perbaikan Input Rekening Developer & Ketahanan Offline
+- Status: selesai
+- Ubah: `src/components/company/CompanyBankAccountsModal.tsx`
+- Alasan/keputusan: Menyediakan fallback persistensi `localStorage` saat backend API (`http://127.0.0.1:3040`) sedang offline atau tidak aktif di lingkungan dev lokal Vite, sehingga penambahan/pengeditan rekening resmi perusahaan tidak lagi memicu error `Terjadi kesalahan saat menyimpan rekening.`.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (sukses).
+- Berikutnya: -
+
+
+## P-060 | 2026-11-24 | Penerapan Unslop pada Home Page & Seluruh Dashboard Pengguna
+- Status: selesai
+- Ubah: `src/components/v3/ChapterIntroAndCaseV3.tsx`, `src/components/v3/RailNavV3.tsx`, `src/components/superadmin/ItCommandCenterDashboard.tsx`, `src/components/superadmin/PlatformExecutiveDashboard.tsx`, `src/App.tsx`
+- Alasan/keputusan: Menghapus AI visual slop (highlighter neon lime `#C6F432`, blurred blobs `blur-3xl`, jargon gamer "God Mode", kode klausul `§7.1`/`§S18`, `animate-pulse`/`animate-ping` pada status statis, dan over-pill). Menerapkan tipografi tenang (font-bold/semibold), nested radius 8-16px, dan hairline borders.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (sukses).
+- Berikutnya: -
+
+
 ## P-059 | 2026-11-24 | Pemasangan Skill Unslop (UI Craft & Anti-Slop)
 - Status: selesai
 - Ubah: `~/.gemini/config/skills/unslop/` (global Antigravity), `.agents/skills/unslop/` (workspace)

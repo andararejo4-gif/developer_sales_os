@@ -161,8 +161,8 @@ export const ChapterIntroAndCaseV3: React.FC<ChapterIntroAndCaseV3Props> = ({
 
         <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-8 lg:px-12 pt-10 pb-12 sm:pt-16 sm:pb-16 lg:pt-20 lg:pb-20">
           {/* Eyebrow */}
-          <div className="v3-hero-fade inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-white border border-[#CFE1D5] text-xs font-mono font-bold uppercase tracking-wider text-[#0B3D2E] mb-6">
-            <span className="size-2 rounded-full bg-[#2F9E5B]" />
+          <div className="v3-hero-fade inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-white border border-[#CFE1D5] text-xs font-mono font-medium text-[#0B3D2E] mb-6 shadow-2xs">
+            <span className="size-1.5 rounded-full bg-[#2F9E5B]" />
             <span>Bab 01 · Platform Multi-Tenant Pengembang Perumahan</span>
           </div>
 
@@ -174,7 +174,7 @@ export const ChapterIntroAndCaseV3: React.FC<ChapterIntroAndCaseV3Props> = ({
             <span className="block overflow-hidden pb-1">
               <span className="v3-hero-line block">
                 menjadi{' '}
-                <span className="inline-block px-3 py-0.5 rounded-xl bg-[#C6F432] text-[#0B3D2E]">
+                <span className="inline-block px-3 py-0.5 rounded-lg bg-[#EAF4D3] text-[#0B3D2E] border border-[#CFE1D5]">
                   mesin penjualan
                 </span>
               </span>
@@ -193,17 +193,15 @@ export const ChapterIntroAndCaseV3: React.FC<ChapterIntroAndCaseV3Props> = ({
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
               <button
                 onClick={onOpenWizard}
-                className="min-h-[52px] px-6 rounded-full bg-[#0B3D2E] text-white font-bold text-sm sm:text-base hover:bg-[#135440] transition-colors cursor-pointer inline-flex items-center justify-center gap-2.5 shadow-[0_12px_28px_-10px_rgba(11,61,46,0.45)]"
+                className="min-h-[50px] px-6 rounded-xl bg-[#0B3D2E] text-white font-semibold text-sm sm:text-base hover:bg-[#135440] transition-colors cursor-pointer inline-flex items-center justify-center gap-2.5 shadow-sm"
               >
                 <span>Dapatkan Surat Cinta Gratis</span>
-                <span className="size-7 rounded-full bg-[#C6F432] text-[#0B3D2E] grid place-items-center">
-                  <ArrowRight className="size-4" />
-                </span>
+                <ArrowRight className="size-4 text-white/80" />
               </button>
 
               <button
                 onClick={onScrollToCaseStudy}
-                className="min-h-[52px] px-6 rounded-full border border-[#0B3D2E]/25 bg-white text-[#0B3D2E] font-bold text-sm sm:text-base hover:border-[#0B3D2E] transition-colors cursor-pointer inline-flex items-center justify-center"
+                className="min-h-[50px] px-6 rounded-xl border border-[#CFE1D5] bg-white text-[#0B3D2E] font-semibold text-sm sm:text-base hover:bg-[#F6FAF7] transition-colors cursor-pointer inline-flex items-center justify-center shadow-2xs"
               >
                 Lihat Studi Kasus
               </button>

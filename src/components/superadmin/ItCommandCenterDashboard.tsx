@@ -451,20 +451,19 @@ export function ItCommandCenterDashboard({
       )}
 
       {/* IT Command Center Header */}
-      <div className="p-6 sm:p-8 rounded-3xl bg-espresso text-white shadow-xl relative overflow-hidden">
-        <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 size-80 bg-blue-500/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="p-6 sm:p-8 rounded-2xl bg-espresso text-white border border-stone-800 shadow-sm relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
             <div className="flex items-center gap-2">
-              <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500 text-white shadow-xs">
-                IT Command Center &middot; God Mode
+              <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium tracking-wide bg-stone-800 text-stone-200 border border-stone-700">
+                Pusat Kendali IT &amp; Bantuan Teknis
               </span>
               <span className="text-xs text-stone-300">Akses &amp; Bantuan Teknis Menyeluruh</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-black tracking-tight mt-2">
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight mt-2.5 text-white">
               Pusat Kendali Sistem IT &amp; Bantuan Teknis Developer
             </h2>
-            <p className="text-xs sm:text-sm text-stone-300 mt-1 max-w-2xl leading-relaxed">
+            <p className="text-xs sm:text-sm text-stone-300 mt-1.5 max-w-2xl leading-relaxed">
               Memiliki otoritas penuh untuk menginspeksi, meng-CRUD seluruh hierarki dari developer hingga tim sales (SE), serta login instan (impersonate) untuk membantu developer yang membutuhkan pertolongan teknis.
             </p>
           </div>
@@ -473,58 +472,58 @@ export function ItCommandCenterDashboard({
             <button
               type="button"
               onClick={onOpenSuperadminModal}
-              className="px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-espresso font-black text-xs shadow-lg transition-all flex items-center gap-2 cursor-pointer"
+              className="px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white font-semibold text-xs shadow-sm transition-colors flex items-center gap-2 cursor-pointer"
             >
-              <ShieldAlert className="size-4 text-espresso" />
+              <ShieldAlert className="size-4 text-white" />
               <span>Buka Superadmin Panel</span>
             </button>
           </div>
         </div>
 
         {/* System Health Indicators */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mt-6 pt-6 border-t border-white/15">
-          <div className="p-4 rounded-2xl bg-white/10 border border-white/10">
-            <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider block">
-              PostgreSQL Schema `devos`
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mt-6 pt-6 border-t border-white/10">
+          <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+            <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
+              Skema PostgreSQL devos
             </span>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-              <strong className="text-base font-bold text-white">6/6 Migrations Active</strong>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="size-2 rounded-full bg-emerald-400" />
+              <strong className="text-sm sm:text-base font-semibold text-white">6/6 Migrasi Aktif</strong>
             </div>
-            <span className="text-[11px] text-white/70 mt-0.5 block">Latency 4ms &middot; 0 Slow Queries</span>
+            <span className="text-[11px] text-white/60 mt-1 block">Latensi 4ms &middot; 0 Permintaan Lambat</span>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white/10 border border-white/10">
-            <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider block">
-              Engine LLM &amp; Token Dispatcher
+          <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+            <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
+              Dispatcher LLM &amp; Token
             </span>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-              <strong className="text-base font-bold text-white">Gemini 2.5 Flash + GPT-4o</strong>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="size-2 rounded-full bg-emerald-400" />
+              <strong className="text-sm sm:text-base font-semibold text-white">Gemini 2.5 Flash + GPT-4o</strong>
             </div>
-            <span className="text-[11px] text-white/70 mt-0.5 block">Quota 98.4% Available</span>
+            <span className="text-[11px] text-white/60 mt-1 block">Kuota 98.4% Tersedia</span>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white/10 border border-white/10">
-            <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider block">
-              WhatsApp Queue Dispatcher
+          <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+            <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
+              Antrean WhatsApp Dispatcher
             </span>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-              <strong className="text-base font-bold text-white">Cloud API Ready</strong>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="size-2 rounded-full bg-emerald-400" />
+              <strong className="text-sm sm:text-base font-semibold text-white">Cloud API Siap</strong>
             </div>
-            <span className="text-[11px] text-white/70 mt-0.5 block">Worker SLA &lt; 2s</span>
+            <span className="text-[11px] text-white/60 mt-1 block">Worker SLA &lt; 2s</span>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white/10 border border-white/10">
-            <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider block">
+          <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+            <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
               Master POI Regional
             </span>
-            <div className="flex items-center gap-1.5 mt-1">
+            <div className="flex items-center gap-2 mt-1.5">
               <span className="size-2 rounded-full bg-amber-400" />
-              <strong className="text-base font-bold text-white">63 Titik Terkurasi</strong>
+              <strong className="text-sm sm:text-base font-semibold text-white">63 Titik Terkurasi</strong>
             </div>
-            <span className="text-[11px] text-white/70 mt-0.5 block">25 Unggulan Homepage</span>
+            <span className="text-[11px] text-white/60 mt-1 block">25 Titik Unggulan</span>
           </div>
         </div>
       </div>

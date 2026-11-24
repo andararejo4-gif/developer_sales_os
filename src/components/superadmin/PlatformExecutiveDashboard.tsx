@@ -160,20 +160,19 @@ export function PlatformExecutiveDashboard({
   return (
     <div className="space-y-6">
       {/* Executive Hero Banner */}
-      <div className="p-6 sm:p-8 rounded-3xl bg-espresso text-white shadow-xl relative overflow-hidden">
-        <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 size-80 bg-terracotta/25 rounded-full blur-3xl pointer-events-none" />
+      <div className="p-6 sm:p-8 rounded-2xl bg-espresso text-white border border-stone-800 shadow-sm relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
             <div className="flex items-center gap-2">
-              <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400 text-espresso shadow-xs">
-                Platform Owner &amp; Executive Suite
+              <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium tracking-wide bg-stone-800 text-stone-200 border border-stone-700">
+                Eksekutif &amp; Pemilik Platform
               </span>
               <span className="text-xs text-stone-300">Portofolio Bisnis Developer Sales OS</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-black tracking-tight mt-2">
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight mt-2.5 text-white">
               Kinerja Platform &amp; Portofolio SaaS Developer Sales OS
             </h2>
-            <p className="text-xs sm:text-sm text-stone-300 mt-1 max-w-2xl leading-relaxed">
+            <p className="text-xs sm:text-sm text-stone-300 mt-1.5 max-w-2xl leading-relaxed">
               Memantau pertumbuhan trafik web publik, penetrasi akun developer properti, retensi langganan, efisiensi konsumsi AI, dan nilai transaksi properti nasional.
             </p>
           </div>
@@ -182,33 +181,33 @@ export function PlatformExecutiveDashboard({
             <button
               type="button"
               onClick={onOpenSuperadminModal}
-              className="px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-espresso font-black text-xs shadow-lg transition-all flex items-center gap-2 cursor-pointer"
+              className="px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white font-semibold text-xs shadow-sm transition-colors flex items-center gap-2 cursor-pointer"
             >
-              <ShieldCheck className="size-4 text-espresso" />
+              <ShieldCheck className="size-4 text-white" />
               <span>Kelola Panel Superadmin</span>
             </button>
           </div>
         </div>
 
         {/* 4 Core Financial & Traffic KPI */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mt-6 pt-6 border-t border-white/15">
-          <div className="p-4 rounded-2xl bg-white/10 border border-white/10">
-            <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider block">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mt-6 pt-6 border-t border-white/10">
+          <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+            <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
               Monthly Recurring Revenue (MRR)
             </span>
-            <p className="text-xl sm:text-2xl font-black text-amber-300 mt-1">
+            <p className="text-xl sm:text-2xl font-bold text-amber-300 mt-1">
               {formatRupiah(totalMrr)}
             </p>
-            <span className="text-[11px] text-emerald-300 font-semibold flex items-center gap-1 mt-0.5">
+            <span className="text-[11px] text-emerald-300 font-medium flex items-center gap-1 mt-0.5">
               <TrendingUp className="size-3" /> +18.4% bulan ini
             </span>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white/10 border border-white/10">
-            <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider block">
+          <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+            <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
               Akun Developer Terdaftar
             </span>
-            <p className="text-xl sm:text-2xl font-black text-white mt-1">
+            <p className="text-xl sm:text-2xl font-bold text-white mt-1">
               {SAMPLE_DEVELOPERS_PORTFOLIO.length} Developer
             </p>
             <span className="text-[11px] text-white/80 mt-0.5 block">
