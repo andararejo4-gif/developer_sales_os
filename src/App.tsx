@@ -931,10 +931,49 @@ export default function App() {
           }`}
         >
           <LayoutDashboard className="size-4 shrink-0" />
-          <span>Dashboard {role}</span>
+          <span>
+            {role === 'REFERRAL_PARTNER'
+              ? 'Dashboard Referral'
+              : role === 'SALES_PARTNER'
+              ? 'Dashboard Sales Mitra'
+              : `Dashboard ${role}`}
+          </span>
         </button>
 
-        {!isPlatformSuperadmin && role !== 'DIREKSI' && (
+        {/* Tampilan Sidebar Khusus Mitra Eksternal (Referral Partner & Sales Partner) */}
+        {(role === 'REFERRAL_PARTNER' || role === 'SALES_PARTNER') && (
+          <div className="pt-3 border-t border-warmborder space-y-1">
+            <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-warmmuted mb-1.5">
+              Portal Mitra Eksternal
+            </p>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('kb'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'kb'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Database className="size-4 shrink-0" />
+              <span>Brosur &amp; Materi Promo</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('surat_cinta'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'surat_cinta'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <HeartHandshake className="size-4 shrink-0" />
+              <span>99 Keunggulan Unit</span>
+            </button>
+          </div>
+        )}
+
+        {!isPlatformSuperadmin && role !== 'DIREKSI' && role !== 'REFERRAL_PARTNER' && (
           <button
             type="button"
             onClick={() => handleItemClick(() => openView('pipeline'))}
@@ -1274,8 +1313,8 @@ export default function App() {
           </div>
         )}
 
-        {/* Unified Project & Workflow Navigation Items (Role Non-SE, Disembunyikan untuk Direksi & Platform Superadmin) */}
-        {role !== 'SE' && !isPlatformSuperadmin && role !== 'DIREKSI' && (
+        {/* Unified Project & Workflow Navigation Items (Role Non-SE, Disembunyikan untuk Direksi, Mitra & Platform Superadmin) */}
+        {role !== 'SE' && !isPlatformSuperadmin && role !== 'DIREKSI' && role !== 'REFERRAL_PARTNER' && role !== 'SALES_PARTNER' && (
           <>
             <button
               type="button"
@@ -1707,7 +1746,11 @@ export default function App() {
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-lg lg:text-xl font-extrabold text-espresso tracking-tight truncate">Developer Sales OS</h1>
               <span className="text-[11px] lg:text-xs font-bold px-2 py-0.5 rounded-md bg-amber-50 text-terracotta border border-amber-200 shrink-0">
-                Dashboard {role} · {user.roleLabel}
+                {role === 'REFERRAL_PARTNER'
+                  ? 'Portal Referral Partner'
+                  : role === 'SALES_PARTNER'
+                  ? 'Portal Sales Partner'
+                  : `Dashboard ${role}`} · {user.roleLabel}
               </span>
             </div>
             <p className="text-xs text-warmmuted mt-0.5 truncate">
@@ -2014,6 +2057,17 @@ export default function App() {
 
           {activeView === 'control_tower' && (
             <ExecutiveControlTowerPage
+              userRole={role}
+            />
+          )}
+
+          {/* ========================================================================= */}
+          {/* ROLE: REFERRAL PARTNER & SALES PARTNER DASHBOARD VIEW */}
+          {/* ========================================================================= */}
+          {activeView === 'dashboard' && (role === 'REFERRAL_PARTNER' || role === 'SALES_PARTNER') && (
+            <ReferralProgramPage
+              projectName={activeProject.nama}
+              projectId={activeProject.id}
               userRole={role}
             />
           )}

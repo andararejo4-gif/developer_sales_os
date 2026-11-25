@@ -151,6 +151,14 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
       { label: 'Pre-Seed Prospek VIP', onClick: actions.onOpenSuperadmin, href: '#preseed', icon: Sparkles },
       { label: 'Kurasi Fasilitas Regional (POI)', onClick: actions.onOpenSuperadmin, href: '#poi-curation', icon: Star },
     ],
+    REFERRAL_PARTNER: [
+      { label: 'Materi Storytelling Unit', onClick: actions.onOpenLoveLetter, href: '#surat-cinta', icon: HeartHandshake },
+      { label: 'Brosur & Materi Promo', onClick: actions.onOpenKb, href: '#kb', icon: Database },
+    ],
+    SALES_PARTNER: [
+      { label: 'Brosur & Spesifikasi Unit', onClick: actions.onOpenKb, href: '#kb', icon: Database },
+      { label: '99 Keunggulan Unit', onClick: actions.onOpenLoveLetter, href: '#surat-cinta', icon: HeartHandshake },
+    ],
   };
 
   const seMenuItems: SheetActionItem[] = [

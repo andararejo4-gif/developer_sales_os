@@ -384,6 +384,37 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   </strong>
                 </button>
               </div>
+
+              {/* Quick Fill Akun Demo (Termasuk Mitra Gmail Nyata) */}
+              <div className="pt-3 border-t border-warmborder/80">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-warmmuted block mb-2 text-center">
+                  Akun Demo Resmi &amp; Mitra Lapangan:
+                </span>
+                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail("anita.wijaya92@gmail.com");
+                      setPassword("MitraReferral#2026");
+                    }}
+                    className="p-1.5 rounded-lg bg-sandstone/60 hover:bg-sandstone border border-warmborder text-left transition-colors cursor-pointer truncate"
+                  >
+                    <span className="font-bold text-espresso block truncate">Ibu Anita (Referral)</span>
+                    <span className="text-[10px] text-warmmuted block truncate">anita.wijaya92@gmail.com</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail("dimas.property.solo@gmail.com");
+                      setPassword("MitraSales#2026");
+                    }}
+                    className="p-1.5 rounded-lg bg-sandstone/60 hover:bg-sandstone border border-warmborder text-left transition-colors cursor-pointer truncate"
+                  >
+                    <span className="font-bold text-espresso block truncate">Pak Dimas (Sales Partner)</span>
+                    <span className="text-[10px] text-warmmuted block truncate">dimas.property.solo@gmail.com</span>
+                  </button>
+                </div>
+              </div>
             </form>
           ) : (
             <form onSubmit={handleSignupSubmit} className="space-y-3.5">

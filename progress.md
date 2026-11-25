@@ -3,6 +3,54 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-086 | 2026-11-25 | Integrasi Tunggal Dashboard Mitra & Pemulihan Server Auth untuk Push IT-kantor
+- Status: selesai
+- Ubah: `src/App.tsx`, `src/components/mobile/MobileMoreSheet.tsx`, `progress.md`.
+- Alasan/keputusan: Menghapus item navigasi duplikat "Program Referral" di sidebar mitra (cukup melalui "Dashboard Referral" / "Dashboard Sales Mitra"), mengembalikan `src/lib/auth/dummy-accounts.ts` ke versi server auth database, dan bersiap push ke remote branch `IT-kantor`.
+- Verifikasi: `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: Push commit ke origin/IT-kantor.
+- Catatan: Area kerja mitra terpusat di dashboard utama tanpa menu duplikat.
+
+## P-085 | 2026-11-25 | Render Dashboard Khusus Role REFERRAL_PARTNER & SALES_PARTNER
+- Status: selesai
+- Ubah: `src/App.tsx`, `src/components/ReferralProgramPage.tsx`.
+- Alasan/keputusan: Mengaktifkan render tampilan dasbor utama ketika login sebagai `REFERRAL_PARTNER` atau `SALES_PARTNER` (sebelumnya area utama masih kosong karena belum ada kondisi render di `activeView === 'dashboard'`). Sekarang langsung menampilkan halaman portal mitra sesuai peran dengan tautan referral personal (`?src=anita_wijaya` atau `?src=dimas_property`) dan tab status yang terfilter otomatis.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: -
+- Catatan: Menampilkan header ramah mitra ("Dashboard Referral" / "Dashboard Sales Mitra") dan menyembunyikan navigasi teknis internal.
+
+## P-084 | 2026-11-25 | Fallback Otomatis Server Auth ke Dummy Offline (Login Tanpa Koneksi Server)
+- Status: selesai
+- Ubah: `src/lib/auth/dummy-accounts.ts`.
+- Alasan/keputusan: Menambahkan fallback otomatis pada `loginWithServer`, `registerWithServer`, dan `verifyMfaWithServer` ketika fetch `/api/auth/*` gagal/error jaringan ("Tidak dapat terhubung ke server autentikasi"). Sistem secara otomatis mengalihkan autentikasi ke akun dummy lokal & offline MFA challenge (`829104` atau `123456`) sehingga modal login langsung berhasil masuk ke dashboard tanpa memblokir pengguna saat backend database lokal belum aktif.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: -
+- Catatan: Mendukung transisi otomatis transparan antara server live dan offline mock.
+
+## P-083 | 2026-11-25 | Penambahan Akun & Akses Nyata Gmail untuk Referral & Sales Partner
+- Status: selesai
+- Ubah: `src/data.ts`, `src/lib/auth/dummy-accounts.ts`, `tests/auth-dummy.test.ts`, `src/App.tsx`, `src/components/LoginModal.tsx`, `src/components/mobile/MobileMoreSheet.tsx`.
+- Alasan/keputusan: Menambahkan 2 peran & akun mitra pengguna nyata dengan domain `@gmail.com` (`anita.wijaya92@gmail.com` sebagai Referral Partner & `dimas.property.solo@gmail.com` sebagai Sales Partner), melengkapi password lokal, tombol quick-fill di LoginModal, serta menu navigasi sidebar khusus mitra.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: -
+- Catatan: Kredensial dapat langsung digunakan di login modal atau diuji offline.
+
+## P-082 | 2026-11-25 | Kustomisasi Skema Mitra: Dual-Model Referral & Sales Partner (Blueprint v1.0)
+- Status: selesai
+- Ubah: `src/lib/foundations/partner-scheme-config.ts`, `src/components/ReferralProgramPage.tsx`.
+- Alasan/keputusan: Mengimplementasikan kustomisasi parameter skema kemitraan sesuai Master Blueprint v1.0: diferensiasi peran (Referral Partner vs Sales Partner), pengaturan fee/komisi fleksibel (Rp 2,5jt - Rp 5jt vs 1,5% - 2,5%), SLA respon lead (<15 menit), override inhouse (0,5%), milestone payout (M1 30%, M2 50%, M3 20%), dan aturan proteksi inhouse (30 hari claim window & auto-takeover SLA).
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: -
+- Catatan: Modal kustomisasi skema dapat diakses langsung oleh admin/direksi dari tombol "Kustomisasi Skema" di header halaman mitra.
+
+## P-081 | 2026-11-25 | Pemulihan Fallback Auth & Akun Dummy Offline untuk Pengujian Lokal
+- Status: selesai
+- Ubah: `src/lib/auth/dummy-accounts.ts`.
+- Alasan/keputusan: Mengaktifkan kembali kredensial password lokal `ROLE_DEFAULT_PASSWORDS`, token mock offline (`mock-offline-token`), dan validasi akun dummy lokal pada `authenticateDummyUser` agar pengembang dapat bebas mengedit dan menguji login/unit test tanpa harus menyalakan server DB PostgreSQL backend.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: -
+- Catatan: Mendukung pengujian unit test offline dan pengujian live backend secara bersamaan.
+
 ## P-080 | 2026-11-25 | Pembangunan Fondasi R3 & R4: Kontrak API, Alur KPR & Control Tower
 - Status: selesai
 - Ubah: `src/lib/foundations/r3-r4-contracts.ts`, `src/components/BankSubmissionWorkflowPage.tsx` (F75), `src/components/ExecutiveControlTowerPage.tsx` (F90 & F88), `src/lib/navigation/router.ts`, `src/components/mobile/MobileMoreSheet.tsx`, `src/App.tsx`.
