@@ -4,12 +4,12 @@ Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di ata
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
 ## P-093 | 2026-11-25 | Restrukturisasi Menu Admin Panel IT & Flow 2-Langkah Permission Fitur (6 Role Utama)
-- Status: selesai di lokal
+- Status: selesai & live di `https://developerproperti.giivepro.com` (`hades`, commit `fb18193` di `origin/feat/totp-2fa`)
 - Ubah: `src/components/superadmin/PermissionMatrixPanel.tsx` (alur 2 langkah: default tabel daftar user dengan tab filter 6 role utama mengecualikan `SUPERADMIN` & `SUPERADMIN_IT` -> klik user masuk halaman detail atur permission CRUD + tombol kembali & opsi Global Per-Role), `src/components/superadmin/ItCommandCenterDashboard.tsx` (pisah 4 halaman: `dashboard`, `permissions`, `knowledge`, `hierarchy` + metrik real & pintasan cepat di dashboard), `src/App.tsx` (menu sidebar khusus `SUPERADMIN_IT`: Permission Fitur, Knowledge AI Terpusat, Hierarki Tenant & Support)
 - Alasan/keputusan: Sebelumnya semua modul menumpuk di satu halaman Dashboard IT dan panel permission masih memuat akun Superadmin dalam split-view. Pemisahan halaman + flow tabel user -> detail membuat navigasi lebih terstruktur dan fokus pada 6 role operasional.
-- Verifikasi: `npm run build` (`tsc --noEmit && vite build`)
-- Berikutnya: Uji alur klik menu sidebar & tabel -> detail permission di browser pada akun `SUPERADMIN_IT`.
-- Catatan: Filter `CORE_SIX_ROLES` di `PermissionMatrixPanel.tsx` secara ketat mengecualikan `SUPERADMIN` dan `SUPERADMIN_IT`.
+- Verifikasi: `npm run build`, `bun build server/index.ts`, push `origin/feat/totp-2fa` (`fb18193`), backup DB `sales_os-20261126-0000.dump`, migrasi `0021`–`0024` sukses di `hades`, deploy backend+frontend & `pm2 restart developer-sales-os-api`; smoke live `/` (`200`, `index-tN02wvMh.js`), `/api/health` (`200`), `/api/it/knowledge-ai` (`401`), `/api/dashboard/summary` (`401`), `/api/permissions/me` (`401`)
+- Berikutnya: Uji langsung di browser `https://developerproperti.giivepro.com` (hard refresh `Ctrl+Shift+R`).
+- Catatan: Rollback backend `dist-server.mjs.pre-20261126-0000`, frontend `~/db-backup/index.html.20261126-0000`, DB `~/db-backup/sales_os-20261126-0000.dump`.
 
 ## P-092 | 2026-11-25 | Pop-up Pengingat & Notification Center Dinamis Semua Role + Auto-Load .env Backend
 - Status: selesai di lokal
