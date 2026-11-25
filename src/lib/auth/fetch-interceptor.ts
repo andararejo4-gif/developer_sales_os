@@ -31,6 +31,22 @@ export function installAuthFetchInterceptor(): void {
       ...init,
       credentials: init?.credentials || 'include',
       headers,
+    }).then((res) => {
+      if (
+        res.status === 401 &&
+        !urlStr.startsWith('/api/auth/') &&
+        !urlStr.startsWith('/api/public/')
+      ) {
+        try {
+          if (localStorage.getItem(AUTH_STORAGE_KEY)) {
+            localStorage.removeItem(AUTH_STORAGE_KEY);
+            window.location.reload();
+          }
+        } catch {
+          /* abaikan */
+        }
+      }
+      return res;
     });
   };
 }

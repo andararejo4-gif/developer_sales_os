@@ -307,7 +307,7 @@ export function loadAuthSession(): AuthSession | null {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as AuthSession;
-    if (!parsed?.role || !(parsed.role in USERS_BY_ROLE)) return null;
+    if (!parsed?.role || !(parsed.role in USERS_BY_ROLE) || !parsed?.token) return null;
     return parsed;
   } catch {
     return null;
