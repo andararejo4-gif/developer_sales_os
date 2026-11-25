@@ -13,6 +13,7 @@ export interface AuthSession {
   name: string;
   tenantId?: string;
   projectId?: string;
+  totpEnabled?: boolean;
   token?: string;
   loggedInAt: string;
   mfaVerified?: boolean;
@@ -189,7 +190,11 @@ export const DUMMY_ACCOUNTS: DummyAccount[] = [
 export async function loginWithServer(
   email: string,
   password: string
-): Promise<{ ok: true; challenge: MfaChallenge } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; requiresMfa: false; session: AuthSession }
+  | { ok: true; requiresMfa: true; challenge: MfaChallenge }
+  | { ok: false; error: string }
+> {
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
@@ -201,12 +206,17 @@ export async function loginWithServer(
     if (!res.ok || !data.ok) {
       return { ok: false, error: data.error || 'Gagal masuk. Periksa email dan kata sandi.' };
     }
+    if (!data.requiresMfa && data.session) {
+      saveAuthSession(data.session as AuthSession);
+      return { ok: true, requiresMfa: false, session: data.session as AuthSession };
+    }
     return {
       ok: true,
+      requiresMfa: true,
       challenge: {
         challengeId: data.challengeId,
         email: data.email,
-        maskedPhone: data.maskedPhone || '+628****0000',
+        maskedPhone: '',
         code: '',
         expiresAt: Date.now() + 5 * 60 * 1000,
         role: data.role,
@@ -224,7 +234,11 @@ export async function registerWithServer(data: {
   email: string;
   phone: string;
   password: string;
-}): Promise<{ ok: true; challenge: MfaChallenge } | { ok: false; error: string }> {
+}): Promise<
+  | { ok: true; requiresMfa: false; session: AuthSession }
+  | { ok: true; requiresMfa: true; challenge: MfaChallenge }
+  | { ok: false; error: string }
+> {
   try {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
@@ -236,12 +250,17 @@ export async function registerWithServer(data: {
     if (!res.ok || !body.ok) {
       return { ok: false, error: body.error || 'Pendaftaran gagal.' };
     }
+    if (!body.requiresMfa && body.session) {
+      saveAuthSession(body.session as AuthSession);
+      return { ok: true, requiresMfa: false, session: body.session as AuthSession };
+    }
     return {
       ok: true,
+      requiresMfa: true,
       challenge: {
         challengeId: body.challengeId,
         email: body.email,
-        maskedPhone: body.maskedPhone || '+628****0000',
+        maskedPhone: '',
         code: '',
         expiresAt: Date.now() + 5 * 60 * 1000,
         role: body.role,

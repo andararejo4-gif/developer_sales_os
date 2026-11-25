@@ -13,10 +13,15 @@ import {
   authenticateRequest,
   buildClearSessionCookieHeader,
   buildSessionCookieHeader,
+  disableUserTotp,
+  enableUserTotp,
   ensureAuthTablesAndSeeds,
+  getUserProfile,
   registerUserAccount,
   revokeSession,
+  setupUserTotp,
   startLogin,
+  updateUserProfile,
   verifyMfaAndCreateSession,
 } from './auth';
 import {
@@ -1069,19 +1074,47 @@ const server = http.createServer(async (req, res) => {
   const pathname = parsedUrl.pathname;
 
   try {
-    // 0. AUTHENTICATION ENDPOINTS (Server-side session + MFA, F91)
+    // 0. AUTHENTICATION ENDPOINTS (Server-side session + TOTP 2FA, F91)
     if (pathname === '/api/auth/login' && req.method === 'POST') {
       const body = await readJsonBody(req);
-      const resAuth = await startLogin(String(body.email || ''), String(body.password || ''));
+      const resAuth = await startLogin(String(body.email || ''), String(body.password || ''), {
+        userAgent: String(req.headers['user-agent'] || ''),
+        ipAddress: String(req.socket?.remoteAddress || ''),
+      });
       if (!resAuth.ok) {
         sendJson(res, 401, { ok: false, error: resAuth.error });
+        return;
+      }
+      if (!resAuth.requiresMfa) {
+        sendJson(
+          res,
+          200,
+          {
+            ok: true,
+            requiresMfa: false,
+            token: resAuth.token,
+            expiresAt: resAuth.expiresAt,
+            session: {
+              role: resAuth.user.role,
+              email: resAuth.user.email,
+              name: resAuth.user.name,
+              tenantId: resAuth.user.tenantId,
+              projectId: resAuth.user.projectId,
+              totpEnabled: Boolean(resAuth.user.totpEnabled),
+              token: resAuth.token,
+              loggedInAt: new Date().toISOString(),
+              mfaVerified: false,
+            },
+          },
+          { 'Set-Cookie': buildSessionCookieHeader(resAuth.token) }
+        );
         return;
       }
       sendJson(res, 200, {
         ok: true,
         requiresMfa: true,
+        mfaType: resAuth.mfaType,
         challengeId: resAuth.challengeId,
-        maskedPhone: resAuth.maskedPhone,
         email: resAuth.email,
         role: resAuth.role,
         name: resAuth.name,
@@ -1091,26 +1124,45 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/auth/register' && req.method === 'POST') {
       const body = await readJsonBody(req);
-      const resReg = await registerUserAccount({
-        companyName: String(body.companyName || ''),
-        name: String(body.name || ''),
-        email: String(body.email || ''),
-        phone: String(body.phone || ''),
-        password: String(body.password || ''),
-      });
+      const resReg = await registerUserAccount(
+        {
+          companyName: String(body.companyName || ''),
+          name: String(body.name || ''),
+          email: String(body.email || ''),
+          phone: String(body.phone || ''),
+          password: String(body.password || ''),
+        },
+        {
+          userAgent: String(req.headers['user-agent'] || ''),
+          ipAddress: String(req.socket?.remoteAddress || ''),
+        }
+      );
       if (!resReg.ok) {
         sendJson(res, 400, { ok: false, error: resReg.error });
         return;
       }
-      sendJson(res, 201, {
-        ok: true,
-        requiresMfa: true,
-        challengeId: resReg.challengeId,
-        maskedPhone: resReg.maskedPhone,
-        email: resReg.email,
-        role: resReg.role,
-        name: resReg.name,
-      });
+      sendJson(
+        res,
+        201,
+        {
+          ok: true,
+          requiresMfa: false,
+          token: resReg.token,
+          expiresAt: resReg.expiresAt,
+          session: {
+            role: resReg.user.role,
+            email: resReg.user.email,
+            name: resReg.user.name,
+            tenantId: resReg.user.tenantId,
+            projectId: resReg.user.projectId,
+            totpEnabled: false,
+            token: resReg.token,
+            loggedInAt: new Date().toISOString(),
+            mfaVerified: false,
+          },
+        },
+        { 'Set-Cookie': buildSessionCookieHeader(resReg.token) }
+      );
       return;
     }
 
@@ -1141,10 +1193,11 @@ const server = http.createServer(async (req, res) => {
             name: resMfa.user.name,
             tenantId: resMfa.user.tenantId,
             projectId: resMfa.user.projectId,
+            totpEnabled: true,
             token: resMfa.token,
             loggedInAt: new Date().toISOString(),
             mfaVerified: true,
-            mfaMethod: 'WHATSAPP_OTP',
+            mfaMethod: 'AUTHENTICATOR_APP',
           },
         },
         { 'Set-Cookie': buildSessionCookieHeader(resMfa.token) }
@@ -3791,6 +3844,75 @@ const server = http.createServer(async (req, res) => {
       const result = await rescheduleAnchorForLead({ leadId, tenantId: user.tenantId, anchorAt });
       if (!result.ok) {
         sendJson(res, 400, { ok: false, error: result.error });
+        return;
+      }
+      sendJson(res, 200, result);
+      return;
+    }
+
+    // 18. PROFIL PENGGUNA & KONFIGURASI 2FA TOTP
+    if (pathname === '/api/profile' && req.method === 'GET') {
+      if (!user.userId) {
+        sendJson(res, 401, { ok: false, error: 'Sesi pengguna tidak valid.' });
+        return;
+      }
+      const profile = await getUserProfile(user.userId);
+      sendJson(res, 200, { ok: true, data: profile });
+      return;
+    }
+
+    if (pathname === '/api/profile' && req.method === 'PATCH') {
+      if (!user.userId) {
+        sendJson(res, 401, { ok: false, error: 'Sesi pengguna tidak valid.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const updated = await updateUserProfile(user.userId, {
+        name: body.name ? String(body.name) : undefined,
+        phone: body.phone !== undefined ? String(body.phone) : undefined,
+      });
+      sendJson(res, 200, { ok: true, data: updated });
+      return;
+    }
+
+    if (pathname === '/api/profile/totp/setup' && req.method === 'POST') {
+      if (!user.userId) {
+        sendJson(res, 401, { ok: false, error: 'Sesi pengguna tidak valid.' });
+        return;
+      }
+      const setup = await setupUserTotp(user.userId);
+      if (!setup.ok) {
+        sendJson(res, 400, setup);
+        return;
+      }
+      sendJson(res, 200, setup);
+      return;
+    }
+
+    if (pathname === '/api/profile/totp/enable' && req.method === 'POST') {
+      if (!user.userId) {
+        sendJson(res, 401, { ok: false, error: 'Sesi pengguna tidak valid.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const result = await enableUserTotp(user.userId, String(body.code || ''));
+      if (!result.ok) {
+        sendJson(res, 400, result);
+        return;
+      }
+      sendJson(res, 200, result);
+      return;
+    }
+
+    if (pathname === '/api/profile/totp/disable' && req.method === 'POST') {
+      if (!user.userId) {
+        sendJson(res, 401, { ok: false, error: 'Sesi pengguna tidak valid.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const result = await disableUserTotp(user.userId, String(body.codeOrPassword || ''));
+      if (!result.ok) {
+        sendJson(res, 400, result);
         return;
       }
       sendJson(res, 200, result);

@@ -13,13 +13,11 @@ import {
   UserPlus,
   ShieldCheck,
   KeyRound,
-  RotateCcw,
 } from "lucide-react";
 import {
   loginWithServer,
   registerWithServer,
   verifyMfaWithServer,
-  createMfaChallenge,
   type MfaChallenge,
 } from "../lib/auth/dummy-accounts";
 import type { RoleKey } from "../data";
@@ -78,10 +76,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
+    if (!result.requiresMfa) {
+      if (onSuccessLogin) onSuccessLogin(result.session.role);
+      onClose();
+      return;
+    }
+
     setMfaChallenge(result.challenge);
     setMode("mfa");
     setOtpCode("");
-    setResendCooldown(60);
   };
 
   const handleSignupSubmit = async (e: React.FormEvent) => {
@@ -100,10 +103,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
+    if (!result.requiresMfa) {
+      if (onSuccessLogin) onSuccessLogin(result.session.role);
+      onClose();
+      return;
+    }
+
     setMfaChallenge(result.challenge);
     setMode("mfa");
     setOtpCode("");
-    setResendCooldown(60);
   };
 
   const handleMfaSubmit = async (e: React.FormEvent) => {
@@ -121,16 +129,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       onSuccessLogin(res.session.role);
     }
     onClose();
-  };
-
-  const handleResendOtp = () => {
-    if (resendCooldown > 0 || !mfaChallenge) return;
-    const challenge = createMfaChallenge(mfaChallenge.email);
-    if (challenge) {
-      setMfaChallenge(challenge);
-      setResendCooldown(60);
-      setErrorMsg(null);
-    }
   };
 
   return (
@@ -223,66 +221,36 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   <KeyRound className="size-5" />
                 </div>
                 <h3 className="text-xs font-extrabold text-espresso">
-                  Masukkan 6-Digit Kode Verifikasi
+                  Verifikasi 2 Faktor (Google Authenticator / TOTP)
                 </h3>
                 <p className="text-[11px] text-warmmuted">
-                  Kode OTP telah dikirimkan ke nomor WhatsApp terdaftar akun Anda:
+                  Akun Anda telah mengaktifkan TOTP. Masukkan 6-digit kode dari aplikasi Authenticator (atau recovery code) untuk akun:
                 </p>
                 <p className="text-xs font-mono font-bold text-espresso bg-white px-3 py-1 rounded-lg border border-warmborder inline-block">
-                  {mfaChallenge.maskedPhone}
+                  {mfaChallenge.email}
                 </p>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-espresso mb-1 text-center">
-                  Kode Verifikasi (OTP) *
+                  Kode Authenticator 6-Digit / Recovery Code *
                 </label>
                 <input
                   type="text"
                   required
                   autoFocus
-                  maxLength={6}
+                  maxLength={12}
                   value={otpCode}
                   onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, "");
-                    setOtpCode(val);
+                    setOtpCode(e.target.value.toUpperCase());
                     if (errorMsg) setErrorMsg(null);
                   }}
-                  placeholder="829104"
+                  placeholder="000000"
                   className="w-full h-12 rounded-xl border border-warmborder text-center text-xl font-mono font-bold tracking-widest focus:border-terracotta focus:outline-none bg-sandstone/30"
                 />
               </div>
 
-              {/* Bantuan Verifikasi Demo */}
-              <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-[11px] text-amber-900 space-y-1">
-                <div className="font-bold flex items-center gap-1.5">
-                  <ShieldCheck className="size-3.5 text-terracotta" />
-                  <span>Kode Verifikasi Resmi:</span>
-                </div>
-                <p className="leading-relaxed">
-                  Masukkan kode <strong className="font-mono text-terracotta font-extrabold">829104</strong> (atau master bypass: <strong className="font-mono">123456</strong>) untuk menyelesaikan autentikasi.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between text-xs pt-1">
-                <button
-                  type="button"
-                  onClick={handleResendOtp}
-                  disabled={resendCooldown > 0}
-                  className={`inline-flex items-center gap-1 font-semibold ${
-                    resendCooldown > 0
-                      ? "text-warmmuted cursor-not-allowed"
-                      : "text-terracotta hover:underline cursor-pointer"
-                  }`}
-                >
-                  <RotateCcw className="size-3" />
-                  <span>
-                    {resendCooldown > 0
-                      ? `Kirim ulang (${resendCooldown}s)`
-                      : "Kirim ulang kode OTP"}
-                  </span>
-                </button>
-
+              <div className="flex items-center justify-end text-xs pt-1">
                 <button
                   type="button"
                   onClick={() => {

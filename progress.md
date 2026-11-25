@@ -3,6 +3,14 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-072 | 2026-11-25 | 2FA TOTP (Google Authenticator), Halaman Profil & Notifikasi Rekomendasi Semua Role
+- Status: selesai di local (belum push/deploy ke hades)
+- Ubah: `db/migrations/0021_totp_2fa_profiles.sql`, `server/totp.ts` (RFC 6238 murni `node:crypto`), `server/auth.ts` (default TOTP mati, login langsung jika nonaktif, wajib kode TOTP/recovery jika aktif, API profil & setup/enable/disable TOTP), `server/index.ts` (`/api/profile*`), `src/components/ProfilePage.tsx`, `src/components/TotpSecurityBell.tsx`, `src/components/LoginModal.tsx`, `src/components/se/SeNotificationCenter.tsx`, `src/components/se/SeGuidedTour.tsx`, `src/lib/navigation/router.ts`, `src/lib/auth/dummy-accounts.ts`, `src/App.tsx`
+- Alasan/keputusan: TOTP gratis (Rp0) untuk semua role dengan default mati; saat belum aktif tidak ada verify WA saat login dan muncul notifikasi rekomendasi di ikon lonceng; kartu profil di sidebar dapat diklik menuju `/profil` untuk aktivasi QR TOTP + 6 recovery codes.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`) bersih; `bun build server/index.ts --outfile dist-server.mjs --target node --packages=external` sukses (23 modul, 0.50 MB); unit check TOTP (`generateTotpSecret`, `verifyTotpToken`, anti-replay, `buildOtpAuthUri`) lulus (`true true true`).
+- Berikutnya: push & deploy ke `hades` bila user siap.
+- Catatan: setelah TOTP diaktifkan pada sebuah akun, login berikutnya wajib memasukkan 6-digit kode Google Authenticator atau salah satu dari 6 recovery codes.
+
 ## P-071 | 2026-11-25 | F55 AI Nurture Cadence Terjadwal (Tab Khusus, WA Preview 2-Kolom, Baileys)
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `db/migrations/0020_wa_nurture_cadence.sql`, `server/wa-nurture.ts` (+auto-fill draf AI & `rescheduleAnchorForLead`), `server/index.ts` (+`/api/nurture/jobs/reschedule-anchor`), `src/components/pipeline/FollowupScheduleTab.tsx` (tab khusus 2 kolom + anchor tanggal follow-up pertama + WA preview), `src/components/PipelinePage.tsx` (tab `FOLLOWUP` & tombol pintas dari kartu lead)

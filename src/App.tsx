@@ -10,6 +10,8 @@ import { PlaybookViewer } from './components/PlaybookViewer';
 import { DailyRouteViewer } from './components/DailyRouteViewer';
 import { ProjectWebsitePreview } from './components/ProjectWebsitePreview';
 import { PublicProjectSitePage } from './components/PublicProjectSitePage';
+import { ProfilePage } from './components/ProfilePage';
+import { TotpSecurityBell } from './components/TotpSecurityBell';
 import { CrmPipelineView } from './components/CrmPipelineView';
 import { CommissionSettingsModal } from './components/CommissionSettingsModal';
 import { SuperadminPanel } from './components/SuperadminPanel';
@@ -1519,15 +1521,20 @@ export default function App() {
         {/* User Badge Footer (Fixed shrink-0) */}
         <div className="shrink-0 p-4 border-t border-warmborder bg-white min-h-0">
           <div className="rounded-2xl bg-sandstone p-3 border border-warmborder">
-            <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => openView('profile')}
+              className="w-full text-left flex items-center gap-2.5 rounded-xl p-1 -m-1 hover:bg-white/70 transition-colors cursor-pointer"
+              title="Buka Pengaturan Profil & 2FA TOTP"
+            >
               <div className="size-8 rounded-lg bg-espresso text-white grid place-items-center text-xs font-bold shrink-0">
                 {user.avatarText}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-espresso truncate">{user.name}</p>
-                <p className="text-[10px] text-warmmuted truncate">{user.roleLabel}</p>
+                <p className="text-[10px] text-warmmuted truncate">{user.roleLabel} · Profil &amp; 2FA</p>
               </div>
-            </div>
+            </button>
             <div className="mt-2 pt-2 border-t border-warmborder flex items-center justify-between text-[10px] text-warmmuted">
               <span className="font-semibold text-terracotta">{user.role}</span>
               <span className="truncate max-w-[120px] font-semibold text-espresso">
@@ -1650,18 +1657,24 @@ export default function App() {
                 <span>Panel Multi-Tenant Core</span>
               </button>
             )}
-            {role === 'SE' && (
+            {role === 'SE' ? (
               <SeNotificationBell
                 quickStatus={seRealData?.quickStatus}
                 extra={{
                   leadsTodayValidCount: seRealData?.metrics?.leadsTodayValidCount,
                   needsCompletionLeadsCount: seRealData?.metrics?.needsCompletionLeadsCount,
                   waConnectionStatus: seRealData?.metrics?.waConnectionStatus,
+                  totpEnabled: Boolean(authSession?.totpEnabled),
                 }}
                 externalOpen={isNotifPanelOpen}
                 onExternalOpenChange={setIsNotifPanelOpen}
                 onNavigateTarget={handleSeNotifNavigate}
                 onH5ReminderTriggered={(item) => setActiveH5Reminder(item)}
+              />
+            ) : (
+              <TotpSecurityBell
+                totpEnabled={authSession?.totpEnabled}
+                onOpenProfile={() => openView('profile')}
               />
             )}
             <div className="flex items-center gap-2 bg-sandstone px-3 py-1.5 rounded-xl border border-warmborder text-xs">
@@ -1688,25 +1701,42 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {role === 'SE' && (
+            {role === 'SE' ? (
               <SeNotificationBell
                 quickStatus={seRealData?.quickStatus}
                 extra={{
                   leadsTodayValidCount: seRealData?.metrics?.leadsTodayValidCount,
                   needsCompletionLeadsCount: seRealData?.metrics?.needsCompletionLeadsCount,
                   waConnectionStatus: seRealData?.metrics?.waConnectionStatus,
+                  totpEnabled: Boolean(authSession?.totpEnabled),
                 }}
                 onNavigateTarget={handleSeNotifNavigate}
               />
+            ) : (
+              <TotpSecurityBell
+                totpEnabled={authSession?.totpEnabled}
+                onOpenProfile={() => openView('profile')}
+              />
             )}
-            <span className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-sandstone text-espresso border border-warmborder shrink-0">
+            <button
+              type="button"
+              onClick={() => openView('profile')}
+              className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-sandstone text-espresso border border-warmborder shrink-0 cursor-pointer"
+            >
               {user.name.split(' ')[0]}
-            </span>
+            </button>
           </div>
         </header>
 
         <div id="dashboard-main" className="max-w-6xl mx-auto px-4 pt-4 md:px-8 md:pt-8 space-y-6">
           {/* HALAMAN PENUH UNTUK SETIAP MODUL (Bukan Modal/Popup) */}
+          {activeView === 'profile' && (
+            <ProfilePage
+              onTotpStatusChanged={(enabled) =>
+                setAuthSession((prev) => (prev ? { ...prev, totpEnabled: enabled } : prev))
+              }
+            />
+          )}
           {activeView === 'pipeline' && (
             <PipelinePage
               user={user}

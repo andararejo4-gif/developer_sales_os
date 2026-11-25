@@ -18,12 +18,13 @@ import {
 } from 'lucide-react';
 import type { SeQuickStatusData } from './SeGuidedTour';
 
-export type SeNotifTarget = 'lapangan' | 'pipeline' | 'kalender' | 'rute' | 'export';
+export type SeNotifTarget = 'lapangan' | 'pipeline' | 'kalender' | 'rute' | 'export' | 'profile';
 
 export interface SeNotificationExtra {
   leadsTodayValidCount?: number;
   needsCompletionLeadsCount?: number;
   waConnectionStatus?: string;
+  totpEnabled?: boolean;
 }
 
 export interface SeNotificationItem {
@@ -52,6 +53,26 @@ export function buildSeRealtimeNotifications(
   if (!quickStatus) return [];
   const mins = getWibMinutesNow(nowMs);
   const list: SeNotificationItem[] = [];
+
+  if (extra?.totpEnabled === false) {
+    list.push({
+      id: 'recommend-totp-2fa',
+      title: 'Rekomendasi Keamanan: Aktifkan 2FA (TOTP)',
+      badge: 'Keamanan Akun',
+      tone: 'amber',
+      summary: 'Akun Anda belum mengaktifkan autentikasi 2 faktor (Google Authenticator). Aktifkan gratis di halaman Profil.',
+      details: [
+        { label: 'Status 2FA', value: 'Nonaktif (Default)' },
+        { label: 'Metode', value: 'Google Authenticator / Authy (Rp0)' },
+      ],
+      recommendations: [
+        'Klik tombol di bawah untuk membuka halaman Profil.',
+        'Scan QR Code di aplikasi Google Authenticator agar akun lebih aman.',
+      ],
+      ctaLabel: 'Aktifkan TOTP di Profil →',
+      target: 'profile',
+    });
+  }
 
   const urgentCount = Number(quickStatus.urgentLeadsCount ?? 0);
   const checkedIn = Boolean(quickStatus.checkedIn);
