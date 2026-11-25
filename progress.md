@@ -3,8 +3,16 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
-## P-070 | 2026-11-25 | Wave 1-4 R1 Local: Auth Server-Side, Unit Lock/Quote, Public Site, Doc Extractor & Conflict Inbox
+## P-071 | 2026-11-25 | F55 AI Nurture Cadence Terjadwal (Baileys, Jadwal Fleksibel & Edit SE)
 - Status: selesai di local (belum deploy ke hades)
+- Ubah: `db/migrations/0020_wa_nurture_cadence.sql`, `server/wa-nurture.ts`, `server/index.ts`, `src/components/pipeline/NurtureCadencePanel.tsx`, `src/components/PipelinePage.tsx`
+- Alasan/keputusan: F55 follow-up terjadwal H0-H14 via Baileys dengan pesan disusun AI (`9router` + guardrail Playbook), dapat diedit bebas oleh SE (`is_edited_by_se` mencegah timpa ulang AI), pola jam default fleksibel, plus quiet hours 08:30-19:30 WIB, cek opt-out sebelum kirim, dan limit 35/hari per SE.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`) bersih; `bun build server/index.ts --outfile dist-server.mjs --target node --packages=external` sukses (22 modul, 0.49 MB).
+- Berikutnya: deploy ke `hades` & smoke test `/api/nurture/templates` + `/api/nurture/jobs` bila siap.
+- Catatan: scheduler berjalan tiap 60 dtk (dapat dimatikan via `WA_NURTURE_SCHEDULER=off`).
+
+## P-070 | 2026-11-25 | Wave 1-4 R1 Local: Auth Server-Side, Unit Lock/Quote, Public Site, Doc Extractor & Conflict Inbox
+- Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`; commit `e679668`)
 - Ubah: `server/auth.ts`, `server/units-quotes.ts`, `server/truth-engine.ts`, `server/doc-extractor.py`, `server/index.ts`, `db/migrations/0017_auth_sessions_rbac.sql`, `db/migrations/0018_unit_inventory_quotes.sql`, `db/migrations/0019_document_truth_conflicts.sql`, `src/lib/auth/dummy-accounts.ts`, `src/lib/auth/fetch-interceptor.ts`, `src/components/LoginModal.tsx`, `src/components/PublicProjectSitePage.tsx`, `src/App.tsx`, `src/main.tsx`
 - Alasan/keputusan: tutup celah auth header (F91), tambah DB row-lock anti double-booking & quote deterministik (F67-F69), buka route publik `/p/:slug` + form lead consent/honeypot (F31-F33), dan pasang extractor `PyMuPDF+RapidOCR+openpyxl` agar `9router` hanya membaca Markdown hasil ekstrak (F01/F02/F04/F05).
 - Verifikasi: `npm run build` (`tsc --noEmit && vite build`) bersih; `bun build server/index.ts --outfile dist-server.mjs --target bun` sukses (504 modul); `python -m py_compile server/doc-extractor.py` & uji CSV extractor OK; Python deps (`pymupdf`, `pymupdf4llm`, `rapidocr_onnxruntime`, `openpyxl`) terpasang di local.

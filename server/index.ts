@@ -28,6 +28,17 @@ import {
   type UnitStatus,
 } from './units-quotes';
 import { ensureTruthTables, ingestSourceDocument } from './truth-engine';
+import {
+  ensureNurtureTablesAndSeeds,
+  executeNurtureJobSend,
+  getNurtureJobsForLead,
+  listCadenceTemplates,
+  regenerateNurtureJobDraft,
+  scheduleNurtureForLead,
+  startNurtureScheduler,
+  updateCadenceTemplate,
+  updateNurtureJob,
+} from './wa-nurture';
 import { analyzeLeadWithAi } from './ai-engine';
 import { getTurns, getTurnsForLeads } from './wa-conversation';
 import { isOptOutMessage } from './wa-consent';
@@ -3668,6 +3679,106 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // 17. AI NURTURE CADENCE (F55: Jadwal fleksibel, AI draft, edit penuh SE, Baileys)
+    if (pathname === '/api/nurture/templates' && req.method === 'GET') {
+      const templates = await listCadenceTemplates(user.tenantId);
+      sendJson(res, 200, { ok: true, data: templates });
+      return;
+    }
+
+    if (pathname === '/api/nurture/templates' && req.method === 'PUT') {
+      const body = await readJsonBody(req);
+      const stepCode = String(body.stepCode || '').trim();
+      if (!stepCode) {
+        sendJson(res, 400, { ok: false, error: 'stepCode wajib diisi.' });
+        return;
+      }
+      const updated = await updateCadenceTemplate({
+        tenantId: user.tenantId,
+        stepCode,
+        delayHours: body.delayHours !== undefined ? Number(body.delayHours) : undefined,
+        stepLabel: body.stepLabel !== undefined ? String(body.stepLabel) : undefined,
+        stepGoal: body.stepGoal !== undefined ? String(body.stepGoal) : undefined,
+        autoSend: body.autoSend !== undefined ? Boolean(body.autoSend) : undefined,
+        isActive: body.isActive !== undefined ? Boolean(body.isActive) : undefined,
+        updatedBy: user.email,
+      });
+      if (!updated) {
+        sendJson(res, 404, { ok: false, error: 'Template cadence tidak ditemukan.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, template: updated });
+      return;
+    }
+
+    if (pathname === '/api/nurture/jobs' && req.method === 'GET') {
+      const leadId = String(parsedUrl.searchParams.get('leadId') || '').trim();
+      if (!leadId) {
+        sendJson(res, 400, { ok: false, error: 'leadId wajib diisi.' });
+        return;
+      }
+      let jobs = await getNurtureJobsForLead(leadId, user.tenantId);
+      if (jobs.length === 0) {
+        jobs = await scheduleNurtureForLead({ leadId, tenantId: user.tenantId, generateInitialDrafts: false });
+      }
+      sendJson(res, 200, { ok: true, data: jobs });
+      return;
+    }
+
+    if (pathname === '/api/nurture/jobs/generate' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const jobId = String(body.jobId || '').trim();
+      if (!jobId) {
+        sendJson(res, 400, { ok: false, error: 'jobId wajib diisi.' });
+        return;
+      }
+      const result = await regenerateNurtureJobDraft(jobId, user.tenantId, Boolean(body.force ?? true));
+      if (!result.ok) {
+        sendJson(res, 400, { ok: false, error: result.error });
+        return;
+      }
+      sendJson(res, 200, { ok: true, job: result.job });
+      return;
+    }
+
+    if (pathname === '/api/nurture/jobs/update' && req.method === 'PATCH') {
+      const body = await readJsonBody(req);
+      const jobId = String(body.jobId || '').trim();
+      if (!jobId) {
+        sendJson(res, 400, { ok: false, error: 'jobId wajib diisi.' });
+        return;
+      }
+      const result = await updateNurtureJob({
+        jobId,
+        tenantId: user.tenantId,
+        draftMessage: body.draftMessage !== undefined ? String(body.draftMessage) : undefined,
+        scheduledAt: body.scheduledAt !== undefined ? String(body.scheduledAt) : undefined,
+        status: body.status,
+      });
+      if (!result.ok) {
+        sendJson(res, 400, { ok: false, error: result.error });
+        return;
+      }
+      sendJson(res, 200, { ok: true, job: result.job });
+      return;
+    }
+
+    if (pathname === '/api/nurture/jobs/send-now' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const jobId = String(body.jobId || '').trim();
+      if (!jobId) {
+        sendJson(res, 400, { ok: false, error: 'jobId wajib diisi.' });
+        return;
+      }
+      const result = await executeNurtureJobSend(jobId, user.tenantId, user.name);
+      if (!result.ok) {
+        sendJson(res, 409, { ok: false, error: result.error });
+        return;
+      }
+      sendJson(res, 200, result);
+      return;
+    }
+
     sendJson(res, 404, { ok: false, error: `Endpoint tidak ditemukan: ${pathname}` });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Terjadi kesalahan internal server.';
@@ -3880,6 +3991,7 @@ async function ensureSeOpsTables(): Promise<void> {
   await ensureAuthTablesAndSeeds();
   await ensureUnitInventoryTablesAndSeeds();
   await ensureTruthTables();
+  await ensureNurtureTablesAndSeeds();
   await sql`
     ALTER TABLE sales_os.pipeline_leads
       ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'andara_rejo_makmur',
@@ -3898,6 +4010,7 @@ server.listen(PORT, '127.0.0.1', () => {
   ensureSeOpsTables()
     .then(() => {
       startContentMediaScheduler();
+      startNurtureScheduler();
     })
     .catch((err) => {
       console.error('[DB] Gagal memastikan tabel SE Ops:', err);

@@ -27,6 +27,7 @@ import {
   CheckCheck,
   Inbox,
 } from 'lucide-react';
+import { NurtureCadencePanel } from './pipeline/NurtureCadencePanel';
 import {
   PLAYBOOK_PIPELINE_STAGES,
   PLAYBOOK_BUYER_PERSONAS,
@@ -2867,6 +2868,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                         </div>
                       </div>
                     )}
+                    <NurtureCadencePanel leadId={lead.id} buyerName={lead.full_name} />
                   </div>
                 )}
               </article>
