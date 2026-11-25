@@ -4,12 +4,12 @@ Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di ata
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
 ## P-088 | 2026-11-25 | Merge IT-kantor ke branch 2FA + penguatan 2FA & akses mitra
-- Status: sebagian (lokal di branch `feat/totp-2fa`, belum push/deploy; SQL belum diuji di PostgreSQL nyata)
+- Status: selesai di lokal (branch `feat/totp-2fa`, belum push/deploy)
 - Ubah: `server/auth.ts` (batas 5 percobaan/15 menit, secret aktif tak bisa ditimpa, klaim step & recovery atomik), `server/partner-access.ts` (tolak-default mitra), `server/index.ts`, `src/App.tsx` (logout mencabut sesi server), `src/components/LoginModal.tsx` (tombol akun demo dihapus), `src/lib/auth/dummy-accounts.ts` (login/OTP offline dihapus), `tests/auth-dummy.test.ts`, `tests/totp-2fa-guardrails.test.ts`, `tests/totp-auth-flow.test.ts`
 - Alasan/keputusan: auth ikut versi TOTP, halaman & layout ikut IT-kantor; akun mitra hanya di-seed bila `DEVOS_PARTNER_SEED_PASSWORD` diset
-- Verifikasi: `tsc --noEmit` bersih, vite build & bun build server sukses, `bun test tests` 145 lulus (AI_ROUTER_API_KEY dikosongkan)
-- Berikutnya: uji SQL 2FA di PostgreSQL + cek visual browser, lalu deploy server dan frontend bersamaan setelah migrasi 0021
-- Catatan: fallback login offline (P-072/P-081/P-084) jangan dimasukkan lagi; dijaga test guardrails. P-087 semula bernomor P-072 lokal.
+- Verifikasi: `tsc --noEmit` bersih, vite build & bun build server sukses, `bun test tests` 145 lulus (AI_ROUTER_API_KEY dikosongkan); PostgreSQL sandbox: migrasi 0017-0021 OK, HTTP 57/57; browser 27/27 (login, TOTP, lonceng SE, mitra, mobile)
+- Berikutnya: push, lalu deploy server dan frontend bersamaan setelah backup DB + migrasi 0021
+- Catatan: fallback login offline (P-072/P-081/P-084) jangan dimasukkan lagi; dijaga test guardrails. P-087 semula bernomor P-072 lokal. `JSON.stringify(..)::jsonb` terbukti tersimpan sebagai string; pola sama masih ada di `server/units-quotes.ts:346-347`.
 
 ## P-087 | 2026-11-25 | 2FA TOTP (Google Authenticator), Halaman Profil & Notifikasi Rekomendasi Semua Role
 - Status: selesai di local (belum push/deploy ke hades)

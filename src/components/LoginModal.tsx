@@ -141,7 +141,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   ? "Akses dashboard penjualan & operasional proyek"
                   : mode === "signup"
                   ? "Registrasi mandiri untuk memulai demo sistem"
-                  : "Keamanan ganda terenkripsi untuk seluruh akun"}
+                  : "Perlindungan tambahan yang Anda aktifkan di Profil"}
               </p>
             </div>
             <button
@@ -191,7 +191,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           ) : (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800">
               <ShieldCheck className="size-4 text-emerald-600 shrink-0" />
-              <span>Multi-Factor Authentication (MFA) Wajib Aktif</span>
+              <span>2FA aktif pada akun ini</span>
             </div>
           )}
         </div>
@@ -495,7 +495,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         {/* Footer Clean */}
         <div className="p-3 bg-sandstone/40 border-t border-warmborder text-center text-[11px] text-warmmuted shrink-0 flex items-center justify-center gap-1.5">
           <ShieldCheck className="size-3.5 text-emerald-600" />
-          <span>Developer Sales OS &middot; Dilindungi Verifikasi Dua Langkah (MFA)</span>
+          <span>Developer Sales OS &middot; Mendukung Verifikasi Dua Langkah (2FA)</span>
         </div>
       </div>
     </div>
