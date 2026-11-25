@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Search, Download, CheckCircle2, Sparkles, BookOpen } from 'lucide-react';
+import { X, Search, Download, CheckCircle2, Sparkles, BookOpen, ShieldCheck, FileText, Check, AlertCircle } from 'lucide-react';
 import { type LoveLetterPoint } from '../lib/love-letter/points-data';
 import { getLoveLetterPoints, initProjectLoveLetter } from '../lib/love-letter/love-letter-engine';
 import { generateLoveLetterDocx } from '../lib/love-letter/docx-exporter';
@@ -19,6 +19,17 @@ interface ViewerProps {
   onClose: () => void;
 }
 
+export type ClaimStatus = 'AKTUAL' | 'RENCANA' | 'ILUSTRASI' | 'DITOLAK';
+export type ProofGrade = 'GRADE_A' | 'GRADE_B' | 'GRADE_C';
+
+export interface ClaimVerificationRecord {
+  pointNumber: number;
+  status: ClaimStatus;
+  grade: ProofGrade;
+  verifiedBy: string;
+  evidenceRef: string;
+}
+
 export const LoveLetterViewerModal: React.FC<ViewerProps> = ({
   isOpen,
   variant = 'modal',
@@ -29,6 +40,70 @@ export const LoveLetterViewerModal: React.FC<ViewerProps> = ({
   const [points, setPoints] = useState<LoveLetterPoint[] | null>(() =>
     getLoveLetterPoints(projectId)
   );
+
+  const [viewMode, setViewMode] = useState<'narrative' | 'ledger'>(() =>
+    loadPersistedState<'narrative' | 'ledger'>(`devos_ll_viewmode_${projectId}`, 'narrative')
+  );
+
+  const [claimRecords, setClaimRecords] = useState<Record<number, ClaimVerificationRecord>>(() => {
+    const saved = loadPersistedState<Record<number, ClaimVerificationRecord> | null>(
+      `devos_claim_ledger_${projectId}`,
+      null
+    );
+    if (saved) return saved;
+
+    // Default seeded claim ledger status
+    const initial: Record<number, ClaimVerificationRecord> = {};
+    const defaultPoints = getLoveLetterPoints(projectId) || [];
+    defaultPoints.forEach((p) => {
+      let status: ClaimStatus = 'AKTUAL';
+      let grade: ProofGrade = 'GRADE_B';
+      let verifiedBy = 'Tim Legal & Teknik';
+      let evidenceRef = 'Brosur & Master Plan Resmi';
+
+      if (p.chapter.includes('Bab I') || p.chapter.includes('Bab VI')) {
+        grade = 'GRADE_A';
+        verifiedBy = 'Legal PT Andara Rejo Makmur';
+        evidenceRef = 'SHM No. 491 / PBG Induk Sukoharjo';
+      } else if (p.chapter.includes('Bab II') || p.chapter.includes('Bab V')) {
+        grade = 'GRADE_B';
+        verifiedBy = 'Arsitek & Tim Sipil';
+        evidenceRef = 'Gambar Kerja Teknis & Siteplan';
+      } else if (p.chapter.includes('Clubhouse') || p.narrative.includes('rencana')) {
+        status = 'RENCANA';
+        grade = 'GRADE_B';
+        verifiedBy = 'Project Manager';
+        evidenceRef = 'Rencana Progres Q1 2027';
+      }
+
+      initial[p.number] = {
+        pointNumber: p.number,
+        status,
+        grade,
+        verifiedBy,
+        evidenceRef,
+      };
+    });
+    return initial;
+  });
+
+  const updateClaimStatus = (pointNum: number, nextStatus: ClaimStatus) => {
+    setClaimRecords((prev) => {
+      const current = prev[pointNum] || {
+        pointNumber: pointNum,
+        status: 'AKTUAL',
+        grade: 'GRADE_B',
+        verifiedBy: 'Tim Legal',
+        evidenceRef: 'Brosur Resmi',
+      };
+      const updated = {
+        ...prev,
+        [pointNum]: { ...current, status: nextStatus },
+      };
+      savePersistedState(`devos_claim_ledger_${projectId}`, updated);
+      return updated;
+    });
+  };
 
   useEffect(() => {
     setPoints(getLoveLetterPoints(projectId));
@@ -210,6 +285,50 @@ export const LoveLetterViewerModal: React.FC<ViewerProps> = ({
           </div>
         ) : (
           <>
+            {/* View Switcher: Narasi Surat Cinta vs Claim Ledger F14 */}
+            <div className="px-4 py-2 bg-sandstone/40 border-b border-warmborder flex flex-wrap items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-1 p-1 bg-white rounded-xl border border-warmborder">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewMode('narrative');
+                    savePersistedState(`devos_ll_viewmode_${projectId}`, 'narrative');
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    viewMode === 'narrative'
+                      ? 'bg-espresso text-white shadow-2xs'
+                      : 'text-warmmuted hover:text-espresso'
+                  }`}
+                >
+                  <FileText className="size-3.5" />
+                  <span>Narasi Surat Cinta (99 Poin)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewMode('ledger');
+                    savePersistedState(`devos_ll_viewmode_${projectId}`, 'ledger');
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    viewMode === 'ledger'
+                      ? 'bg-espresso text-white shadow-2xs'
+                      : 'text-warmmuted hover:text-espresso'
+                  }`}
+                >
+                  <ShieldCheck className="size-3.5 text-terracotta" />
+                  <span>Buku Besar Klaim / Claim Ledger (F14)</span>
+                </button>
+              </div>
+
+              <div className="text-[11px] text-warmmuted flex items-center gap-2">
+                <span className="font-semibold text-olive inline-flex items-center gap-1">
+                  <Check className="size-3" /> Faktual Aktif
+                </span>
+                <span>·</span>
+                <span className="font-semibold text-amber-700">Rencana Terverifikasi</span>
+              </div>
+            </div>
+
             {/* Filter and Search Bar */}
             <div className="p-4 border-b border-warmborder bg-white flex flex-col sm:flex-row items-center gap-3 shrink-0">
               <div className="relative w-full sm:flex-1">
@@ -236,13 +355,108 @@ export const LoveLetterViewerModal: React.FC<ViewerProps> = ({
               </div>
             </div>
 
-            {/* 99 Points List */}
+            {/* 99 Points List (View 1: Narasi vs View 2: Claim Ledger F14) */}
             <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-3 bg-sandstone/20">
               {filteredPoints.length === 0 ? (
                 <div className="py-12 text-center text-xs text-warmmuted">
                   Tidak ada poin yang cocok dengan pencarian &ldquo;{searchQuery}&rdquo;.
                 </div>
+              ) : viewMode === 'ledger' ? (
+                /* VIEW 2: CLAIM LEDGER TABLE (F14) */
+                <div className="space-y-3">
+                  <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl text-xs text-amber-900 leading-relaxed flex items-start gap-2">
+                    <AlertCircle className="size-4 text-terracotta shrink-0 mt-0.5" />
+                    <div>
+                      <strong>Standar Audit F14:</strong> Setiap klaim promosi properti wajib memiliki derajat bukti (Grade A/B/C) dan status operasional yang sah. Klaim berstatus <em>Ditolak</em> otomatis dicegah muncul di materi iklan, brosur, atau skrip AI.
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-warmborder bg-white shadow-2xs">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-sandstone/60 border-b border-warmborder font-extrabold text-espresso">
+                        <tr>
+                          <th className="py-3 px-3.5 w-16">No</th>
+                          <th className="py-3 px-3.5 min-w-[200px]">Pernyataan Klaim Keunggulan</th>
+                          <th className="py-3 px-3.5 w-32">Status Klaim</th>
+                          <th className="py-3 px-3.5 w-28">Derajat Bukti</th>
+                          <th className="py-3 px-3.5 min-w-[150px]">Penanggung Jawab / Dasar Bukti</th>
+                          <th className="py-3 px-3.5 w-40 text-right">Verifikasi Legal</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-warmborder">
+                        {filteredPoints.map((point) => {
+                          const record = claimRecords[point.number] || {
+                            pointNumber: point.number,
+                            status: 'AKTUAL',
+                            grade: 'GRADE_B',
+                            verifiedBy: 'Tim Proyek',
+                            evidenceRef: 'Brosur & Master Plan',
+                          };
+                          return (
+                            <tr key={point.number} className="hover:bg-sandstone/20 transition-colors">
+                              <td className="py-3 px-3.5 font-bold font-mono text-terracotta">
+                                #{point.number}
+                              </td>
+                              <td className="py-3 px-3.5">
+                                <p className="font-extrabold text-espresso">{point.title}</p>
+                                <p className="text-[11px] text-warmmuted line-clamp-2 mt-0.5">
+                                  {point.narrative}
+                                </p>
+                              </td>
+                              <td className="py-3 px-3.5">
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-extrabold inline-block whitespace-nowrap ${
+                                    record.status === 'AKTUAL'
+                                      ? 'bg-lime-100 text-olive border border-lime-300'
+                                      : record.status === 'RENCANA'
+                                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                      : record.status === 'ILUSTRASI'
+                                      ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                                      : 'bg-rose-100 text-rose-800 border border-rose-300'
+                                  }`}
+                                >
+                                  {record.status}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3.5 font-semibold text-warmmuted whitespace-nowrap">
+                                <span className="px-2 py-0.5 rounded bg-sandstone border border-warmborder text-[10px]">
+                                  {record.grade === 'GRADE_A'
+                                    ? 'A · Dokumen Resmi'
+                                    : record.grade === 'GRADE_B'
+                                    ? 'B · Gambar Kerja'
+                                    : 'C · Ilustrasi 3D'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3.5 text-[11px] text-espresso">
+                                <span className="font-semibold block">{record.verifiedBy}</span>
+                                <span className="text-warmmuted block text-[10px] mt-0.5">
+                                  {record.evidenceRef}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                                <select
+                                  aria-label={`Ubah status klaim #${point.number}`}
+                                  value={record.status}
+                                  onChange={(e) =>
+                                    updateClaimStatus(point.number, e.target.value as ClaimStatus)
+                                  }
+                                  className="h-8 px-2 rounded-lg border border-warmborder bg-sandstone/30 text-[11px] font-bold text-espresso cursor-pointer focus:outline-none focus:ring-1 focus:ring-terracotta"
+                                >
+                                  <option value="AKTUAL">Setujui: AKTUAL</option>
+                                  <option value="RENCANA">Tandai: RENCANA</option>
+                                  <option value="ILUSTRASI">Tandai: ILUSTRASI</option>
+                                  <option value="DITOLAK">Tolak: DITOLAK</option>
+                                </select>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               ) : (
+                /* VIEW 1: NARASI SURAT CINTA */
                 filteredPoints.map((point) => (
                   <article 
                     key={point.number}

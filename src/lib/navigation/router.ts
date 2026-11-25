@@ -14,7 +14,12 @@ export type DashboardView =
   | 'kb'
   | 'surat_cinta'
   | 'unit_park'
-  | 'kinerja_se';
+  | 'kinerja_se'
+  | 'vault'
+  | 'referral'
+  | 'garansi'
+  | 'kpr_bank'
+  | 'control_tower';
 
 export const VIEW_PATHS: Record<DashboardView, string> = {
   dashboard: '/dashboard',
@@ -33,6 +38,11 @@ export const VIEW_PATHS: Record<DashboardView, string> = {
   surat_cinta: '/surat-cinta',
   unit_park: '/unit-park',
   kinerja_se: '/kinerja-se',
+  vault: '/dokumen-vault',
+  referral: '/program-referral',
+  garansi: '/keluhan-garansi',
+  kpr_bank: '/alur-kpr-bank',
+  control_tower: '/control-tower',
 };
 
 const PATH_TO_VIEW: Record<string, DashboardView> = Object.entries(VIEW_PATHS).reduce(

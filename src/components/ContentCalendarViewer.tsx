@@ -770,7 +770,7 @@ export function ContentCalendarViewer({
     <div className={outerClass}>
       <div className={cardClass}>
         {/* Header */}
-        <div className="px-4 py-4 sm:px-6 sm:py-5 bg-sandstone/60 border-b border-warmborder flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
+        <div className="px-4 py-4 sm:px-6 sm:py-5 bg-sandstone/60 border-b border-warmborder flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 shrink-0">
           <div className="flex items-start sm:items-center gap-3 min-w-0">
             <div className="size-10 sm:size-11 rounded-2xl bg-terracotta text-white flex items-center justify-center shadow-sm shrink-0">
               <CalendarIcon className="size-5 sm:size-6" />

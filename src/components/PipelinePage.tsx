@@ -26,8 +26,11 @@ import {
   ChevronUp,
   CheckCheck,
   Inbox,
+  FileText,
 } from 'lucide-react';
 import { FollowupScheduleTab } from './pipeline/FollowupScheduleTab';
+import { TaskInboxTab } from './pipeline/TaskInboxTab';
+import { BuyerPackModal } from './pipeline/BuyerPackModal';
 import {
   PLAYBOOK_PIPELINE_STAGES,
   PLAYBOOK_BUYER_PERSONAS,
@@ -238,6 +241,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
     return initialFilter || getQueryParam('tab') || loadPersistedState<string>(`devos_pipeline_filter_${user.email}`, 'ALL');
   });
   const [followupTargetLeadId, setFollowupTargetLeadId] = useState<string | null>(null);
+  const [buyerPackTargetLead, setBuyerPackTargetLead] = useState<PipelineLeadRecord | null>(null);
 
   useEffect(() => {
     if (initialFilter) {
@@ -1209,28 +1213,30 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
 
   return (
     <div className="space-y-4 sm:space-y-5 pb-24 md:pb-6 overflow-x-hidden">
-      {/* Header Halaman Pipeline (Mobile-First Compact Hierarchy) */}
-      <div className="bg-white border border-warmborder rounded-2xl p-3.5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="size-10 sm:size-11 rounded-xl sm:rounded-2xl bg-terracotta text-white flex items-center justify-center shrink-0">
+      {/* Header Halaman Pipeline */}
+      <div className="bg-white border border-warmborder rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3 min-w-0">
+          <div className="size-10 sm:size-11 rounded-xl bg-terracotta text-white flex items-center justify-center shrink-0 shadow-xs">
             <Users className="size-5 sm:size-6" />
           </div>
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <h2 className="text-base sm:text-xl font-extrabold text-espresso truncate">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base sm:text-xl font-extrabold text-espresso">
                 Pipeline &amp; AI Lead
               </h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-amber-50 text-terracotta border border-amber-200 whitespace-nowrap">
+              <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-amber-50 text-terracotta border border-amber-200 shrink-0">
                 BANT 0–12
               </span>
             </div>
-            <p className="hidden sm:block text-xs text-warmmuted mt-0.5">
-              Akun SE: <strong className="text-espresso">{user.name}</strong> ({user.email}) · Data &amp; WhatsApp terisolasi per akun
-            </p>
+            <div className="text-xs text-warmmuted mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span>Akun SE: <strong className="text-espresso">{user.name}</strong> ({user.email})</span>
+              <span className="text-warmborder hidden sm:inline">&bull;</span>
+              <span className="text-olive font-medium">Data &amp; WhatsApp terisolasi per akun</span>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-warmborder/60">
           <button
             type="button"
             disabled={submitting}
@@ -1240,7 +1246,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                 handleConnectWa(false);
               }
             }}
-            className={`min-h-[44px] px-2 sm:px-3.5 py-2 rounded-xl text-[11px] sm:text-xs font-extrabold inline-flex items-center justify-center gap-1 sm:gap-2 cursor-pointer border transition-colors whitespace-nowrap ${
+            className={`min-h-[40px] px-3 py-2 rounded-xl text-xs font-extrabold inline-flex items-center justify-center gap-1.5 cursor-pointer border transition-colors shrink-0 ${
               waStatus?.status === 'CONNECTED'
                 ? 'bg-lime-100 hover:bg-lime-200 text-olive border-lime-300'
                 : waStatus?.status === 'QR_READY' || waStatus?.status === 'CONNECTING'
@@ -1248,22 +1254,15 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                 : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
             }`}
           >
-            <QrCode className="size-3.5 sm:size-4 shrink-0" />
-            <span className="sm:hidden truncate">
-              {waStatus?.status === 'CONNECTED'
-                ? 'WA Aktif'
-                : waStatus?.status === 'QR_READY'
-                ? 'Scan QR'
-                : 'Hubungkan'}
-            </span>
-            <span className="hidden sm:inline">
+            <QrCode className="size-4 shrink-0" />
+            <span className="truncate">
               {waStatus?.status === 'CONNECTED'
                 ? `WA Terhubung (${waStatus.phoneNumber})`
                 : waStatus?.status === 'QR_READY'
-                ? 'WA Menunggu Scan QR'
+                ? 'Scan QR WA'
                 : waStatus?.status === 'CONNECTING'
-                ? 'WA Menyambungkan...'
-                : 'WA Terdiskonek · Hubungkan (QR)'}
+                ? 'Menyambungkan...'
+                : 'Hubungkan WA (QR)'}
             </span>
           </button>
 
@@ -1272,7 +1271,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
               type="button"
               disabled={submitting}
               onClick={handleDisconnectWa}
-              className="hidden sm:flex min-h-[44px] px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
+              className="min-h-[40px] px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0"
             >
               <X className="size-4 shrink-0" />
               <span>Diskonek WA</span>
@@ -1282,11 +1281,10 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
           <button
             type="button"
             onClick={() => setShowWaIngestModal(true)}
-            className="min-h-[44px] px-2 sm:px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-espresso border border-warmborder text-[11px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap"
+            className="min-h-[40px] px-3 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-espresso border border-warmborder text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
           >
-            <Smartphone className="size-3.5 sm:size-4 text-olive shrink-0" />
-            <span className="sm:hidden">Pesan WA</span>
-            <span className="hidden sm:inline">Proses Pesan WA Masuk</span>
+            <Smartphone className="size-4 text-olive shrink-0" />
+            <span>Proses Pesan WA</span>
           </button>
 
           <button
@@ -1295,11 +1293,10 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
               resetForm();
               setIsLeadFormOpen(true);
             }}
-            className="min-h-[44px] px-2 sm:px-4 py-2 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-[11px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
+            className="min-h-[40px] px-3.5 py-2 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-xs shrink-0"
           >
-            <Plus className="size-3.5 sm:size-4 shrink-0" />
-            <span className="sm:hidden">Lead Baru</span>
-            <span className="hidden sm:inline">Input Lead Baru</span>
+            <Plus className="size-4 shrink-0" />
+            <span>+ Input Lead Baru</span>
           </button>
         </div>
       </div>
@@ -1343,7 +1340,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
             : 'border-rose-200'
         }`}
       >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           <div className="flex items-start gap-3">
             <div
               className={`size-10 rounded-xl flex items-center justify-center shrink-0 ${
@@ -2058,6 +2055,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar snap-x pb-1">
           {[
             { id: 'ALL', label: `Semua (${leads.filter((l) => l.lead_quality !== 'JUNK').length})`, isUrgentTab: false, count: 0 },
+            { id: 'TASK_INBOX', label: 'Task Inbox & Aksi (F47)', isUrgentTab: false, count: 0 },
             { id: 'FOLLOWUP', label: 'Jadwal Follow-Up AI', isUrgentTab: false, count: 0 },
             {
               id: 'PERLU_DITANGANI',
@@ -2120,8 +2118,10 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
         </div>
       </div>
 
-      {/* Daftar Lead (Default Tertutup / List Ringkas, Buka saat Klik Detail) atau Tab Jadwal Follow-Up */}
-      {activeFilter === 'FOLLOWUP' ? (
+      {/* Daftar Lead (Default Tertutup / List Ringkas, Buka saat Klik Detail) atau Tab Jadwal Follow-Up / Task Inbox */}
+      {activeFilter === 'TASK_INBOX' ? (
+        <TaskInboxTab leads={leads} />
+      ) : activeFilter === 'FOLLOWUP' ? (
         <FollowupScheduleTab
           leads={leads}
           initialLeadId={followupTargetLeadId}
@@ -2362,6 +2362,16 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                           </button>
                         )
                       )}
+
+                      <button
+                        type="button"
+                        onClick={() => setBuyerPackTargetLead(lead)}
+                        className="min-h-[44px] px-2 sm:px-3 rounded-xl bg-sandstone hover:bg-warmborder text-espresso text-[11px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap"
+                        title="Buka Paket Kunjungan Calon Pembeli (Buyer Pack · F57)"
+                      >
+                        <FileText className="size-3.5 text-terracotta shrink-0" />
+                        <span className="hidden sm:inline">Buyer Pack</span>
+                      </button>
 
                       <button
                         type="button"
@@ -3105,6 +3115,14 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {buyerPackTargetLead && (
+        <BuyerPackModal
+          lead={buyerPackTargetLead}
+          projectName="The Park Townhouse Sukoharjo"
+          onClose={() => setBuyerPackTargetLead(null)}
+        />
       )}
 
       {toast && (

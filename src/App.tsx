@@ -103,7 +103,15 @@ import {
   TrendingUp,
   Users,
   X,
+  Lock,
+  Share2,
+  Wrench,
 } from 'lucide-react';
+import { SecureDocumentVaultPage } from './components/SecureDocumentVaultPage';
+import { ReferralProgramPage } from './components/ReferralProgramPage';
+import { CustomerComplaintsPage } from './components/CustomerComplaintsPage';
+import { BankSubmissionWorkflowPage } from './components/BankSubmissionWorkflowPage';
+import { ExecutiveControlTowerPage } from './components/ExecutiveControlTowerPage';
 import {
   AD_CAMPAIGNS,
   BOOKING_TRANSACTIONS,
@@ -1215,6 +1223,54 @@ export default function App() {
               <HeartHandshake className="size-4 shrink-0" />
               <span>Surat Cinta 99 Keunggulan</span>
             </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('vault'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'vault'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Lock className="size-4 shrink-0 text-olive" />
+              <span>Dokumen Vault KPR (F74)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('referral'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'referral'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Share2 className="size-4 shrink-0 text-terracotta" />
+              <span>Program Referral (F79)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('garansi'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'garansi'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Wrench className="size-4 shrink-0 text-warmmuted" />
+              <span>Keluhan &amp; Garansi DLP (F86)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('kpr_bank'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'kpr_bank'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Building2 className="size-4 shrink-0 text-olive" />
+              <span>Alur KPR Bank (F75)</span>
+            </button>
           </div>
         )}
 
@@ -1349,6 +1405,66 @@ export default function App() {
             >
               <HeartHandshake className="size-4 shrink-0" />
               <span>Surat Cinta 99 Keunggulan</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('vault'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'vault'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Lock className="size-4 shrink-0 text-olive" />
+              <span>Dokumen Vault KPR (F74)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('referral'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'referral'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Share2 className="size-4 shrink-0 text-terracotta" />
+              <span>Program Referral (F79)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('garansi'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'garansi'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Wrench className="size-4 shrink-0 text-warmmuted" />
+              <span>Keluhan &amp; Garansi DLP (F86)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('kpr_bank'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'kpr_bank'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Building2 className="size-4 shrink-0 text-olive" />
+              <span>Alur KPR Bank (F75)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('control_tower'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'control_tower'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <TrendingUp className="size-4 shrink-0 text-terracotta" />
+              <span>Control Tower Portofolio (F90)</span>
             </button>
           </>
         )}
@@ -1586,15 +1702,15 @@ export default function App() {
         )}
 
         {/* Header Desktop */}
-        <header className="hidden md:flex items-center justify-between px-8 py-5 bg-white border-b border-warmborder sticky top-0 z-20">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-extrabold text-espresso tracking-tight">Developer Sales OS</h1>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-amber-50 text-terracotta border border-amber-200">
+        <header className="hidden md:flex items-center justify-between gap-3 px-4 lg:px-8 py-3.5 lg:py-5 bg-white border-b border-warmborder sticky top-0 z-20">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg lg:text-xl font-extrabold text-espresso tracking-tight truncate">Developer Sales OS</h1>
+              <span className="text-[11px] lg:text-xs font-bold px-2 py-0.5 rounded-md bg-amber-50 text-terracotta border border-amber-200 shrink-0">
                 Dashboard {role} · {user.roleLabel}
               </span>
             </div>
-            <p className="text-xs text-warmmuted mt-0.5">
+            <p className="text-xs text-warmmuted mt-0.5 truncate">
               {today} ·{' '}
               {isPlatformSuperadmin ? (
                 <span className="font-semibold text-terracotta">
@@ -1608,16 +1724,16 @@ export default function App() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 lg:gap-3 shrink-0">
             {/* Universal Project Pill Dropdown & Tambah Proyek Button persis di sebelahnya (Klien Developer) vs Panel Superadmin (Superadmin) */}
             {!isPlatformSuperadmin ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <div className="relative">
                   <select
                     aria-label="Pilih Proyek Aktif"
                     value={activeProjectId}
                     onChange={(e) => handleSelectProject(e.target.value)}
-                    className="h-10 pl-8 pr-8 rounded-xl border border-warmborder bg-sandstone hover:bg-sandstone/80 text-xs font-bold text-espresso appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-terracotta transition-colors shadow-sm"
+                    className="h-10 pl-8 pr-7 sm:pr-8 rounded-xl border border-warmborder bg-sandstone hover:bg-sandstone/80 text-xs font-bold text-espresso appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-terracotta transition-colors shadow-sm max-w-[130px] sm:max-w-[170px] lg:max-w-[220px] truncate"
                   >
                     {projects.map((proj) => (
                       <option key={proj.id} value={proj.id}>
@@ -1626,48 +1742,51 @@ export default function App() {
                     ))}
                   </select>
                   <Building2 className="size-4 text-terracotta absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <ChevronDown className="size-4 text-warmmuted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <ChevronDown className="size-4 text-warmmuted absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setShowNewProjectModal(true)}
-                  className="h-10 px-3.5 rounded-xl bg-terracotta text-white hover:bg-terracotta/90 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer shrink-0"
+                  className="h-10 px-2.5 sm:px-3.5 rounded-xl bg-terracotta text-white hover:bg-terracotta/90 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer shrink-0"
                   title="Tambah Proyek Baru"
                 >
-                  <Plus className="size-4" />
-                  <span>Tambah Proyek</span>
+                  <Plus className="size-4 shrink-0" />
+                  <span className="hidden xl:inline">Tambah Proyek</span>
+                  <span className="hidden sm:inline xl:hidden">Proyek</span>
                 </button>
               </div>
             ) : (
               <button
                 type="button"
                 onClick={() => setShowSuperadminModal(true)}
-                className="h-10 px-3.5 rounded-xl bg-amber-500/10 border border-amber-300/80 hover:bg-amber-500/20 text-terracotta text-xs font-extrabold flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
+                className="h-10 px-3.5 rounded-xl bg-amber-500/10 border border-amber-300/80 hover:bg-amber-500/20 text-terracotta text-xs font-extrabold flex items-center gap-2 transition-colors shadow-xs cursor-pointer shrink-0"
                 title="Buka Panel Superadmin Multi-Tenant"
               >
-                <ShieldCheck className="size-4 text-terracotta" />
-                <span>Panel Multi-Tenant Core</span>
+                <ShieldCheck className="size-4 text-terracotta shrink-0" />
+                <span className="hidden sm:inline">Panel Multi-Tenant Core</span>
               </button>
             )}
             {role === 'SE' && (
-              <SeNotificationBell
-                quickStatus={seRealData?.quickStatus}
-                extra={{
-                  leadsTodayValidCount: seRealData?.metrics?.leadsTodayValidCount,
-                  needsCompletionLeadsCount: seRealData?.metrics?.needsCompletionLeadsCount,
-                  waConnectionStatus: seRealData?.metrics?.waConnectionStatus,
-                }}
-                externalOpen={isNotifPanelOpen}
-                onExternalOpenChange={setIsNotifPanelOpen}
-                onNavigateTarget={handleSeNotifNavigate}
-                onH5ReminderTriggered={(item) => setActiveH5Reminder(item)}
-              />
+              <div className="shrink-0">
+                <SeNotificationBell
+                  quickStatus={seRealData?.quickStatus}
+                  extra={{
+                    leadsTodayValidCount: seRealData?.metrics?.leadsTodayValidCount,
+                    needsCompletionLeadsCount: seRealData?.metrics?.needsCompletionLeadsCount,
+                    waConnectionStatus: seRealData?.metrics?.waConnectionStatus,
+                  }}
+                  externalOpen={isNotifPanelOpen}
+                  onExternalOpenChange={setIsNotifPanelOpen}
+                  onNavigateTarget={handleSeNotifNavigate}
+                  onH5ReminderTriggered={(item) => setActiveH5Reminder(item)}
+                />
+              </div>
             )}
-            <div className="flex items-center gap-2 bg-sandstone px-3 py-1.5 rounded-xl border border-warmborder text-xs">
-              <span className="size-2 rounded-full bg-olive"></span>
+            <div className="hidden lg:flex items-center gap-2 bg-sandstone px-3 py-1.5 rounded-xl border border-warmborder text-xs shrink-0">
+              <span className="size-2 rounded-full bg-olive shrink-0"></span>
               <span className="font-semibold text-espresso">Online</span>
-              <span className="text-warmmuted text-[11px]">({user.name})</span>
+              <span className="text-warmmuted text-[11px] hidden xl:inline">({user.name})</span>
             </div>
           </div>
         </header>
@@ -1858,6 +1977,44 @@ export default function App() {
               projectId={activeProject.id}
               projectName={activeProject.nama}
               onClose={() => openView('dashboard')}
+            />
+          )}
+
+          {activeView === 'vault' && (
+            <SecureDocumentVaultPage
+              projectName={activeProject.nama}
+              projectId={activeProject.id}
+              userRole={role}
+            />
+          )}
+
+          {activeView === 'referral' && (
+            <ReferralProgramPage
+              projectName={activeProject.nama}
+              projectId={activeProject.id}
+              userRole={role}
+            />
+          )}
+
+          {activeView === 'garansi' && (
+            <CustomerComplaintsPage
+              projectName={activeProject.nama}
+              projectId={activeProject.id}
+              userRole={role}
+            />
+          )}
+
+          {activeView === 'kpr_bank' && (
+            <BankSubmissionWorkflowPage
+              projectName={activeProject.nama}
+              projectId={activeProject.id}
+              userRole={role}
+            />
+          )}
+
+          {activeView === 'control_tower' && (
+            <ExecutiveControlTowerPage
+              userRole={role}
             />
           )}
 
@@ -2297,7 +2454,7 @@ export default function App() {
 
               {/* Radar Speed to Lead ≤ 5 Menit */}
               <section id="live-sla" className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
-                <div className="p-5 border-b border-warmborder flex items-center justify-between">
+                <div className="p-5 border-b border-warmborder flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
                       <Clock className="size-4 text-terracotta" />
@@ -2356,7 +2513,7 @@ export default function App() {
 
               {/* Aturan Kepemilikan 72 Jam */}
               <section id="aturan-72jam" className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm">
-                <div className="flex items-start justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-bold text-espresso">Aturan Pool Lead 72 Jam (Playbook §6.5)</h3>
                     <p className="text-xs text-warmmuted mt-1">
@@ -2365,7 +2522,7 @@ export default function App() {
                   </div>
                   <button
                     onClick={() => setToast('Fungsi kembalikan_lead_72jam() dieksekusi')}
-                    className="px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-xs font-bold text-espresso flex items-center gap-2 cursor-pointer"
+                    className="px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-xs font-bold text-espresso flex items-center gap-2 cursor-pointer shrink-0 self-start sm:self-auto"
                   >
                     <RefreshCw className="size-3.5" /> Jalankan Audit 72 Jam
                   </button>
@@ -2398,7 +2555,7 @@ export default function App() {
           {activeView === 'dashboard' && role === 'SM' && (
             <div className="space-y-6">
               {/* Info Banner SM */}
-              <div className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold px-2 py-0.5 rounded bg-terracotta text-white">
@@ -2689,7 +2846,7 @@ export default function App() {
 
               {/* SM Pantau Tim SE Table Section */}
               <section id="tim-se" className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
-                <div className="p-5 border-b border-warmborder flex items-center justify-between">
+                <div className="p-5 border-b border-warmborder flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-bold text-espresso">Performa Real-Time &amp; Kepatuhan SLA</h3>
                     <p className="text-xs text-warmmuted mt-0.5">
@@ -2951,7 +3108,7 @@ export default function App() {
 
               {/* Eskalasi Persetujuan Khusus Direksi (Modul Q1, S9, S21) */}
               <section id="eskalasi-persetujuan" className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
-                <div className="p-5 border-b border-warmborder flex items-center justify-between">
+                <div className="p-5 border-b border-warmborder flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-bold text-espresso">
                       Meja Persetujuan Khusus &amp; Eskalasi Direksi
@@ -3048,7 +3205,7 @@ export default function App() {
 
               {/* Tabel Booking Pipeline */}
               <section id="booking-pipeline" className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
-                <div className="p-5 border-b border-warmborder flex items-center justify-between">
+                <div className="p-5 border-b border-warmborder flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-bold text-espresso">Transaksi Booking Masuk &amp; Batas Waktu Pembayaran</h3>
                     <p className="text-xs text-warmmuted mt-0.5">
@@ -3144,7 +3301,7 @@ export default function App() {
             <div className="space-y-6">
               {/* Migration Status Cards */}
               <section id="db-schema" className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm">
-                <div className="flex items-center justify-between pb-4 border-b border-warmborder">
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-warmborder">
                   <div>
                     <h3 className="text-base font-bold text-espresso">Status PostgreSQL Schema `devos`</h3>
                     <p className="text-xs text-warmmuted mt-0.5">
@@ -3176,7 +3333,7 @@ export default function App() {
 
               {/* Audit Log 100% */}
               <section id="audit-log" className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
-                <div className="p-5 border-b border-warmborder flex items-center justify-between">
+                <div className="p-5 border-b border-warmborder flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-bold text-espresso">Audit Log 100% (Pencatatan Riwayat Data)</h3>
                     <p className="text-xs text-warmmuted mt-0.5">
@@ -3273,7 +3430,7 @@ export default function App() {
 
               {/* Tabel Kampanye & Kinerja Iklan */}
               <section id="ad-campaigns" className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm">
-                <div className="p-5 border-b border-warmborder flex items-center justify-between">
+                <div className="p-5 border-b border-warmborder flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-bold text-espresso">
                       Kinerja Kampanye Iklan &amp; Biaya per Lead (CPL) per Kanal
@@ -3520,7 +3677,7 @@ export default function App() {
       {showUnitModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto space-y-4 shadow-xl border border-warmborder">
-            <div className="flex items-center justify-between pb-3 border-b border-warmborder">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-warmborder">
               <h3 className="text-base font-bold text-espresso">
                 {editingUnit ? `Edit Unit ${editingUnit.namaUnit}` : `Tambah Unit Baru — ${activeProject.nama}`}
               </h3>
@@ -3896,6 +4053,11 @@ export default function App() {
           onOpenCommission: () => openView('komisi'),
           onOpenKb: () => openView('kb'),
           onOpenLoveLetter: () => openView('surat_cinta'),
+          onOpenVault: () => openView('vault'),
+          onOpenReferral: () => openView('referral'),
+          onOpenGaransi: () => openView('garansi'),
+          onOpenKprBank: () => openView('kpr_bank'),
+          onOpenControlTower: () => openView('control_tower'),
           onOpenUnitPark: () => openView('unit_park'),
           onOpenKinerjaSe: () => openView('kinerja_se'),
           onOpenSuperadmin: () => setShowSuperadminModal(true),
@@ -3909,7 +4071,7 @@ export default function App() {
       {showNewProjectModal && (
         <div className="fixed inset-0 z-60 bg-espresso/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl p-5 sm:p-7 border border-warmborder max-w-2xl w-full shadow-2xl space-y-5 animate-in zoom-in-95 my-auto max-h-[94vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-warmborder pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-warmborder pb-4">
               <div className="flex items-center gap-2.5">
                 <span className="p-2 rounded-xl bg-terracotta/10 text-terracotta">
                   <Building2 className="size-5" />
@@ -4138,7 +4300,7 @@ export default function App() {
       {isDireksiGlossaryOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full border border-warmborder shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-5 border-b border-warmborder flex items-center justify-between bg-sandstone/40">
+            <div className="p-5 border-b border-warmborder flex flex-wrap items-center justify-between gap-3 bg-sandstone/40">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-emerald-100 text-emerald-800 rounded-xl">
                   <BookOpen className="size-4" />

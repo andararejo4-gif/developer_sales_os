@@ -3,6 +3,73 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-080 | 2026-11-25 | Pembangunan Fondasi R3 & R4: Kontrak API, Alur KPR & Control Tower
+- Status: selesai
+- Ubah: `src/lib/foundations/r3-r4-contracts.ts`, `src/components/BankSubmissionWorkflowPage.tsx` (F75), `src/components/ExecutiveControlTowerPage.tsx` (F90 & F88), `src/lib/navigation/router.ts`, `src/components/mobile/MobileMoreSheet.tsx`, `src/App.tsx`.
+- Alasan/keputusan: Menyiapkan fondasi deterministik R3 (Alur KPR Bank mitra & SP3K) dan R4 (Control Tower Portofolio & Proyeksi Cashflow) dalam bentuk halaman kerja utuh bergaya `/unslop` dan kontrak adapter API, siap disambungkan ke backend/third-party tanpa merombak UI.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: -
+- Catatan: Rute view `kpr_bank` dan `control_tower` terintegrasi di sidebar dan router.
+
+## P-079 | 2026-11-25 | Unslopping UI: Quiet Chrome, Clean Spacing & Tipografi Elegan
+- Status: selesai
+- Ubah: `src/components/ReferralProgramPage.tsx`, `src/components/SecureDocumentVaultPage.tsx`, `src/components/CustomerComplaintsPage.tsx`.
+- Alasan/keputusan: Mengaplikasikan prinsip skill `/unslop`: menghilangkan badge/banner mencolok, menata quiet chrome, merapikan card angka, dan menertibkan tabel data agar berkarakter studio arsitektur/pengembang properti.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: Audit visual halaman dashboard role lain (TL, SM, Admin, Direksi).
+
+## P-078 | 2026-11-25 | Integrasi Halaman Penuh F74, F79, F86 di Sidebar & Main View (Anti-Popup)
+- Status: selesai
+- Ubah: `src/components/SecureDocumentVaultPage.tsx`, `src/components/ReferralProgramPage.tsx`, `src/components/CustomerComplaintsPage.tsx`, `src/lib/navigation/router.ts`, `src/components/mobile/MobileMoreSheet.tsx`, `src/App.tsx`.
+- Alasan/keputusan: Mengembalikan menu F74, F79, F86 ke sidebar dan mobile sheet sebagai view halaman utuh (`activeView` main area), bukan modal popup overlay, sesuai instruksi user.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: -
+- Catatan: Menambahkan route view `vault`, `referral`, `garansi` ke router state dan sidebar navigation.
+
+## P-077 | 2026-11-25 | Penghapusan Tombol Popup F86/F79/F74 & Unslopping Layout Responsif
+- Status: selesai
+- Ubah: `src/App.tsx`, `src/components/PipelinePage.tsx`, `src/components/PlaybookViewer.tsx`, hapus modal dead code `CustomerComplaintsModal.tsx`, `ReferralTrackingModal.tsx`, `SecureDocumentVaultModal.tsx`.
+- Alasan/keputusan: Menghilangkan tombol popup F86, F79, F74 dari sidebar sesuai instruksi user; menjaga navigasi berbasis halaman utuh (`activeView`), serta menata ulang header Pipeline & kartu SOP Playbook agar tidak bertumpuk di layar menengah/kecil.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) sukses.
+- Berikutnya: -
+- Catatan: Semua navigasi alat kerja diarahkan ke view halaman penuh, bukan overlay popup acak.
+
+## P-076 | 2026-11-25 | Pembangunan Persiapan Fitur R2 (F14, F47, F57, F62, F65, F74, F79, F86)
+- Status: selesai
+- Ubah: `src/components/LoveLetterViewerModal.tsx` (F14 Claim Ledger), `src/components/pipeline/TaskInboxTab.tsx` (F47 Task Inbox), `src/components/pipeline/BuyerPackModal.tsx` (F57 Buyer Pack), `src/components/DailyRouteViewer.tsx` (F62 Replan Hujan), `src/components/PlaybookViewer.tsx` (F65 Sertifikasi SE), `src/components/SecureDocumentVaultModal.tsx` (F74 Vault KPR), `src/components/ReferralTrackingModal.tsx` (F79 Referral Link), `src/components/CustomerComplaintsModal.tsx` (F86 DLP Garansi), `src/components/PipelinePage.tsx`, `src/App.tsx`.
+- Alasan/keputusan: Menutup kesenjangan fitur R2 dengan membangun antarmuka dan kontrak persiapan deterministik tanpa ketergantungan API pihak ketiga / database baru sesuai arahan user.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) sukses bersih.
+- Berikutnya: -
+
+## P-075 | 2026-11-25 | Unslopping Card SOP Playbook & Perataan Responsif Multi-Role
+- Status: selesai
+- Ubah: `src/components/PlaybookViewer.tsx`, `src/components/CrmPipelineView.tsx`, `src/App.tsx`
+- Alasan/keputusan: Merestrukturisasi card SOP Playbook harian: meletakkan target output di footer card berikon Target (tidak lagi menekan kolom kiri), memadukan waktu/channel/SLA dengan flex-wrap & no-wrap agar tidak terpotong vertikal; menambahkan flex-wrap & gap pada seluruh header sub-modul (TL, SM, ADMIN, IT, DIREKSI).
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) sukses.
+- Berikutnya: -
+
+## P-074 | 2026-11-25 | Standardisasi Breakpoint Responsif Pipeline & Modul Viewer
+- Status: selesai
+- Ubah: `src/components/PipelinePage.tsx`, `ContentCalendarViewer.tsx`, `PlaybookViewer.tsx`, `SalesTargetViewer.tsx`, `DailyRouteViewer.tsx`, `MarketResearchViewer.tsx`, `CrmPipelineView.tsx`, `DireksiMultiProjectView.tsx`
+- Alasan/keputusan: Mengganti breakpoint `sm:flex-row` menjadi `xl:flex-row` / `lg:flex-row` pada header halaman agar judul tidak terjepit 30px dan tombol aksi tidak menumpuk saat sidebar aktif di layar menengah/restore down.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (sukses).
+- Berikutnya: -
+
+## P-073 | 2026-11-25 | Perbaikan Responsivitas Header Desktop saat Window Dikecilkan / Minimize
+- Status: selesai
+- Ubah: `src/App.tsx`, `src/components/se/SeNotificationCenter.tsx` (tambah truncation, responsivitas lebar dropdown proyek, label tombol adaptif, badge online adaptif, dan shrink-0 pada lonceng notifikasi)
+- Alasan/keputusan: Mengatasi masalah elemen header (tombol Tambah Proyek, dropdown, lonceng notifikasi SE) saling bertumpuk dan menyebabkan overflow horizontal saat ukuran window browser dikecilkan/restore down.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (sukses).
+- Berikutnya: -
+
+## P-072 | 2026-11-25 | Offline Resilience Fallback untuk Login & Verifikasi MFA
+- Status: selesai
+- Ubah: `src/lib/auth/dummy-accounts.ts` (fallback otomatis ke dummy auth & token mock saat backend/DB offline)
+- Alasan/keputusan: Mengatasi kendala gagal login/MFA saat backend server atau PostgreSQL lokal belum aktif setelah pull dari main; dapat di-revert kapan saja sebelum push bila diinginkan.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run typecheck` (bersih).
+- Berikutnya: -
+- Catatan: Jika ingin kembali murni server auth saat push, cukup `git checkout src/lib/auth/dummy-accounts.ts`.
+
 ## P-071 | 2026-11-25 | F55 AI Nurture Cadence Terjadwal (Tab Khusus, WA Preview 2-Kolom, Baileys)
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `db/migrations/0020_wa_nurture_cadence.sql`, `server/wa-nurture.ts` (+auto-fill draf AI & `rescheduleAnchorForLead`), `server/index.ts` (+`/api/nurture/jobs/reschedule-anchor`), `src/components/pipeline/FollowupScheduleTab.tsx` (tab khusus 2 kolom + anchor tanggal follow-up pertama + WA preview), `src/components/PipelinePage.tsx` (tab `FOLLOWUP` & tombol pintas dari kartu lead)

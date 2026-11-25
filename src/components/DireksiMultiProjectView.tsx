@@ -86,7 +86,7 @@ export const DireksiMultiProjectView: React.FC<DireksiMultiProjectViewProps> = (
   return (
     <div className="space-y-6">
       {/* Top Banner Notice */}
-      <div className="p-5 rounded-3xl bg-espresso text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md">
+      <div className="p-5 rounded-3xl bg-espresso text-white flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-md">
         <div>
           <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-terracotta text-white uppercase tracking-wider">
             Dasbor Direksi &amp; Owner
