@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   X,
   LogIn,
@@ -53,17 +53,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   // MFA form state
   const [mfaChallenge, setMfaChallenge] = useState<MfaChallenge | null>(null);
   const [otpCode, setOtpCode] = useState("");
-  const [resendCooldown, setResendCooldown] = useState(0);
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  useEffect(() => {
-    let timer: any;
-    if (resendCooldown > 0) {
-      timer = setTimeout(() => setResendCooldown((prev) => prev - 1), 1000);
-    }
-    return () => clearTimeout(timer);
-  }, [resendCooldown]);
 
   if (!isOpen) return null;
 
@@ -351,37 +342,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     Daftar Developer Baru
                   </strong>
                 </button>
-              </div>
-
-              {/* Quick Fill Akun Demo (Termasuk Mitra Gmail Nyata) */}
-              <div className="pt-3 border-t border-warmborder/80">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-warmmuted block mb-2 text-center">
-                  Akun Demo Resmi &amp; Mitra Lapangan:
-                </span>
-                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail("anita.wijaya92@gmail.com");
-                      setPassword("MitraReferral#2026");
-                    }}
-                    className="p-1.5 rounded-lg bg-sandstone/60 hover:bg-sandstone border border-warmborder text-left transition-colors cursor-pointer truncate"
-                  >
-                    <span className="font-bold text-espresso block truncate">Ibu Anita (Referral)</span>
-                    <span className="text-[10px] text-warmmuted block truncate">anita.wijaya92@gmail.com</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail("dimas.property.solo@gmail.com");
-                      setPassword("MitraSales#2026");
-                    }}
-                    className="p-1.5 rounded-lg bg-sandstone/60 hover:bg-sandstone border border-warmborder text-left transition-colors cursor-pointer truncate"
-                  >
-                    <span className="font-bold text-espresso block truncate">Pak Dimas (Sales Partner)</span>
-                    <span className="text-[10px] text-warmmuted block truncate">dimas.property.solo@gmail.com</span>
-                  </button>
-                </div>
               </div>
             </form>
           ) : (

@@ -3,6 +3,14 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-088 | 2026-11-25 | Merge IT-kantor ke branch 2FA + penguatan 2FA & akses mitra
+- Status: sebagian (lokal di branch `feat/totp-2fa`, belum push/deploy; SQL belum diuji di PostgreSQL nyata)
+- Ubah: `server/auth.ts` (batas 5 percobaan/15 menit, secret aktif tak bisa ditimpa, klaim step & recovery atomik), `server/partner-access.ts` (tolak-default mitra), `server/index.ts`, `src/App.tsx` (logout mencabut sesi server), `src/components/LoginModal.tsx` (tombol akun demo dihapus), `src/lib/auth/dummy-accounts.ts` (login/OTP offline dihapus), `tests/auth-dummy.test.ts`, `tests/totp-2fa-guardrails.test.ts`, `tests/totp-auth-flow.test.ts`
+- Alasan/keputusan: auth ikut versi TOTP, halaman & layout ikut IT-kantor; akun mitra hanya di-seed bila `DEVOS_PARTNER_SEED_PASSWORD` diset
+- Verifikasi: `tsc --noEmit` bersih, vite build & bun build server sukses, `bun test tests` 145 lulus (AI_ROUTER_API_KEY dikosongkan)
+- Berikutnya: uji SQL 2FA di PostgreSQL + cek visual browser, lalu deploy server dan frontend bersamaan setelah migrasi 0021
+- Catatan: fallback login offline (P-072/P-081/P-084) jangan dimasukkan lagi; dijaga test guardrails. P-087 semula bernomor P-072 lokal.
+
 ## P-087 | 2026-11-25 | 2FA TOTP (Google Authenticator), Halaman Profil & Notifikasi Rekomendasi Semua Role
 - Status: selesai di local (belum push/deploy ke hades)
 - Ubah: `db/migrations/0021_totp_2fa_profiles.sql`, `server/totp.ts` (RFC 6238 murni `node:crypto`), `server/auth.ts` (default TOTP mati, login langsung jika nonaktif, wajib kode TOTP/recovery jika aktif, API profil & setup/enable/disable TOTP), `server/index.ts` (`/api/profile*`), `src/components/ProfilePage.tsx`, `src/components/TotpSecurityBell.tsx`, `src/components/LoginModal.tsx`, `src/components/se/SeNotificationCenter.tsx`, `src/components/se/SeGuidedTour.tsx`, `src/lib/navigation/router.ts`, `src/lib/auth/dummy-accounts.ts`, `src/App.tsx`

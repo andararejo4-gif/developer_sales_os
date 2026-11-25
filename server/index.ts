@@ -24,6 +24,7 @@ import {
   updateUserProfile,
   verifyMfaAndCreateSession,
 } from './auth';
+import { isExternalPartnerRole, isPartnerRequestAllowed } from './partner-access';
 import {
   createUnitQuote,
   ensureUnitInventoryTablesAndSeeds,
@@ -1268,6 +1269,10 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       user = authedUser;
+      if (!isPartnerRequestAllowed(user.role, pathname, req.method)) {
+        sendJson(res, 403, { ok: false, error: 'Akses ditolak untuk akun mitra eksternal.' });
+        return;
+      }
     }
 
     // 2. DASHBOARD SE REAL DATA
@@ -1895,7 +1900,8 @@ const server = http.createServer(async (req, res) => {
                 LIMIT 1
               ) AS latest_analysis
             FROM sales_os.pipeline_leads l
-            WHERE l.tenant_id = ${user.tenantId} AND (l.owner_se_email = ${user.email} OR l.is_in_pool = true)
+            WHERE l.tenant_id = ${user.tenantId}
+              AND (l.owner_se_email = ${user.email} OR (l.is_in_pool = true AND ${!isExternalPartnerRole(user.role)}::boolean))
             ORDER BY l.created_at DESC
           `;
 

@@ -23,156 +23,14 @@ export interface AuthSession {
 export interface MfaChallenge {
   challengeId: string;
   email: string;
-  maskedPhone: string;
-  code: string;
   expiresAt: number;
   role: RoleKey;
   name: string;
 }
 
-export const activeMfaChallenges = new Map<string, MfaChallenge>();
-
-export function maskPhoneNumber(phone: string): string {
-  const clean = phone.replace(/\s+/g, '');
-  if (clean.length < 8) return clean;
-  return `${clean.slice(0, 4)}****${clean.slice(-4)}`;
-}
-
-export function createMfaChallenge(email: string): MfaChallenge | null {
-  const normEmail = email.trim().toLowerCase();
-  const dummyAcc = DUMMY_ACCOUNTS.find((a) => a.email.toLowerCase() === normEmail);
-  const regAcc = getRegisteredUsers().find((u) => u.email.toLowerCase() === normEmail);
-
-  if (!dummyAcc && !regAcc) return null;
-
-  const phone = dummyAcc?.profile.noWa || regAcc?.phone || '+6281234567890';
-  const role = dummyAcc?.role || regAcc?.role || 'DIREKSI';
-  const name = dummyAcc?.profile.name || regAcc?.name || 'User';
-
-  const code = '829104'; // Kode OTP 6-digit deterministik standar verifikasi
-  const challengeId = `mfa_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-  const challenge: MfaChallenge = {
-    challengeId,
-    email: normEmail,
-    maskedPhone: maskPhoneNumber(phone),
-    code,
-    expiresAt: Date.now() + 5 * 60 * 1000,
-    role,
-    name,
-  };
-
-  activeMfaChallenges.set(challengeId, challenge);
-  return challenge;
-}
-
-export function verifyMfaChallenge(
-  challengeId: string,
-  inputCode: string
-): { ok: true; session: AuthSession } | { ok: false; error: string } {
-  const challenge = activeMfaChallenges.get(challengeId);
-  if (!challenge) {
-    return { ok: false, error: 'Sesi verifikasi MFA telah kedaluwarsa. Silakan login kembali.' };
-  }
-
-  if (Date.now() > challenge.expiresAt) {
-    activeMfaChallenges.delete(challengeId);
-    return { ok: false, error: 'Kode verifikasi telah kedaluwarsa (lebih dari 5 menit). Silakan minta kode baru.' };
-  }
-
-  const cleanCode = inputCode.trim();
-  if (cleanCode !== challenge.code && cleanCode !== '123456') {
-    return { ok: false, error: 'Kode verifikasi 6-digit salah. Silakan periksa kembali.' };
-  }
-
-  activeMfaChallenges.delete(challengeId);
-  const session: AuthSession = {
-    role: challenge.role,
-    email: challenge.email,
-    name: challenge.name,
-    loggedInAt: new Date().toISOString(),
-    mfaVerified: true,
-    mfaMethod: 'WHATSAPP_OTP',
-  };
-
-  saveAuthSession(session);
-  return { ok: true, session };
-}
-
 export const AUTH_STORAGE_KEY = 'devos_auth_session_v1';
-export const REGISTERED_USERS_KEY = 'devos_registered_users_v1';
-
-export interface RegisteredUser {
-  companyName: string;
-  name: string;
-  email: string;
-  password: string;
-  phone: string;
-  role: RoleKey;
-  registeredAt: string;
-}
-
-let inMemoryRegisteredUsers: RegisteredUser[] = [];
-
-export function getRegisteredUsers(): RegisteredUser[] {
-  try {
-    if (typeof localStorage === 'undefined') return inMemoryRegisteredUsers;
-    const raw = localStorage.getItem(REGISTERED_USERS_KEY);
-    return raw ? (JSON.parse(raw) as RegisteredUser[]) : inMemoryRegisteredUsers;
-  } catch {
-    return inMemoryRegisteredUsers;
-  }
-}
-
-export function registerDeveloperAccount(data: {
-  companyName: string;
-  name: string;
-  email: string;
-  password: string;
-  phone: string;
-}): { ok: true; session: AuthSession } | { ok: false; error: string } {
-  const normEmail = data.email.trim().toLowerCase();
-  if (!normEmail || !data.password || !data.companyName.trim()) {
-    return { ok: false, error: 'Nama developer, email, dan kata sandi wajib diisi.' };
-  }
-
-  const existing = getRegisteredUsers();
-  if (existing.some((u) => u.email.toLowerCase() === normEmail)) {
-    return { ok: false, error: 'Email ini sudah terdaftar. Silakan pilih tab Masuk.' };
-  }
-
-  const newUser: RegisteredUser = {
-    companyName: data.companyName.trim(),
-    name: data.name.trim() || 'Direktur Developer',
-    email: normEmail,
-    password: data.password,
-    phone: data.phone.trim(),
-    role: 'DIREKSI',
-    registeredAt: new Date().toISOString(),
-  };
-
-  inMemoryRegisteredUsers = [...existing, newUser];
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(REGISTERED_USERS_KEY, JSON.stringify(inMemoryRegisteredUsers));
-    }
-  } catch {
-    /* abaikan storage error */
-  }
-
-  const session: AuthSession = {
-    role: 'DIREKSI',
-    email: newUser.email,
-    name: newUser.name,
-    loggedInAt: new Date().toISOString(),
-  };
-
-  saveAuthSession(session);
-  return { ok: true, session };
-}
-
 /**
- * Kredensial akun dummy per role untuk simulasi login Developer Sales OS.
+ * Daftar akun per role (tanpa kata sandi; autentikasi hanya lewat server).
  * Email diselaraskan dengan USERS_BY_ROLE di src/data.ts.
  */
 export const DUMMY_ACCOUNTS: DummyAccount[] = [
@@ -216,8 +74,6 @@ export async function loginWithServer(
       challenge: {
         challengeId: data.challengeId,
         email: data.email,
-        maskedPhone: '',
-        code: '',
         expiresAt: Date.now() + 5 * 60 * 1000,
         role: data.role,
         name: data.name,
@@ -260,8 +116,6 @@ export async function registerWithServer(data: {
       challenge: {
         challengeId: body.challengeId,
         email: body.email,
-        maskedPhone: '',
-        code: '',
         expiresAt: Date.now() + 5 * 60 * 1000,
         role: body.role,
         name: body.name,
@@ -295,29 +149,14 @@ export async function verifyMfaWithServer(
 }
 
 export async function logoutFromServer(): Promise<void> {
-  try {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-  } catch {
-    /* abaikan */
-  }
+  // Token dibaca interceptor saat fetch dipanggil, jadi sesi lokal boleh langsung dihapus tanpa menunggu server.
+  const request = fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
   clearAuthSession();
-}
-
-/**
- * Memvalidasi email & kata sandi terhadap daftar akun dummy per role.
- */
-export function authenticateDummyUser(
-  email: string,
-  password: string
-): { ok: true; session: AuthSession } | { ok: false; error: string } {
-  const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail || !password) {
-    return { ok: false, error: 'Email dan kata sandi wajib diisi.' };
+  try {
+    await request;
+  } catch {
+    /* sesi lokal tetap dihapus walau server tidak terjangkau */
   }
-  return {
-    ok: false,
-    error: 'Gunakan autentikasi server (loginWithServer).',
-  };
 }
 
 export function loadAuthSession(): AuthSession | null {

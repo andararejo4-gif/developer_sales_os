@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type http from 'node:http';
 import { sql } from './db';
 import { USERS_BY_ROLE, type RoleKey } from '../src/data';
+import { isExternalPartnerRole, type ExternalPartnerRole } from './partner-access';
 import {
   buildOtpAuthUri,
   generateRecoveryCodes,
@@ -34,6 +35,55 @@ interface MfaPending {
 }
 
 const pendingMfa = new Map<string, MfaPending>();
+
+// Batas tebakan kode 2FA dihitung per akun, bukan per challenge, agar login ulang tidak mereset hitungan.
+const MAX_2FA_FAILURES = 5;
+const FAILURE_WINDOW_MS = 15 * 60 * 1000;
+const twoFactorFailures = new Map<string, { count: number; resetAt: number }>();
+const ERROR_2FA_ALREADY_ON = '2FA sudah aktif. Nonaktifkan terlebih dahulu untuk mengganti authenticator.';
+const ERROR_2FA_LOCKED = 'Terlalu banyak percobaan kode 2FA. Coba lagi dalam 15 menit.';
+
+function consume2faAttempt(userId: string): boolean {
+  const now = Date.now();
+  const entry = twoFactorFailures.get(userId);
+  if (!entry || entry.resetAt <= now) {
+    twoFactorFailures.set(userId, { count: 1, resetAt: now + FAILURE_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= MAX_2FA_FAILURES) return false;
+  entry.count += 1;
+  return true;
+}
+
+function clear2faFailures(userId: string): void {
+  twoFactorFailures.delete(userId);
+}
+
+/** Catat step TOTP secara atomik: dua request paralel dengan kode sama hanya satu yang lolos. */
+async function claimTotpStep(userId: string, step: number): Promise<boolean> {
+  const rows = await sql`
+    UPDATE sales_os.app_users
+    SET totp_last_used_step = ${step}, updated_at = NOW()
+    WHERE id = ${userId}::uuid
+      AND totp_enabled = TRUE
+      AND (totp_last_used_step IS NULL OR totp_last_used_step < ${step})
+    RETURNING id
+  `;
+  return rows.length > 0;
+}
+
+async function claimRecoveryCode(userId: string, code: string): Promise<boolean> {
+  const codeHash = hashRecoveryCode(code);
+  const rows = await sql`
+    UPDATE sales_os.app_users
+    SET recovery_codes_hash = recovery_codes_hash - ${codeHash}::text, updated_at = NOW()
+    WHERE id = ${userId}::uuid
+      AND totp_enabled = TRUE
+      AND jsonb_exists(recovery_codes_hash, ${codeHash}::text)
+    RETURNING id
+  `;
+  return rows.length > 0;
+}
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const SESSION_COOKIE_NAME = 'devos_session';
 
@@ -62,7 +112,7 @@ function maskPhone(phone: string): string {
   return `${clean.slice(0, 4)}****${clean.slice(-4)}`;
 }
 
-const ROLE_DEFAULT_PASSWORDS: Record<RoleKey, string> = {
+const ROLE_DEFAULT_PASSWORDS: Record<Exclude<RoleKey, ExternalPartnerRole>, string> = {
   SE: process.env.DEVOS_SEED_PASSWORD || 'AndaraSE#2026',
   TL: process.env.DEVOS_SEED_PASSWORD || 'AndaraTL#2026',
   SM: process.env.DEVOS_SEED_PASSWORD || 'AndaraSM#2026',
@@ -122,7 +172,11 @@ export async function ensureAuthTablesAndSeeds(): Promise<void> {
   for (const roleKey of roles) {
     const profile = USERS_BY_ROLE[roleKey];
     const email = profile.email.trim().toLowerCase();
-    const defaultPass = ROLE_DEFAULT_PASSWORDS[roleKey] || 'AndaraOS2026!';
+    // Akun mitra eksternal tidak pernah dibuat dengan password yang tertulis di kode.
+    const defaultPass = isExternalPartnerRole(roleKey)
+      ? process.env.DEVOS_PARTNER_SEED_PASSWORD
+      : ROLE_DEFAULT_PASSWORDS[roleKey];
+    if (!defaultPass) continue;
     const existing = await sql`
       SELECT id FROM sales_os.app_users WHERE email = ${email} LIMIT 1
     `;
@@ -216,6 +270,10 @@ export async function startLogin(
   if (!user.totp_enabled) {
     const issued = await issueSessionForUser(authedUser, meta);
     return { ok: true, requiresMfa: false, ...issued };
+  }
+
+  for (const [id, pending] of pendingMfa) {
+    if (pending.expiresAt <= Date.now()) pendingMfa.delete(id);
   }
 
   const challengeId = `totp_${crypto.randomBytes(12).toString('hex')}`;
@@ -316,10 +374,16 @@ export async function verifyMfaAndCreateSession(
     return { ok: false, error: 'Sesi verifikasi 2FA telah kedaluwarsa.' };
   }
 
+  if (!consume2faAttempt(challenge.userId)) {
+    pendingMfa.delete(challengeId);
+    return { ok: false, error: ERROR_2FA_LOCKED };
+  }
+
   const rows = await sql`
-    SELECT totp_secret, totp_enabled, totp_last_used_step, recovery_codes_hash, phone
+    SELECT totp_secret, totp_enabled, totp_last_used_step, phone
     FROM sales_os.app_users
     WHERE id = ${challenge.userId}::uuid
+      AND is_active = TRUE
     LIMIT 1
   `;
   const dbUser = rows[0];
@@ -334,29 +398,15 @@ export async function verifyMfaAndCreateSession(
     dbUser.totp_last_used_step ? Number(dbUser.totp_last_used_step) : null
   );
 
-  if (totpCheck.valid) {
-    await sql`
-      UPDATE sales_os.app_users
-      SET totp_last_used_step = ${totpCheck.matchedStep ?? null}, updated_at = NOW()
-      WHERE id = ${challenge.userId}::uuid
-    `;
-  } else {
-    // Cek apakah input berupa recovery code cadangan
-    const hashes: string[] = Array.isArray(dbUser.recovery_codes_hash)
-      ? dbUser.recovery_codes_hash.map(String)
-      : [];
-    const targetHash = hashRecoveryCode(cleanCode);
-    if (!hashes.includes(targetHash)) {
-      return { ok: false, error: 'Kode Authenticator 6-digit (atau recovery code) salah atau sudah terpakai.' };
-    }
-    const remaining = hashes.filter((h) => h !== targetHash);
-    await sql`
-      UPDATE sales_os.app_users
-      SET recovery_codes_hash = ${JSON.stringify(remaining)}::jsonb, updated_at = NOW()
-      WHERE id = ${challenge.userId}::uuid
-    `;
+  const accepted =
+    totpCheck.valid && totpCheck.matchedStep !== undefined
+      ? await claimTotpStep(challenge.userId, totpCheck.matchedStep)
+      : await claimRecoveryCode(challenge.userId, cleanCode);
+  if (!accepted) {
+    return { ok: false, error: 'Kode Authenticator 6-digit (atau recovery code) salah atau sudah terpakai.' };
   }
 
+  clear2faFailures(challenge.userId);
   pendingMfa.delete(challengeId);
   const issued = await issueSessionForUser(
     {
@@ -467,11 +517,16 @@ export async function setupUserTotp(userId: string) {
   `;
   if (rows.length === 0) return { ok: false as const, error: 'Akun tidak ditemukan.' };
   const secret = generateTotpSecret();
-  await sql`
+  // Secret aktif tidak boleh ditimpa dari sesi yang sedang login; pengguna harus menonaktifkan 2FA dulu.
+  const updated = await sql`
     UPDATE sales_os.app_users
     SET totp_secret = ${secret}, updated_at = NOW()
-    WHERE id = ${userId}::uuid
+    WHERE id = ${userId}::uuid AND totp_enabled = FALSE
+    RETURNING id
   `;
+  if (updated.length === 0) {
+    return { ok: false as const, error: ERROR_2FA_ALREADY_ON };
+  }
   const otpauthUri = buildOtpAuthUri({
     email: String(rows[0].email),
     secret,
@@ -481,32 +536,43 @@ export async function setupUserTotp(userId: string) {
 
 export async function enableUserTotp(userId: string, code: string) {
   const rows = await sql`
-    SELECT totp_secret FROM sales_os.app_users WHERE id = ${userId}::uuid LIMIT 1
+    SELECT totp_secret, totp_enabled FROM sales_os.app_users WHERE id = ${userId}::uuid LIMIT 1
   `;
+  if (rows[0]?.totp_enabled) {
+    return { ok: false as const, error: ERROR_2FA_ALREADY_ON };
+  }
   const secret = rows[0]?.totp_secret ? String(rows[0].totp_secret) : '';
   if (!secret) {
     return { ok: false as const, error: 'Silakan generate QR TOTP terlebih dahulu.' };
+  }
+  if (!consume2faAttempt(userId)) {
+    return { ok: false as const, error: ERROR_2FA_LOCKED };
   }
   const check = verifyTotpToken(secret, code);
   if (!check.valid) {
     return { ok: false as const, error: 'Kode 6-digit dari Google Authenticator salah.' };
   }
   const recovery = generateRecoveryCodes(6);
-  await sql`
+  const enabled = await sql`
     UPDATE sales_os.app_users
     SET totp_enabled = TRUE,
         totp_verified_at = NOW(),
         totp_last_used_step = ${check.matchedStep ?? null},
-        recovery_codes_hash = ${JSON.stringify(recovery.hashes)}::jsonb,
+        recovery_codes_hash = ${sql.json(recovery.hashes)},
         updated_at = NOW()
-    WHERE id = ${userId}::uuid
+    WHERE id = ${userId}::uuid AND totp_enabled = FALSE AND totp_secret = ${secret}
+    RETURNING id
   `;
+  if (enabled.length === 0) {
+    return { ok: false as const, error: 'Pengaturan 2FA berubah. Muat ulang halaman lalu coba lagi.' };
+  }
+  clear2faFailures(userId);
   return { ok: true as const, recoveryCodes: recovery.plain };
 }
 
 export async function disableUserTotp(userId: string, codeOrPassword: string) {
   const rows = await sql`
-    SELECT totp_secret, totp_enabled, password_hash
+    SELECT totp_secret, totp_enabled, totp_last_used_step, password_hash
     FROM sales_os.app_users
     WHERE id = ${userId}::uuid
     LIMIT 1
@@ -515,7 +581,16 @@ export async function disableUserTotp(userId: string, codeOrPassword: string) {
   if (!user || !user.totp_enabled) {
     return { ok: false as const, error: 'TOTP belum aktif pada akun ini.' };
   }
-  const totpOk = user.totp_secret && verifyTotpToken(String(user.totp_secret), codeOrPassword).valid;
+  if (!consume2faAttempt(userId)) {
+    return { ok: false as const, error: ERROR_2FA_LOCKED };
+  }
+  const totpOk =
+    user.totp_secret &&
+    verifyTotpToken(
+      String(user.totp_secret),
+      codeOrPassword,
+      user.totp_last_used_step ? Number(user.totp_last_used_step) : null
+    ).valid;
   const passOk = verifyPassword(codeOrPassword, String(user.password_hash));
   if (!totpOk && !passOk) {
     return { ok: false as const, error: 'Masukkan kode 6-digit Authenticator atau kata sandi akun yang benar.' };
@@ -530,6 +605,7 @@ export async function disableUserTotp(userId: string, codeOrPassword: string) {
         updated_at = NOW()
     WHERE id = ${userId}::uuid
   `;
+  clear2faFailures(userId);
   return { ok: true as const };
 }
 

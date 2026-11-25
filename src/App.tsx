@@ -44,8 +44,8 @@ import {
   exportDailyReportPdf,
 } from './lib/exporters/daily-report-exporter';
 import {
-  clearAuthSession,
   loadAuthSession,
+  logoutFromServer,
   saveAuthSession,
   saveImpersonatorBackup,
   loadImpersonatorBackup,
@@ -867,7 +867,7 @@ export default function App() {
       handleExitImpersonation();
       return;
     }
-    clearAuthSession();
+    void logoutFromServer();
     clearImpersonatorBackup();
     setAuthSession(null);
     setIsMobileMoreOpen(false);
