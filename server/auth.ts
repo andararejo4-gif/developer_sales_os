@@ -54,6 +54,18 @@ function maskPhone(phone: string): string {
   return `${clean.slice(0, 4)}****${clean.slice(-4)}`;
 }
 
+const ROLE_DEFAULT_PASSWORDS: Record<RoleKey, string> = {
+  SE: process.env.DEVOS_SEED_PASSWORD || 'AndaraSE#2026',
+  TL: process.env.DEVOS_SEED_PASSWORD || 'AndaraTL#2026',
+  SM: process.env.DEVOS_SEED_PASSWORD || 'AndaraSM#2026',
+  DIREKSI: process.env.DEVOS_SEED_PASSWORD || 'AndaraDireksi#2026',
+  ADMIN: process.env.DEVOS_SEED_PASSWORD || 'AndaraAdmin#2026',
+  IT: process.env.DEVOS_SEED_PASSWORD || 'AndaraIT#2026',
+  DIGITAL_MARKETING: process.env.DEVOS_SEED_PASSWORD || 'AndaraMkt#2026',
+  SUPERADMIN: process.env.DEVOS_SEED_PASSWORD || 'DevosOwner#2026',
+  SUPERADMIN_IT: process.env.DEVOS_SEED_PASSWORD || 'DevosIT#2026',
+};
+
 export async function ensureAuthTablesAndSeeds(): Promise<void> {
   await sql`
     CREATE TABLE IF NOT EXISTS sales_os.app_users (
@@ -84,11 +96,11 @@ export async function ensureAuthTablesAndSeeds(): Promise<void> {
     )
   `;
 
-  const seedPass = process.env.DEVOS_SEED_PASSWORD || 'AndaraOS2026!';
   const roles = Object.keys(USERS_BY_ROLE) as RoleKey[];
   for (const roleKey of roles) {
     const profile = USERS_BY_ROLE[roleKey];
     const email = profile.email.trim().toLowerCase();
+    const defaultPass = ROLE_DEFAULT_PASSWORDS[roleKey] || 'AndaraOS2026!';
     const existing = await sql`
       SELECT id FROM sales_os.app_users WHERE email = ${email} LIMIT 1
     `;
@@ -99,7 +111,7 @@ export async function ensureAuthTablesAndSeeds(): Promise<void> {
         ) VALUES (
           ${email}, ${profile.name}, ${roleKey},
           'andara_rejo_makmur', 'the-park-sukoharjo',
-          ${profile.noWa || null}, ${hashPassword(seedPass)}, TRUE
+          ${profile.noWa || null}, ${hashPassword(defaultPass)}, TRUE
         )
         ON CONFLICT (email) DO NOTHING
       `;
