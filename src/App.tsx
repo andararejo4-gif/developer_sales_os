@@ -9,6 +9,7 @@ import { LoveLetterViewerModal } from './components/LoveLetterViewerModal';
 import { PlaybookViewer } from './components/PlaybookViewer';
 import { DailyRouteViewer } from './components/DailyRouteViewer';
 import { ProjectWebsitePreview } from './components/ProjectWebsitePreview';
+import { PublicProjectSitePage } from './components/PublicProjectSitePage';
 import { CrmPipelineView } from './components/CrmPipelineView';
 import { CommissionSettingsModal } from './components/CommissionSettingsModal';
 import { SuperadminPanel } from './components/SuperadminPanel';
@@ -881,6 +882,11 @@ export default function App() {
     else if (tab === 'rute') openView('rute');
     else if (tab === 'lapangan') openView('lapangan');
   };
+
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/p/')) {
+    const slug = decodeURIComponent(window.location.pathname.replace(/^\/p\//, '').split('/')[0] || 'the-park-sukoharjo');
+    return <PublicProjectSitePage slug={slug} />;
+  }
 
   if (viewMode === 'homepage' || !authSession) {
     const handleEnterDashboard = (chosenRole?: string) => {

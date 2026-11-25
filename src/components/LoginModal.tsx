@@ -16,11 +16,10 @@ import {
   RotateCcw,
 } from "lucide-react";
 import {
-  authenticateDummyUser,
-  saveAuthSession,
-  registerDeveloperAccount,
+  loginWithServer,
+  registerWithServer,
+  verifyMfaWithServer,
   createMfaChallenge,
-  verifyMfaChallenge,
   type MfaChallenge,
 } from "../lib/auth/dummy-accounts";
 import type { RoleKey } from "../data";
@@ -70,36 +69,25 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const result = authenticateDummyUser(email, password);
+    setErrorMsg(null);
+    const result = await loginWithServer(email, password);
     if (!result.ok) {
       setErrorMsg(result.error);
       return;
     }
 
-    // MFA Wajib untuk Seluruh Akun (Review Kategori 7 & Temuan T4)
-    const challenge = createMfaChallenge(email);
-    if (challenge) {
-      setMfaChallenge(challenge);
-      setMode("mfa");
-      setOtpCode("");
-      setErrorMsg(null);
-      setResendCooldown(60);
-      return;
-    }
-
-    setErrorMsg(null);
-    saveAuthSession(result.session);
-    if (onSuccessLogin) {
-      onSuccessLogin(result.session.role);
-    }
-    onClose();
+    setMfaChallenge(result.challenge);
+    setMode("mfa");
+    setOtpCode("");
+    setResendCooldown(60);
   };
 
-  const handleSignupSubmit = (e: React.FormEvent) => {
+  const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const result = registerDeveloperAccount({
+    setErrorMsg(null);
+    const result = await registerWithServer({
       companyName,
       name: picName,
       email: signupEmail,
@@ -112,29 +100,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
-    // MFA Wajib untuk Akun Baru yang Terdaftar
-    const challenge = createMfaChallenge(signupEmail);
-    if (challenge) {
-      setMfaChallenge(challenge);
-      setMode("mfa");
-      setOtpCode("");
-      setErrorMsg(null);
-      setResendCooldown(60);
-      return;
-    }
-
-    setErrorMsg(null);
-    if (onSuccessLogin) {
-      onSuccessLogin(result.session.role);
-    }
-    onClose();
+    setMfaChallenge(result.challenge);
+    setMode("mfa");
+    setOtpCode("");
+    setResendCooldown(60);
   };
 
-  const handleMfaSubmit = (e: React.FormEvent) => {
+  const handleMfaSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mfaChallenge) return;
 
-    const res = verifyMfaChallenge(mfaChallenge.challengeId, otpCode);
+    const res = await verifyMfaWithServer(mfaChallenge.challengeId, otpCode);
     if (!res.ok) {
       setErrorMsg(res.error);
       return;

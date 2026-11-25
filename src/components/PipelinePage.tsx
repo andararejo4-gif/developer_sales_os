@@ -76,6 +76,8 @@ export interface PipelineLeadRecord {
   last_customer_message?: string;
   last_sales_message?: string;
   interaction_count?: number;
+  /** Riwayat chat WA (lama -> baru), maks 10 giliran. */
+  chat_turns?: { from: 'customer' | 'sales'; text: string; at: string }[];
   lost_reason?: string | null;
   response_time_seconds?: number | null;
   is_ai_analyzing?: boolean;
@@ -101,6 +103,8 @@ export interface PipelineLeadRecord {
     recommended_persona: PersonaCode;
     recommended_bant: { b: number; a: number; n: number; t: number; total: number; grade: string };
     followup_draft_message: string;
+    reply_mode?: 'DIAM' | 'SINGKAT' | 'JAWAB' | 'JELASKAN' | 'TANYA_BALIK' | 'SERAHKAN' | null;
+    reply_reason?: string | null;
     model: string;
     prompt_tokens?: number;
     completion_tokens?: number;
@@ -166,7 +170,21 @@ function createDefaultPersonaForm(code: PersonaCode): Record<string, string> {
   };
 }
 
+const REPLY_MODE_LABEL: Record<string, string> = {
+  DIAM: 'Tidak perlu dibalas',
+  SINGKAT: 'Balas singkat',
+  JAWAB: 'Jawab intinya',
+  JELASKAN: 'Perlu dijelaskan',
+  TANYA_BALIK: 'Tanya balik',
+  SERAHKAN: 'Perlu keputusan Anda / SM',
+};
+
+/** Analisis terbaru memutuskan tidak perlu membalas. */
+const isNoReplyNeeded = (l: PipelineLeadRecord): boolean =>
+  l.latest_analysis?.reply_mode === 'DIAM' && !(l.latest_analysis?.followup_draft_message || '').trim();
+
 const isLeadNeedsHandling = (l: PipelineLeadRecord): boolean => {
+  if (isNoReplyNeeded(l)) return false;
   const isWa =
     l.lead_origin === 'WA_BAILEYS' ||
     /whatsapp inbound|baileys/i.test(l.source || '');
@@ -2168,6 +2186,8 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
               customDrafts[draftKey] ??
               analysis?.followup_draft_message ??
               `Selamat sore ${lead.full_name}, saya ${user.name} dari The Park Townhouse Sukoharjo.`;
+            const noReplyNeeded = !isAiWorking && isNoReplyNeeded(lead);
+            const chatTurns = lead.chat_turns || [];
             const isCustMsgLong =
               Boolean(lead.last_customer_message) &&
               ((lead.last_customer_message || '').length > 140 ||
@@ -2592,6 +2612,8 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                             <span className="px-2 py-0.5 rounded-full bg-white/15 text-[10px] font-semibold shrink-0">
                               {isAiWorking
                                 ? 'Menyusun...'
+                                : noReplyNeeded
+                                ? 'Selesai'
                                 : isFollowUpAlreadySent
                                 ? 'Terkirim ✓✓'
                                 : 'Draf AI'}
@@ -2603,6 +2625,8 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                             <div className="self-center px-2.5 py-0.5 rounded-lg bg-[#E1F3FB] text-[#54656F] text-[10px] font-semibold shadow-2xs text-center">
                               {isAiWorking
                                 ? `Pesan baru dari ${lead.full_name} diterima · AI sedang menyusun balasan`
+                                : noReplyNeeded
+                                ? `AI menyarankan tidak perlu membalas saat ini`
                                 : isFollowUpAlreadySent
                                 ? `Pesan telah dikirim ke ${lead.full_name} · Menunggu balasan berikutnya`
                                 : isWaInboundLead
@@ -2610,7 +2634,46 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                                 : 'Mode Follow-Up Pasca-Temu · Klik Lihat selengkapnya untuk edit sebelum kirim'}
                             </div>
 
-                            {lead.last_customer_message && (
+                            {chatTurns.length > 0 && (
+                              <div
+                                className="max-h-72 overflow-y-auto space-y-2 pr-1"
+                                role="log"
+                                aria-label={`Riwayat percakapan dengan ${lead.full_name}`}
+                                ref={(el) => {
+                                  if (el && el.dataset.count !== String(chatTurns.length)) {
+                                    el.dataset.count = String(chatTurns.length);
+                                    el.scrollTop = el.scrollHeight;
+                                  }
+                                }}
+                              >
+                                {chatTurns.map((t, i) => (
+                                  <div
+                                    key={`${t.at}-${i}`}
+                                    className={`rounded-2xl p-2.5 shadow-2xs border text-xs text-[#111B21] ${
+                                      t.from === 'customer'
+                                        ? 'mr-6 rounded-tl-xs bg-white border-black/5'
+                                        : 'ml-6 rounded-tr-xs bg-[#DCF8C6] border-[#c7eab0]'
+                                    }`}
+                                  >
+                                    <p className="flex items-center justify-between gap-2 text-[10px] font-bold text-[#075E54] mb-0.5">
+                                      <span>{t.from === 'customer' ? lead.full_name : `Anda (${user.name.split(' ')[0]})`}</span>
+                                      <time dateTime={t.at} className="font-medium text-[#667781]">
+                                        {new Date(t.at).toLocaleString('id-ID', {
+                                          day: 'numeric',
+                                          month: 'short',
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                          timeZone: 'Asia/Jakarta',
+                                        })}
+                                      </time>
+                                    </p>
+                                    <p className="leading-snug whitespace-pre-line break-words">{t.text}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {chatTurns.length === 0 && lead.last_customer_message && (
                               <div className="mr-6 rounded-2xl rounded-tl-xs bg-white p-2.5 shadow-2xs border border-black/5 text-xs text-[#111B21]">
                                 <p className="text-[10px] font-bold text-[#075E54] mb-0.5">
                                   {lead.full_name}:
@@ -2662,7 +2725,12 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                                   <span>Playbook v1.2</span>
                                 </div>
                               </div>
-                            ) : isFollowUpAlreadySent ? (
+                            ) : noReplyNeeded ? (
+                              <div className="ml-3 rounded-2xl bg-white/90 p-3 border border-black/10 text-xs text-[#111B21]">
+                                <p className="font-bold text-[#075E54]">Tidak perlu dibalas</p>
+                                <p className="mt-0.5 leading-snug text-[#54656F]">{analysis?.reply_reason}</p>
+                              </div>
+                            ) : isFollowUpAlreadySent && chatTurns.some((t) => t.from === 'sales') ? null : isFollowUpAlreadySent ? (
                               /* Jika pesan sudah dikirim, sembunyikan kotak draf rekomendasi & tampilkan gelembung chat terkirim secara ringkas */
                               <div className="ml-6 rounded-2xl rounded-tr-xs bg-[#DCF8C6] p-3 shadow-xs border border-[#c7eab0] text-xs text-[#111B21] space-y-1.5">
                                 <p className="text-[10px] font-bold text-[#075E54]">
@@ -2709,6 +2777,19 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                                   )}
                                 </div>
 
+                                {analysis?.reply_mode && (
+                                  <p className="text-[10px] leading-snug text-[#54656F]">
+                                    <span
+                                      className={`font-bold ${
+                                        analysis.reply_mode === 'SERAHKAN' ? 'text-rose-700' : 'text-[#075E54]'
+                                      }`}
+                                    >
+                                      {REPLY_MODE_LABEL[analysis.reply_mode] || analysis.reply_mode}
+                                    </span>
+                                    {analysis.reply_reason ? ` · ${analysis.reply_reason}` : ''}
+                                  </p>
+                                )}
+
                                 {!isDraftMsgLong || isDraftMsgExpanded ? (
                                   <textarea
                                     rows={isDraftMsgExpanded ? 7 : 3}
@@ -2749,6 +2830,10 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                               <div className="min-h-[44px] px-4 rounded-full bg-[#128C7E]/70 text-white text-xs font-extrabold flex items-center justify-center gap-2 animate-pulse">
                                 <Sparkles className="size-4 animate-spin shrink-0" />
                                 <span>AI Sedang Menyusun Rekomendasi Balasan...</span>
+                              </div>
+                            ) : noReplyNeeded ? (
+                              <div className="min-h-[40px] px-3.5 py-2 rounded-full bg-white border border-black/10 text-[11px] font-bold text-[#075E54] flex items-center justify-center text-center">
+                                Rekomendasi baru muncul saat {lead.full_name} membalas, atau klik analisis ulang
                               </div>
                             ) : isFollowUpAlreadySent ? (
                               <div className="min-h-[40px] px-3.5 py-2 rounded-full bg-white border border-black/10 text-[11px] font-bold text-[#075E54] flex items-center justify-center gap-2 text-center">

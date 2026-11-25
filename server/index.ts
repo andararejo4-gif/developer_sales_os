@@ -9,7 +9,28 @@ import fsSync from 'node:fs';
 import path from 'node:path';
 import { URL } from 'node:url';
 import { sql } from './db';
+import {
+  authenticateRequest,
+  buildClearSessionCookieHeader,
+  buildSessionCookieHeader,
+  ensureAuthTablesAndSeeds,
+  registerUserAccount,
+  revokeSession,
+  startLogin,
+  verifyMfaAndCreateSession,
+} from './auth';
+import {
+  createUnitQuote,
+  ensureUnitInventoryTablesAndSeeds,
+  listUnits,
+  transitionUnitStatus,
+  type PaymentScheme,
+  type UnitStatus,
+} from './units-quotes';
+import { ensureTruthTables, ingestSourceDocument } from './truth-engine';
 import { analyzeLeadWithAi } from './ai-engine';
+import { getTurns, getTurnsForLeads } from './wa-conversation';
+import { isOptOutMessage } from './wa-consent';
 import {
   MEDIA_OUTPUT_DIR,
   generateUniqueDaySlotsWithAi,
@@ -18,7 +39,8 @@ import {
   getHermesHealth,
   getWibClock,
   formatWibDateForDay,
-  getBusyWindowInfo,
+  SE_EMAILS,
+  getManualLock,
   getQueuePositionInfo,
   isSlotDueNowWib,
   startContentMediaScheduler,
@@ -115,8 +137,7 @@ async function getVerifiedCompanyBankAccounts(tenantId: string = 'andara_rejo_ma
 // KEPATUHAN UU PDP NO. 27/2022 & WA PRIVACY SUPPRESSION (Temuan T3 / F92)
 // ============================================================================
 function isOptOutKeyword(text: string): boolean {
-  if (!text) return false;
-  return /\b(stop|berhenti|batal|jangan hubungi|tidak berkenan|unsubscribe|unsub)\b/i.test(text);
+  return isOptOutMessage(text);
 }
 
 function cleanPhoneWa(phone: string): string {
@@ -330,13 +351,19 @@ async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, a
   return JSON.parse(raw) as Record<string, any>;
 }
 
-function sendJson(res: http.ServerResponse, status: number, payload: unknown): void {
+function sendJson(
+  res: http.ServerResponse,
+  status: number,
+  payload: unknown,
+  extraHeaders: Record<string, string | string[]> = {}
+): void {
   const body = JSON.stringify(payload);
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS',
+    'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     'access-control-allow-headers': 'Content-Type, Authorization, X-User-Email, X-User-Role',
+    ...extraHeaders,
   });
   res.end(body);
 }
@@ -1028,9 +1055,112 @@ const server = http.createServer(async (req, res) => {
 
   const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
   const pathname = parsedUrl.pathname;
-  const user = getAuthenticatedUser(req);
 
   try {
+    // 0. AUTHENTICATION ENDPOINTS (Server-side session + MFA, F91)
+    if (pathname === '/api/auth/login' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const resAuth = await startLogin(String(body.email || ''), String(body.password || ''));
+      if (!resAuth.ok) {
+        sendJson(res, 401, { ok: false, error: resAuth.error });
+        return;
+      }
+      sendJson(res, 200, {
+        ok: true,
+        requiresMfa: true,
+        challengeId: resAuth.challengeId,
+        maskedPhone: resAuth.maskedPhone,
+        email: resAuth.email,
+        role: resAuth.role,
+        name: resAuth.name,
+      });
+      return;
+    }
+
+    if (pathname === '/api/auth/register' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const resReg = await registerUserAccount({
+        companyName: String(body.companyName || ''),
+        name: String(body.name || ''),
+        email: String(body.email || ''),
+        phone: String(body.phone || ''),
+        password: String(body.password || ''),
+      });
+      if (!resReg.ok) {
+        sendJson(res, 400, { ok: false, error: resReg.error });
+        return;
+      }
+      sendJson(res, 201, {
+        ok: true,
+        requiresMfa: true,
+        challengeId: resReg.challengeId,
+        maskedPhone: resReg.maskedPhone,
+        email: resReg.email,
+        role: resReg.role,
+        name: resReg.name,
+      });
+      return;
+    }
+
+    if (pathname === '/api/auth/verify-mfa' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const resMfa = await verifyMfaAndCreateSession(
+        String(body.challengeId || ''),
+        String(body.code || ''),
+        {
+          userAgent: String(req.headers['user-agent'] || ''),
+          ipAddress: String(req.socket?.remoteAddress || ''),
+        }
+      );
+      if (!resMfa.ok) {
+        sendJson(res, 401, { ok: false, error: resMfa.error });
+        return;
+      }
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          token: resMfa.token,
+          expiresAt: resMfa.expiresAt,
+          session: {
+            role: resMfa.user.role,
+            email: resMfa.user.email,
+            name: resMfa.user.name,
+            tenantId: resMfa.user.tenantId,
+            projectId: resMfa.user.projectId,
+            token: resMfa.token,
+            loggedInAt: new Date().toISOString(),
+            mfaVerified: true,
+            mfaMethod: 'WHATSAPP_OTP',
+          },
+        },
+        { 'Set-Cookie': buildSessionCookieHeader(resMfa.token) }
+      );
+      return;
+    }
+
+    if (pathname === '/api/auth/logout' && req.method === 'POST') {
+      await revokeSession(req);
+      sendJson(
+        res,
+        200,
+        { ok: true },
+        { 'Set-Cookie': buildClearSessionCookieHeader() }
+      );
+      return;
+    }
+
+    if (pathname === '/api/auth/me' && req.method === 'GET') {
+      const authed = await authenticateRequest(req);
+      if (!authed) {
+        sendJson(res, 401, { ok: false, error: 'Sesi tidak valid atau telah berakhir.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, user: authed });
+      return;
+    }
+
     // 1. HEALTH CHECK
     if (pathname === '/api/health' && req.method === 'GET') {
       const dbCheck = await sql`SELECT NOW() AS now`;
@@ -1041,6 +1171,38 @@ const server = http.createServer(async (req, res) => {
         model: process.env.AI_ROUTER_MODEL || 'andararejomakmurjosjis',
       });
       return;
+    }
+
+    // PUBLIC ROUTES (tidak butuh login dashboard)
+    const isPublicRoute =
+      pathname.startsWith('/api/public/') ||
+      pathname.startsWith('/api/se/media/') ||
+      pathname === '/api/se/social/callback';
+
+    let user: {
+      userId?: string;
+      email: string;
+      name: string;
+      role: RoleKey;
+      tenantId: string;
+      projectId?: string;
+    };
+
+    if (isPublicRoute) {
+      user = {
+        email: 'public@andararejomakmur.co.id',
+        name: 'Public Visitor',
+        role: 'SE',
+        tenantId: 'andara_rejo_makmur',
+        projectId: 'the-park-sukoharjo',
+      };
+    } else {
+      const authedUser = await authenticateRequest(req);
+      if (!authedUser) {
+        sendJson(res, 401, { ok: false, error: 'Autentikasi diperlukan. Silakan login terlebih dahulu.' });
+        return;
+      }
+      user = authedUser;
     }
 
     // 2. DASHBOARD SE REAL DATA
@@ -1672,8 +1834,12 @@ const server = http.createServer(async (req, res) => {
             ORDER BY l.created_at DESC
           `;
 
+      // Riwayat chat baru dibuka bila login sudah diverifikasi server (API masih memercayai header klien).
+      const turnsByLead =
+        process.env.WA_HISTORY_API === 'on' ? await getTurnsForLeads(leads as any[]).catch(() => new Map()) : new Map();
       const enrichedLeads = leads.map((l: any) => ({
         ...l,
+        chat_turns: turnsByLead.get(`${String(l.owner_se_email).toLowerCase()}|${l.phone_wa}`) || [],
         is_ai_analyzing: isLeadCurrentlyAnalyzing(String(l.id)),
       }));
 
@@ -2134,6 +2300,7 @@ const server = http.createServer(async (req, res) => {
           lastCustomerMessage: String(body.lastCustomerMessage ?? prev.last_customer_message ?? ''),
           lastSalesMessage: String(body.lastSalesMessage ?? prev.last_sales_message ?? ''),
           interactionCount: Number(prev.interaction_count || 1),
+          turns: await getTurns(String(prev.owner_se_email).toLowerCase(), String(prev.phone_wa)).catch(() => []),
           seName: String(prev.owner_se_name || user.name),
           isReanalyze: Boolean(body.reanalyze),
           previousAnalysis: prevAnalysis,
@@ -2158,7 +2325,7 @@ const server = http.createServer(async (req, res) => {
           INSERT INTO sales_os.lead_ai_analyses (
             lead_id, owner_se_email, skor, label, clarity_status, unclear_parts, ringkas,
             poin_kuat, poin_lemah, perlu_dicek_ulang, rekomendasi, recommended_persona,
-            recommended_bant, followup_draft_message, model, prompt_tokens, completion_tokens
+            recommended_bant, followup_draft_message, reply_mode, reply_reason, model, prompt_tokens, completion_tokens
           ) VALUES (
             ${leadId},
             ${prev.owner_se_email},
@@ -2174,6 +2341,8 @@ const server = http.createServer(async (req, res) => {
             ${aiResult.recommended_persona},
             ${sql.json(aiResult.recommended_bant as any)},
             ${aiResult.followup_draft_message},
+            ${aiResult.reply_mode || null},
+            ${aiResult.reply_reason || null},
             ${aiResult.model},
             ${aiResult.prompt_tokens},
             ${aiResult.completion_tokens}
@@ -2594,7 +2763,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/se/content-slots/status' && req.method === 'GET') {
       const slotId = parsedUrl.searchParams.get('slotId') || '';
       const { minutesOfDay } = getWibClock();
-      const busyWindow = getBusyWindowInfo(minutesOfDay);
+      const busyWindow = await getManualLock(minutesOfDay);
       const [rows, hermesHealth, queueCountRows, queueInfo] = await Promise.all([
         slotId
           ? sql`
@@ -2769,8 +2938,12 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/se/content-slots/generate-media' && req.method === 'POST') {
+      if (!SE_EMAILS.includes(user.email)) {
+        sendJson(res, 403, { ok: false, error: 'Generate konten hanya untuk akun Sales Executive.' });
+        return;
+      }
       const { minutesOfDay } = getWibClock();
-      const busyWindow = getBusyWindowInfo(minutesOfDay);
+      const busyWindow = await getManualLock(minutesOfDay);
       if (busyWindow.busy) {
         sendJson(res, 423, {
           ok: false,
@@ -3225,6 +3398,276 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // 14. UNIT INVENTORY STATE MACHINE & QUOTES (F67, F68, F69)
+    if (pathname === '/api/units' && req.method === 'GET') {
+      const projectId = parsedUrl.searchParams.get('projectId') || undefined;
+      const units = await listUnits(user.tenantId, projectId);
+      sendJson(res, 200, { ok: true, data: units });
+      return;
+    }
+
+    if (pathname === '/api/units/transition' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const unitId = String(body.unitId || '').trim();
+      const toStatus = String(body.toStatus || '').trim() as UnitStatus;
+      if (!unitId || !toStatus) {
+        sendJson(res, 400, { ok: false, error: 'unitId dan toStatus wajib diisi.' });
+        return;
+      }
+      const result = await transitionUnitStatus({
+        unitId,
+        tenantId: user.tenantId,
+        toStatus,
+        actorEmail: user.email,
+        actorRole: user.role,
+        leadId: body.leadId ? String(body.leadId) : undefined,
+        reason: body.reason ? String(body.reason) : undefined,
+        holdHours: body.holdHours ? Number(body.holdHours) : undefined,
+      });
+      if (!result.ok) {
+        sendJson(res, result.statusCode, { ok: false, error: result.error });
+        return;
+      }
+      sendJson(res, 200, { ok: true, unit: result.unit });
+      return;
+    }
+
+    if (pathname === '/api/quotes' && req.method === 'GET') {
+      const quotes = await sql`
+        SELECT q.*, u.unit_code, u.cluster
+        FROM sales_os.unit_quotes q
+        JOIN sales_os.project_units u ON u.id = q.unit_id
+        WHERE q.tenant_id = ${user.tenantId}
+        ORDER BY q.created_at DESC
+        LIMIT 50
+      `;
+      sendJson(res, 200, { ok: true, data: quotes });
+      return;
+    }
+
+    if (pathname === '/api/quotes' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const unitId = String(body.unitId || '').trim();
+      const scheme = String(body.scheme || 'KPR').trim().toUpperCase() as PaymentScheme;
+      if (!unitId || !['CK', 'CT12', 'CT24', 'KPR'].includes(scheme)) {
+        sendJson(res, 400, { ok: false, error: 'unitId dan scheme (CK/CT12/CT24/KPR) wajib valid.' });
+        return;
+      }
+      const result = await createUnitQuote({
+        tenantId: user.tenantId,
+        unitId,
+        leadId: body.leadId ? String(body.leadId) : undefined,
+        scheme,
+        dpPercent: body.dpPercent !== undefined ? Number(body.dpPercent) : undefined,
+        tenorYears: body.tenorYears !== undefined ? Number(body.tenorYears) : undefined,
+        interestRateAnnual: body.interestRateAnnual !== undefined ? Number(body.interestRateAnnual) : undefined,
+        createdBy: user.email,
+      });
+      if (!result.ok) {
+        sendJson(res, 404, { ok: false, error: result.error });
+        return;
+      }
+      sendJson(res, 201, { ok: true, quote: result.quote, unit: result.unit });
+      return;
+    }
+
+    // 15. PUBLIC WEBSITE LIVE FEED & LEAD CAPTURE (F31, F32, F33)
+    if (pathname.startsWith('/api/public/site/') && req.method === 'GET') {
+      const slug = decodeURIComponent(pathname.replace('/api/public/site/', '')).trim().toLowerCase() || 'the-park-sukoharjo';
+      const units = await listUnits('andara_rejo_makmur', 'the-park-sukoharjo');
+      const visibleUnits = units.filter((u: Record<string, any>) => u.status !== 'sold');
+      sendJson(res, 200, {
+        ok: true,
+        site: {
+          slug,
+          projectId: 'the-park-sukoharjo',
+          projectName: 'The Park Townhouse Sukoharjo',
+          developer: 'PT Andara Rejo Makmur',
+          location: 'Jl. Bhayangkara, Sukoharjo (Belakang Alun-alun)',
+          updatedAt: new Date().toISOString(),
+          feedHealthy: true,
+        },
+        units: visibleUnits.map((u: Record<string, any>) => ({
+          id: u.id,
+          unitCode: u.unit_code,
+          cluster: u.cluster,
+          unitType: u.unit_type,
+          ltSqm: Number(u.lt_sqm),
+          lbSqm: Number(u.lb_sqm),
+          priceCash: Number(u.price_cash),
+          priceKpr: Number(u.price_kpr),
+          status: u.status,
+        })),
+      });
+      return;
+    }
+
+    if (pathname === '/api/public/leads' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      // Anti-bot honeypot check
+      if (body.website_hp && String(body.website_hp).trim() !== '') {
+        sendJson(res, 400, { ok: false, error: 'Permintaan ditolak oleh filter anti-bot.' });
+        return;
+      }
+      const name = String(body.name || '').trim();
+      const phoneRaw = String(body.phone || '').trim();
+      const consentAccepted = Boolean(body.consentAccepted);
+      if (!name || !phoneRaw) {
+        sendJson(res, 400, { ok: false, error: 'Nama lengkap dan nomor WhatsApp wajib diisi.' });
+        return;
+      }
+      if (!consentAccepted) {
+        sendJson(res, 400, { ok: false, error: 'Persetujuan kontak (consent) wajib dicentang.' });
+        return;
+      }
+
+      const phoneWa = normalizePhoneWa(phoneRaw);
+      if (phoneWa.length < 10) {
+        sendJson(res, 400, { ok: false, error: 'Format nomor WhatsApp tidak valid.' });
+        return;
+      }
+
+      const seRef = String(body.seRef || '').trim().toLowerCase();
+      const assignedSe = SE_EMAILS.includes(seRef) ? seRef : SE_EMAILS[0] || 'raka@andararejomakmur.co.id';
+      const utmSource = String(body.utmSource || 'Website Publik').trim().slice(0, 120);
+      const unitInterest = String(body.unitCode || 'Unit The Park').trim().slice(0, 80);
+
+      // Deduplikasi nomor WA di tenant aktif
+      const existing = await sql`
+        SELECT id, buyer_name, se_email FROM sales_os.pipeline_leads
+        WHERE tenant_id = 'andara_rejo_makmur' AND phone_wa = ${phoneWa}
+        LIMIT 1
+      `;
+
+      if (existing.length > 0) {
+        sendJson(res, 200, {
+          ok: true,
+          deduplicated: true,
+          leadId: existing[0].id,
+          message: 'Terima kasih! Data Anda sudah terdaftar dan tim konsultan kami akan segera menghubungi Anda.',
+        });
+        return;
+      }
+
+      const inserted = await sql`
+        INSERT INTO sales_os.pipeline_leads (
+          tenant_id, se_email, buyer_name, phone_wa, lead_source, stage,
+          unit_interest, notes, wa_consent, wa_consent_updated_at, lead_quality, last_activity_at
+        ) VALUES (
+          'andara_rejo_makmur', ${assignedSe}, ${name}, ${phoneWa}, ${utmSource}, 'LEAD_MASUK',
+          ${unitInterest}, ${'Form Website Publik (Consent v1.0)'}, 'OPT_IN', NOW(), 'WARM', NOW()
+        )
+        RETURNING id
+      `;
+
+      sendJson(res, 201, {
+        ok: true,
+        deduplicated: false,
+        leadId: inserted[0].id,
+        message: 'Terima kasih! Konsultan resmi kami akan segera menghubungi Anda via WhatsApp.',
+      });
+      return;
+    }
+
+    // 16. DOCUMENT TRUTH, EXTRACTOR & CONFLICT INBOX (F01, F02, F04, F05, F06)
+    if (pathname === '/api/truth/upload' && req.method === 'POST') {
+      if (!['ADMIN', 'SM', 'DIREKSI', 'IT', 'SUPERADMIN'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Admin/SM/Direksi/IT yang dapat mengunggah dokumen kebenaran proyek.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const filename = String(body.filename || '').trim();
+      const contentBase64 = String(body.contentBase64 || '').trim();
+      if (!filename || !contentBase64) {
+        sendJson(res, 400, { ok: false, error: 'filename dan contentBase64 wajib diisi.' });
+        return;
+      }
+      const cleanB64 = contentBase64.includes(',') ? contentBase64.split(',')[1] : contentBase64;
+      const fileBuffer = Buffer.from(cleanB64, 'base64');
+      if (fileBuffer.length === 0 || fileBuffer.length > 20 * 1024 * 1024) {
+        sendJson(res, 400, { ok: false, error: 'Ukuran file harus > 0 dan maksimal 20 MB.' });
+        return;
+      }
+      const result = await ingestSourceDocument({
+        tenantId: user.tenantId,
+        projectId: String(body.projectId || user.projectId || 'the-park-sukoharjo'),
+        docType: String(body.docType || 'pricelist'),
+        filename,
+        fileBuffer,
+        uploadedBy: user.email,
+      });
+      if (!result.ok) {
+        sendJson(res, 422, { ok: false, error: result.error });
+        return;
+      }
+      sendJson(res, 201, result);
+      return;
+    }
+
+    if (pathname === '/api/truth/documents' && req.method === 'GET') {
+      const docs = await sql`
+        SELECT id, project_id, doc_type, filename, file_hash, version, effective_at, status, uploaded_by, created_at
+        FROM sales_os.source_documents
+        WHERE tenant_id = ${user.tenantId}
+        ORDER BY created_at DESC
+        LIMIT 50
+      `;
+      sendJson(res, 200, { ok: true, data: docs });
+      return;
+    }
+
+    if (pathname === '/api/truth/conflicts' && req.method === 'GET') {
+      const conflicts = await sql`
+        SELECT * FROM sales_os.truth_conflicts
+        WHERE tenant_id = ${user.tenantId}
+        ORDER BY CASE WHEN status = 'open' THEN 0 ELSE 1 END, created_at DESC
+        LIMIT 50
+      `;
+      sendJson(res, 200, { ok: true, data: conflicts });
+      return;
+    }
+
+    if (pathname === '/api/truth/conflicts/resolve' && req.method === 'POST') {
+      if (!['ADMIN', 'SM', 'DIREKSI', 'SUPERADMIN'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Admin/SM/Direksi yang dapat memutuskan konflik fakta.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const conflictId = String(body.conflictId || '').trim();
+      const action = String(body.action || 'accept').trim();
+      if (!conflictId) {
+        sendJson(res, 400, { ok: false, error: 'conflictId wajib diisi.' });
+        return;
+      }
+      const rows = await sql`
+        SELECT * FROM sales_os.truth_conflicts
+        WHERE id = ${conflictId}::uuid AND tenant_id = ${user.tenantId} AND status = 'open'
+        LIMIT 1
+      `;
+      if (rows.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Konflik tidak ditemukan atau sudah diselesaikan.' });
+        return;
+      }
+      const c = rows[0];
+      if (action === 'accept' && c.unit_code && c.fact_key === 'price_cash') {
+        await sql`
+          UPDATE sales_os.project_units
+          SET price_cash = ${Number(c.new_value)}, version = version + 1, updated_by = ${user.email}, updated_at = NOW()
+          WHERE tenant_id = ${user.tenantId} AND project_id = ${c.project_id} AND unit_code = ${c.unit_code}
+        `;
+      }
+      await sql`
+        UPDATE sales_os.truth_conflicts
+        SET status = ${action === 'accept' ? 'accepted' : 'rejected'},
+            resolved_by = ${user.email},
+            resolution_note = ${String(body.note || '')},
+            resolved_at = NOW()
+        WHERE id = ${conflictId}::uuid
+      `;
+      sendJson(res, 200, { ok: true, conflictId, resolution: action });
+      return;
+    }
+
     sendJson(res, 404, { ok: false, error: `Endpoint tidak ditemukan: ${pathname}` });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Terjadi kesalahan internal server.';
@@ -3330,6 +3773,28 @@ async function ensureSeOpsTables(): Promise<void> {
     )
   `;
   await sql`
+    ALTER TABLE sales_os.media_render_queue
+      ADD COLUMN IF NOT EXISTS render_meta JSONB
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.wa_conversation_turns (
+      id BIGSERIAL PRIMARY KEY,
+      se_email TEXT NOT NULL,
+      contact_phone TEXT NOT NULL,
+      direction TEXT NOT NULL CHECK (direction IN ('customer', 'sales')),
+      encrypted_text TEXT NOT NULL,
+      draft_similarity REAL,
+      sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_wa_turns_contact ON sales_os.wa_conversation_turns (se_email, contact_phone, sent_at DESC)`;
+  await sql`
+    ALTER TABLE sales_os.lead_ai_analyses
+      ADD COLUMN IF NOT EXISTS reply_mode TEXT,
+      ADD COLUMN IF NOT EXISTS reply_reason TEXT
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS sales_os.activity_audit_logs (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       actor_email TEXT NOT NULL,
@@ -3412,11 +3877,19 @@ async function ensureSeOpsTables(): Promise<void> {
     ALTER TABLE sales_os.wa_suppression_list
       ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'andara_rejo_makmur'
   `;
+  await ensureAuthTablesAndSeeds();
+  await ensureUnitInventoryTablesAndSeeds();
+  await ensureTruthTables();
   await sql`
     ALTER TABLE sales_os.pipeline_leads
       ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'andara_rejo_makmur',
       ADD COLUMN IF NOT EXISTS wa_consent TEXT NOT NULL DEFAULT 'PENDING',
-      ADD COLUMN IF NOT EXISTS wa_consent_updated_at TIMESTAMPTZ
+      ADD COLUMN IF NOT EXISTS wa_consent_updated_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS lead_quality TEXT NOT NULL DEFAULT 'WARM',
+      ADD COLUMN IF NOT EXISTS spam_reason TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS is_in_pool BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS pool_reason TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ DEFAULT NOW()
   `;
 }
 

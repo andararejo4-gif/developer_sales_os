@@ -316,7 +316,7 @@ export function PlaybookViewer({
                         },
                         {
                           title: '4. Pengunci Booking Fee Rp5 Juta (Unit Terbatas)',
-                          text: 'Info update Bapak/Ibu [Nama]: unit [Nomor Unit] saat ini tersedia, total proyek hanya 35 unit boutique. Untuk mengunci harga promo bulan ini dan mengamankan kavling, cukup tanda jadi Rp5 juta ke rekening resmi PT Andara Rejo Makmur.',
+                          text: 'Info update Bapak/Ibu [Nama]: unit [Nomor Unit] saat ini tersedia, total proyek hanya 30 unit boutique. Untuk mengunci harga promo bulan ini dan mengamankan kavling, cukup tanda jadi Rp5 juta ke rekening resmi PT Andara Rejo Makmur.',
                         },
                       ].map((scr) => (
                         <div key={scr.title} className="p-4 rounded-2xl bg-white border border-warmborder space-y-2.5 flex flex-col justify-between">

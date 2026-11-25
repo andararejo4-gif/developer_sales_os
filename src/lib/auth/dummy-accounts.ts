@@ -3,7 +3,6 @@ import { USERS_BY_ROLE, type RoleKey, type UserProfile } from '../../data';
 export interface DummyAccount {
   role: RoleKey;
   email: string;
-  password: string;
   label: string;
   profile: UserProfile;
 }
@@ -12,6 +11,9 @@ export interface AuthSession {
   role: RoleKey;
   email: string;
   name: string;
+  tenantId?: string;
+  projectId?: string;
+  token?: string;
   loggedInAt: string;
   mfaVerified?: boolean;
   mfaMethod?: 'WHATSAPP_OTP' | 'AUTHENTICATOR_APP';
@@ -173,70 +175,114 @@ export function registerDeveloperAccount(data: {
  * Email diselaraskan dengan USERS_BY_ROLE di src/data.ts.
  */
 export const DUMMY_ACCOUNTS: DummyAccount[] = [
-  {
-    role: 'SE',
-    email: USERS_BY_ROLE.SE.email,
-    password: 'AndaraSE#2026',
-    label: 'Sales Executive (SE)',
-    profile: USERS_BY_ROLE.SE,
-  },
-  {
-    role: 'TL',
-    email: USERS_BY_ROLE.TL.email,
-    password: 'AndaraTL#2026',
-    label: 'Team Leader (TL)',
-    profile: USERS_BY_ROLE.TL,
-  },
-  {
-    role: 'SM',
-    email: USERS_BY_ROLE.SM.email,
-    password: 'AndaraSM#2026',
-    label: 'Sales Manager (SM)',
-    profile: USERS_BY_ROLE.SM,
-  },
-  {
-    role: 'DIREKSI',
-    email: USERS_BY_ROLE.DIREKSI.email,
-    password: 'AndaraDireksi#2026',
-    label: 'Direksi Developer Properti',
-    profile: USERS_BY_ROLE.DIREKSI,
-  },
-  {
-    role: 'ADMIN',
-    email: USERS_BY_ROLE.ADMIN.email,
-    password: 'AndaraAdmin#2026',
-    label: 'Admin Sales Developer',
-    profile: USERS_BY_ROLE.ADMIN,
-  },
-  {
-    role: 'IT',
-    email: USERS_BY_ROLE.IT.email,
-    password: 'AndaraIT#2026',
-    label: 'IT & System Developer',
-    profile: USERS_BY_ROLE.IT,
-  },
-  {
-    role: 'DIGITAL_MARKETING',
-    email: USERS_BY_ROLE.DIGITAL_MARKETING.email,
-    password: 'AndaraMkt#2026',
-    label: 'Digital Marketer',
-    profile: USERS_BY_ROLE.DIGITAL_MARKETING,
-  },
-  {
-    role: 'SUPERADMIN',
-    email: USERS_BY_ROLE.SUPERADMIN.email,
-    password: 'DevosOwner#2026',
-    label: 'Direksi Pemilik Developer Sales OS',
-    profile: USERS_BY_ROLE.SUPERADMIN,
-  },
-  {
-    role: 'SUPERADMIN_IT',
-    email: USERS_BY_ROLE.SUPERADMIN_IT.email,
-    password: 'DevosIT#2026',
-    label: 'Tim IT Internal Developer Sales OS',
-    profile: USERS_BY_ROLE.SUPERADMIN_IT,
-  },
+  { role: 'SE', email: USERS_BY_ROLE.SE.email, label: 'Sales Executive (SE)', profile: USERS_BY_ROLE.SE },
+  { role: 'TL', email: USERS_BY_ROLE.TL.email, label: 'Team Leader (TL)', profile: USERS_BY_ROLE.TL },
+  { role: 'SM', email: USERS_BY_ROLE.SM.email, label: 'Sales Manager (SM)', profile: USERS_BY_ROLE.SM },
+  { role: 'DIREKSI', email: USERS_BY_ROLE.DIREKSI.email, label: 'Direksi Developer Properti', profile: USERS_BY_ROLE.DIREKSI },
+  { role: 'ADMIN', email: USERS_BY_ROLE.ADMIN.email, label: 'Admin Sales Developer', profile: USERS_BY_ROLE.ADMIN },
+  { role: 'IT', email: USERS_BY_ROLE.IT.email, label: 'IT & System Developer', profile: USERS_BY_ROLE.IT },
+  { role: 'DIGITAL_MARKETING', email: USERS_BY_ROLE.DIGITAL_MARKETING.email, label: 'Digital Marketer', profile: USERS_BY_ROLE.DIGITAL_MARKETING },
+  { role: 'SUPERADMIN', email: USERS_BY_ROLE.SUPERADMIN.email, label: 'Direksi Pemilik Developer Sales OS', profile: USERS_BY_ROLE.SUPERADMIN },
+  { role: 'SUPERADMIN_IT', email: USERS_BY_ROLE.SUPERADMIN_IT.email, label: 'Tim IT Internal Developer Sales OS', profile: USERS_BY_ROLE.SUPERADMIN_IT },
 ];
+
+export async function loginWithServer(
+  email: string,
+  password: string
+): Promise<{ ok: true; challenge: MfaChallenge } | { ok: false; error: string }> {
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      return { ok: false, error: data.error || 'Gagal masuk. Periksa email dan kata sandi.' };
+    }
+    return {
+      ok: true,
+      challenge: {
+        challengeId: data.challengeId,
+        email: data.email,
+        maskedPhone: data.maskedPhone || '+628****0000',
+        code: '',
+        expiresAt: Date.now() + 5 * 60 * 1000,
+        role: data.role,
+        name: data.name,
+      },
+    };
+  } catch {
+    return { ok: false, error: 'Tidak dapat terhubung ke server autentikasi.' };
+  }
+}
+
+export async function registerWithServer(data: {
+  companyName: string;
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+}): Promise<{ ok: true; challenge: MfaChallenge } | { ok: false; error: string }> {
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(data),
+    });
+    const body = await res.json();
+    if (!res.ok || !body.ok) {
+      return { ok: false, error: body.error || 'Pendaftaran gagal.' };
+    }
+    return {
+      ok: true,
+      challenge: {
+        challengeId: body.challengeId,
+        email: body.email,
+        maskedPhone: body.maskedPhone || '+628****0000',
+        code: '',
+        expiresAt: Date.now() + 5 * 60 * 1000,
+        role: body.role,
+        name: body.name,
+      },
+    };
+  } catch {
+    return { ok: false, error: 'Tidak dapat terhubung ke server autentikasi.' };
+  }
+}
+
+export async function verifyMfaWithServer(
+  challengeId: string,
+  code: string
+): Promise<{ ok: true; session: AuthSession } | { ok: false; error: string }> {
+  try {
+    const res = await fetch('/api/auth/verify-mfa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ challengeId, code }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok || !data.session) {
+      return { ok: false, error: data.error || 'Kode verifikasi salah.' };
+    }
+    saveAuthSession(data.session as AuthSession);
+    return { ok: true, session: data.session as AuthSession };
+  } catch {
+    return { ok: false, error: 'Tidak dapat memverifikasi OTP ke server.' };
+  }
+}
+
+export async function logoutFromServer(): Promise<void> {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  } catch {
+    /* abaikan */
+  }
+  clearAuthSession();
+}
 
 /**
  * Memvalidasi email & kata sandi terhadap daftar akun dummy per role.
@@ -249,43 +295,9 @@ export function authenticateDummyUser(
   if (!normalizedEmail || !password) {
     return { ok: false, error: 'Email dan kata sandi wajib diisi.' };
   }
-
-  const account = DUMMY_ACCOUNTS.find(
-    (acc) => acc.email.toLowerCase() === normalizedEmail
-  );
-
-  if (account) {
-    if (account.password !== password) {
-      return { ok: false, error: 'Kata sandi tidak sesuai.' };
-    }
-    return {
-      ok: true,
-      session: {
-        role: account.role,
-        email: account.email,
-        name: account.profile.name,
-        loggedInAt: new Date().toISOString(),
-      },
-    };
-  }
-
-  // Periksa akun yang didaftarkan melalui form signup developer
-  const registered = getRegisteredUsers().find(
-    (u) => u.email.toLowerCase() === normalizedEmail
-  );
-
-  if (!registered || registered.password !== password) {
-    return { ok: false, error: 'Email atau kata sandi tidak sesuai.' };
-  }
-
   return {
-    ok: true,
-    session: {
-      role: registered.role,
-      email: registered.email,
-      name: registered.name,
-      loggedInAt: new Date().toISOString(),
-    },
+    ok: false,
+    error: 'Gunakan autentikasi server (loginWithServer).',
   };
 }
 

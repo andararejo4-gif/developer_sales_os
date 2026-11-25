@@ -17,6 +17,8 @@ import QRCode from 'qrcode';
 import { sql } from './db';
 import { encryptText, decryptText } from './crypto-util';
 import { analyzeLeadWithAi } from './ai-engine';
+import { getTurns, saveTurn } from './wa-conversation';
+import { isOptOutMessage } from './wa-consent';
 
 interface ActiveWaInstance {
   seEmail: string;
@@ -30,6 +32,7 @@ interface ActiveWaInstance {
 const instances = new Map<string, ActiveWaInstance>();
 const processedMessageIds = new Set<string>();
 const activeAnalyzingLeadIds = new Set<string>();
+const BURST_WAIT_MS = 6000;
 
 export function isLeadCurrentlyAnalyzing(leadId: string): boolean {
   return activeAnalyzingLeadIds.has(String(leadId));
@@ -233,6 +236,11 @@ export async function processInboundWaMessageForSe(params: {
   const now = params.receivedAt || new Date();
   const encryptedMsg = encryptText(params.messageText.trim());
 
+  // 0. Riwayat percakapan (10 giliran terakhir, terenkripsi) sebagai konteks AI & tampilan chat
+  await saveTurn({ seEmail, phone: cleanPhone, from: 'customer', text: params.messageText, at: now }).catch((err) =>
+    console.warn('[WA-Baileys] Gagal menyimpan giliran chat:', err instanceof Error ? err.message : String(err))
+  );
+
   // 1. Simpan sementara di buffer terenkripsi (maks 24 jam, dihapus setelah analisis AI)
   await sql`
     INSERT INTO sales_os.wa_inbound_temp_buffer (se_email, contact_phone, contact_name, encrypted_text, received_at)
@@ -240,7 +248,7 @@ export async function processInboundWaMessageForSe(params: {
   `;
 
   // Deteksi UU PDP No. 27/2022: Otomatis tandai suppression list bila customer membalas STOP / opt-out
-  const isOptOut = /\b(stop|berhenti|batal|jangan hubungi|tidak berkenan|unsubscribe|unsub)\b/i.test(params.messageText);
+  const isOptOut = isOptOutMessage(params.messageText);
   if (isOptOut) {
     try {
       await sql`
@@ -377,13 +385,13 @@ export async function processInboundWaMessageForSe(params: {
         ${'WA-INBOUND'},
         ${'NEW'},
         ${'VALID'},
-        ${'P1'},
+        ${'LAINNYA'},
+        ${0},
+        ${0},
         ${1},
+        ${0},
         ${1},
-        ${2},
-        ${1},
-        ${5},
-        ${'C'},
+        ${'D'},
         ${detectedAttrs.clusterInterest},
         ${detectedAttrs.unitInterest},
         ${detectedAttrs.unitPriceIdr},
@@ -419,7 +427,14 @@ export async function processInboundWaMessageForSe(params: {
     `;
   }
 
+  // Customer sering mengirim beberapa bubble beruntun: tunggu sebentar, hanya pesan terakhir yang dianalisis.
   activeAnalyzingLeadIds.add(leadId);
+  await new Promise((r) => setTimeout(r, BURST_WAIT_MS));
+  const turns = await getTurns(seEmail, cleanPhone).catch(() => []);
+  const latestCustomer = [...turns].reverse().find((t) => t.from === 'customer');
+  if (latestCustomer && new Date(latestCustomer.at).getTime() > now.getTime()) {
+    return { leadId, responseTimeSeconds: null };
+  }
 
   try {
     // 4. Jalankan AI Lead Analyzer berbasis Playbook v1.2 (Jalur B: WA_BAILEYS 2-Arah)
@@ -430,20 +445,22 @@ export async function processInboundWaMessageForSe(params: {
       source: currentLead?.source || 'WhatsApp Inbound (Baileys)',
       contentCode: currentLead?.content_code || 'WA-INBOUND',
       stage: currentLead?.stage || 'NEW',
-      personaCode: (currentLead?.persona_code || 'P1') as any,
+      personaCode: (currentLead?.persona_code || 'LAINNYA') as any,
       personaProfile: (currentLead?.persona_profile || {}) as Record<string, string>,
       unitInterest: detectedAttrs.unitInterest,
       paymentScheme: detectedAttrs.paymentScheme,
-      bantB: Number(currentLead?.bant_b ?? 1),
-      bantA: Number(currentLead?.bant_a ?? 1),
-      bantN: Number(currentLead?.bant_n ?? 2),
-      bantT: Number(currentLead?.bant_t ?? 1),
+      bantB: Number(currentLead?.bant_b ?? 0),
+      bantA: Number(currentLead?.bant_a ?? 0),
+      bantN: Number(currentLead?.bant_n ?? 1),
+      bantT: Number(currentLead?.bant_t ?? 0),
       salesNotes: combinedNotes,
       inboundMessages: decryptedMessages,
       leadOrigin: 'WA_BAILEYS',
       lastCustomerMessage: latestCustomerMsg,
       lastSalesMessage: prevSalesMsg,
       interactionCount: nextInteractionCount,
+      turns,
+      isSuppressed: isOptOut || currentLead?.wa_consent === 'REVOKED',
       seName: params.seName,
       previousAnalysis: prevAnalysis,
     });
@@ -476,7 +493,7 @@ export async function processInboundWaMessageForSe(params: {
       SET full_name = ${resolvedContactName},
           domicile = ${finalDomicile},
           stage = ${nextStage},
-          persona_code = ${aiResult.recommended_persona},
+          persona_code = ${aiResult.confirmed_persona || currentLead?.persona_code || 'LAINNYA'},
           bant_b = ${recBant.b},
           bant_a = ${recBant.a},
           bant_n = ${recBant.n},
@@ -503,7 +520,7 @@ export async function processInboundWaMessageForSe(params: {
       INSERT INTO sales_os.lead_ai_analyses (
         lead_id, owner_se_email, skor, label, clarity_status, unclear_parts, ringkas,
         poin_kuat, poin_lemah, perlu_dicek_ulang, rekomendasi, recommended_persona,
-        recommended_bant, followup_draft_message, model, prompt_tokens, completion_tokens
+        recommended_bant, followup_draft_message, reply_mode, reply_reason, model, prompt_tokens, completion_tokens
       ) VALUES (
         ${leadId},
         ${seEmail},
@@ -519,6 +536,8 @@ export async function processInboundWaMessageForSe(params: {
         ${aiResult.recommended_persona},
         ${sql.json(aiResult.recommended_bant as any)},
         ${aiResult.followup_draft_message},
+        ${aiResult.reply_mode || null},
+        ${aiResult.reply_reason || null},
         ${aiResult.model},
         ${aiResult.prompt_tokens},
         ${aiResult.completion_tokens}
@@ -561,6 +580,20 @@ export async function recordOutboundWaReplyForSe(params: {
   const outboundText = (params.messageText || '').trim();
 
   if (outboundText) {
+    const draftRows = await sql`
+      SELECT a.followup_draft_message FROM sales_os.lead_ai_analyses a
+      JOIN sales_os.pipeline_leads l ON l.id = a.lead_id
+      WHERE l.owner_se_email = ${seEmail} AND l.phone_wa = ${cleanPhone}
+      ORDER BY a.created_at DESC LIMIT 1
+    `.catch(() => [] as any[]);
+    await saveTurn({
+      seEmail,
+      phone: cleanPhone,
+      from: 'sales',
+      text: outboundText,
+      at: repliedAt,
+      aiDraft: String(draftRows[0]?.followup_draft_message || ''),
+    }).catch((err) => console.warn('[WA-Baileys] Gagal menyimpan giliran sales:', err instanceof Error ? err.message : String(err)));
     await sql`
       UPDATE sales_os.pipeline_leads
       SET last_sales_message = ${outboundText},
