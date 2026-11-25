@@ -34,6 +34,7 @@ import {
   getNurtureJobsForLead,
   listCadenceTemplates,
   regenerateNurtureJobDraft,
+  rescheduleAnchorForLead,
   scheduleNurtureForLead,
   startNurtureScheduler,
   updateCadenceTemplate,
@@ -3773,6 +3774,23 @@ const server = http.createServer(async (req, res) => {
       const result = await executeNurtureJobSend(jobId, user.tenantId, user.name);
       if (!result.ok) {
         sendJson(res, 409, { ok: false, error: result.error });
+        return;
+      }
+      sendJson(res, 200, result);
+      return;
+    }
+
+    if (pathname === '/api/nurture/jobs/reschedule-anchor' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const leadId = String(body.leadId || '').trim();
+      const anchorAt = String(body.anchorAt || '').trim();
+      if (!leadId || !anchorAt) {
+        sendJson(res, 400, { ok: false, error: 'leadId dan anchorAt wajib diisi.' });
+        return;
+      }
+      const result = await rescheduleAnchorForLead({ leadId, tenantId: user.tenantId, anchorAt });
+      if (!result.ok) {
+        sendJson(res, 400, { ok: false, error: result.error });
         return;
       }
       sendJson(res, 200, result);

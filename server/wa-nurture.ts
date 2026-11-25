@@ -272,7 +272,11 @@ export async function scheduleNurtureForLead(params: {
     ORDER BY step_order ASC
   `;
 
-  const baseTime = lead.created_at ? new Date(lead.created_at) : new Date();
+  const baseTime = lead.last_activity_at
+    ? new Date(lead.last_activity_at)
+    : lead.created_at
+    ? new Date(lead.created_at)
+    : new Date();
   for (const tpl of templates) {
     const rawTarget = new Date(baseTime.getTime() + Number(tpl.delay_hours) * 3600 * 1000);
     const scheduledAt = clampToWibQuietHours(rawTarget);
@@ -312,8 +316,8 @@ export async function scheduleNurtureForLead(params: {
   return getNurtureJobsForLead(params.leadId, params.tenantId);
 }
 
-export async function getNurtureJobsForLead(leadId: string, tenantId: string) {
-  return sql`
+export async function getNurtureJobsForLead(leadId: string, tenantId: string, autoFillDrafts = true) {
+  const jobs = await sql`
     SELECT j.*, t.step_label, t.step_goal, t.delay_hours
     FROM sales_os.wa_nurture_jobs j
     LEFT JOIN sales_os.wa_cadence_templates t
@@ -321,6 +325,65 @@ export async function getNurtureJobsForLead(leadId: string, tenantId: string) {
     WHERE j.lead_id = ${leadId}::uuid AND j.tenant_id = ${tenantId}
     ORDER BY j.step_order ASC, j.scheduled_at ASC
   `;
+
+  if (autoFillDrafts && jobs.length > 0) {
+    const missing = jobs.filter((j: any) => !j.draft_message && !j.is_edited_by_se && j.status !== 'SENT');
+    if (missing.length > 0) {
+      const leadRows = await sql`
+        SELECT * FROM sales_os.pipeline_leads WHERE id = ${leadId}::uuid LIMIT 1
+      `;
+      if (leadRows.length > 0) {
+        const lead = leadRows[0];
+        for (const m of missing) {
+          const gen = await generateNurtureDraftWithAi({
+            lead,
+            stepCode: String(m.step_code),
+            stepLabel: String(m.step_label || m.step_code),
+            stepGoal: String(m.step_goal || 'Follow up prospek'),
+          });
+          await sql`
+            UPDATE sales_os.wa_nurture_jobs
+            SET draft_message = ${gen.text}, ai_model = ${gen.model}, updated_at = NOW()
+            WHERE id = ${m.id}::uuid
+          `;
+          m.draft_message = gen.text;
+          m.ai_model = gen.model;
+        }
+      }
+    }
+  }
+
+  return jobs;
+}
+
+export async function rescheduleAnchorForLead(params: {
+  leadId: string;
+  tenantId: string;
+  anchorAt: string;
+}) {
+  const anchorDate = new Date(params.anchorAt);
+  if (Number.isNaN(anchorDate.getTime())) {
+    return { ok: false as const, error: 'Format tanggal follow-up pertama tidak valid.' };
+  }
+
+  const jobs = await getNurtureJobsForLead(params.leadId, params.tenantId, false);
+  for (const job of jobs) {
+    if (job.status === 'SENT') continue;
+    const delayHours = Number(job.delay_hours ?? 0);
+    // H0 (delay_hours < 1) langsung memakai waktu anchor yang dipilih user
+    const rawTarget = delayHours < 1
+      ? anchorDate
+      : new Date(anchorDate.getTime() + delayHours * 3600 * 1000);
+    const finalTarget = delayHours < 1 ? rawTarget : clampToWibQuietHours(rawTarget);
+    await sql`
+      UPDATE sales_os.wa_nurture_jobs
+      SET scheduled_at = ${finalTarget.toISOString()}::timestamptz, updated_at = NOW()
+      WHERE id = ${job.id}::uuid
+    `;
+  }
+
+  const updatedJobs = await getNurtureJobsForLead(params.leadId, params.tenantId, true);
+  return { ok: true as const, data: updatedJobs };
 }
 
 export async function updateNurtureJob(params: {

@@ -27,7 +27,7 @@ import {
   CheckCheck,
   Inbox,
 } from 'lucide-react';
-import { NurtureCadencePanel } from './pipeline/NurtureCadencePanel';
+import { FollowupScheduleTab } from './pipeline/FollowupScheduleTab';
 import {
   PLAYBOOK_PIPELINE_STAGES,
   PLAYBOOK_BUYER_PERSONAS,
@@ -237,6 +237,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
   const [activeFilter, setActiveFilter] = useState<string>(() => {
     return initialFilter || getQueryParam('tab') || loadPersistedState<string>(`devos_pipeline_filter_${user.email}`, 'ALL');
   });
+  const [followupTargetLeadId, setFollowupTargetLeadId] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialFilter) {
@@ -2057,6 +2058,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar snap-x pb-1">
           {[
             { id: 'ALL', label: `Semua (${leads.filter((l) => l.lead_quality !== 'JUNK').length})`, isUrgentTab: false, count: 0 },
+            { id: 'FOLLOWUP', label: 'Jadwal Follow-Up AI', isUrgentTab: false, count: 0 },
             {
               id: 'PERLU_DITANGANI',
               label: `Perlu Ditangani`,
@@ -2118,8 +2120,15 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
         </div>
       </div>
 
-      {/* Daftar Lead (Default Tertutup / List Ringkas, Buka saat Klik Detail) */}
-      {loading ? (
+      {/* Daftar Lead (Default Tertutup / List Ringkas, Buka saat Klik Detail) atau Tab Jadwal Follow-Up */}
+      {activeFilter === 'FOLLOWUP' ? (
+        <FollowupScheduleTab
+          leads={leads}
+          initialLeadId={followupTargetLeadId}
+          waConnected={waStatus?.status === 'CONNECTED'}
+          waPhoneNumber={waStatus?.phoneNumber}
+        />
+      ) : loading ? (
         <div className="bg-white border border-warmborder rounded-2xl p-8 text-center text-xs text-warmmuted">
           Memuat data pipeline real dari database sales_os...
         </div>
@@ -2868,7 +2877,19 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                         </div>
                       </div>
                     )}
-                    <NurtureCadencePanel leadId={lead.id} buyerName={lead.full_name} />
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFollowupTargetLeadId(lead.id);
+                          setActiveFilter('FOLLOWUP');
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-700/30 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-100"
+                      >
+                        <Clock className="h-3.5 w-3.5" />
+                        Atur Jadwal Follow-Up AI →
+                      </button>
+                    </div>
                   </div>
                 )}
               </article>

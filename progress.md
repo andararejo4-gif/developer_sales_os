@@ -3,12 +3,12 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
-## P-071 | 2026-11-25 | F55 AI Nurture Cadence Terjadwal (Baileys, Jadwal Fleksibel & Edit SE)
-- Status: selesai di local (belum deploy ke hades)
-- Ubah: `db/migrations/0020_wa_nurture_cadence.sql`, `server/wa-nurture.ts`, `server/index.ts`, `src/components/pipeline/NurtureCadencePanel.tsx`, `src/components/PipelinePage.tsx`
-- Alasan/keputusan: F55 follow-up terjadwal H0-H14 via Baileys dengan pesan disusun AI (`9router` + guardrail Playbook), dapat diedit bebas oleh SE (`is_edited_by_se` mencegah timpa ulang AI), pola jam default fleksibel, plus quiet hours 08:30-19:30 WIB, cek opt-out sebelum kirim, dan limit 35/hari per SE.
+## P-071 | 2026-11-25 | F55 AI Nurture Cadence Terjadwal (Tab Khusus, WA Preview 2-Kolom, Baileys)
+- Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
+- Ubah: `db/migrations/0020_wa_nurture_cadence.sql`, `server/wa-nurture.ts` (+auto-fill draf AI & `rescheduleAnchorForLead`), `server/index.ts` (+`/api/nurture/jobs/reschedule-anchor`), `src/components/pipeline/FollowupScheduleTab.tsx` (tab khusus 2 kolom + anchor tanggal follow-up pertama + WA preview), `src/components/PipelinePage.tsx` (tab `FOLLOWUP` & tombol pintas dari kartu lead)
+- Alasan/keputusan: F55 dipindah menjadi tab tersendiri agar kartu Pipeline ringkas; draf pesan otomatis disusun AI saat jadwal dibuka, dengan visualisasi gelembung WhatsApp di sisi kanan & editor penuh SE.
 - Verifikasi: `npm run build` (`tsc --noEmit && vite build`) bersih; `bun build server/index.ts --outfile dist-server.mjs --target node --packages=external` sukses (22 modul, 0.49 MB).
-- Berikutnya: deploy ke `hades` & smoke test `/api/nurture/templates` + `/api/nurture/jobs` bila siap.
+- Berikutnya: pantau pengiriman scheduler Baileys pada jam kerja 08:30-19:30 WIB.
 - Catatan: scheduler berjalan tiap 60 dtk (dapat dimatikan via `WA_NURTURE_SCHEDULER=off`).
 
 ## P-070 | 2026-11-25 | Wave 1-4 R1 Local: Auth Server-Side, Unit Lock/Quote, Public Site, Doc Extractor & Conflict Inbox
