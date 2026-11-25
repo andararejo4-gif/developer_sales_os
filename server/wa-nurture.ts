@@ -300,12 +300,15 @@ export async function scheduleNurtureForLead(params: {
       aiModel = gen.model;
     }
 
+    const seEmail = String(lead.se_email || lead.owner_email || lead.assigned_se_email || 'raka@andararejomakmur.co.id');
+    const projectId = String(tpl.project_id || 'the-park-sukoharjo');
+
     await sql`
       INSERT INTO sales_os.wa_nurture_jobs (
         tenant_id, project_id, lead_id, se_email, step_code, step_order,
         scheduled_at, draft_message, ai_model, status
       ) VALUES (
-        ${params.tenantId}, ${tpl.project_id}, ${lead.id}::uuid, ${lead.se_email},
+        ${params.tenantId}, ${projectId}, ${lead.id}::uuid, ${seEmail},
         ${tpl.step_code}, ${tpl.step_order}, ${scheduledAt.toISOString()}::timestamptz,
         ${draftText}, ${aiModel || null}, ${tpl.auto_send ? 'SCHEDULED' : 'PAUSED'}
       )
