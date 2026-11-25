@@ -11,19 +11,30 @@ import { URL } from 'node:url';
 import { sql } from './db';
 import {
   authenticateRequest,
+  BASIC_ORG_ROLES,
   buildClearSessionCookieHeader,
   buildSessionCookieHeader,
+  createTenantUser,
   disableUserTotp,
   enableUserTotp,
   ensureAuthTablesAndSeeds,
   getUserProfile,
+  listTenantUsers,
   registerUserAccount,
   revokeSession,
   setupUserTotp,
   startLogin,
+  updateTenantUserStatus,
   updateUserProfile,
   verifyMfaAndCreateSession,
 } from './auth';
+import {
+  ensurePermissionTables,
+  getEffectivePermissionsForUser,
+  getScopePermissionMatrix,
+  PLATFORM_FEATURES,
+  saveScopePermissions,
+} from './permissions';
 import { isExternalPartnerRole, isPartnerRequestAllowed } from './partner-access';
 import {
   createUnitQuote,
@@ -33,7 +44,13 @@ import {
   type PaymentScheme,
   type UnitStatus,
 } from './units-quotes';
-import { ensureTruthTables, ingestSourceDocument } from './truth-engine';
+import {
+  ensureTruthTables,
+  getCentralAiKnowledge,
+  ingestSourceDocument,
+  rebuildCentralKnowledgeFromDocs,
+  saveCentralAiKnowledge,
+} from './truth-engine';
 import {
   ensureNurtureTablesAndSeeds,
   executeNurtureJobSend,
@@ -1223,7 +1240,12 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 401, { ok: false, error: 'Sesi tidak valid atau telah berakhir.' });
         return;
       }
-      sendJson(res, 200, { ok: true, user: authed });
+      const permissions = await getEffectivePermissionsForUser(
+        authed.tenantId,
+        authed.userId,
+        authed.role
+      );
+      sendJson(res, 200, { ok: true, user: authed, permissions });
       return;
     }
 
@@ -3925,6 +3947,964 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // ORG USERS MANAGEMENT (ADMIN & SM)
+    if (pathname === '/api/org/users' && req.method === 'GET') {
+      if (!['ADMIN', 'SM', 'DIREKSI', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Admin dan Sales Manager yang dapat melihat daftar user tim.' });
+        return;
+      }
+      const users = await listTenantUsers(user.tenantId);
+      sendJson(res, 200, { ok: true, users, allowedRoles: BASIC_ORG_ROLES });
+      return;
+    }
+
+    if (pathname === '/api/org/users' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await createTenantUser(user, {
+        name: String(body.name || ''),
+        email: String(body.email || ''),
+        phone: body.phone ? String(body.phone) : undefined,
+        role: String(body.role || ''),
+        password: String(body.password || ''),
+        projectId: body.projectId ? String(body.projectId) : undefined,
+      });
+      if (!result.ok) {
+        sendJson(res, 400, result);
+        return;
+      }
+      sendJson(res, 201, result);
+      return;
+    }
+
+    if (pathname === '/api/org/users' && req.method === 'PATCH') {
+      const body = await readJsonBody(req);
+      const targetUserId = String(body.userId || '').trim();
+      if (!targetUserId) {
+        sendJson(res, 400, { ok: false, error: 'userId wajib diisi.' });
+        return;
+      }
+      const result = await updateTenantUserStatus(user, targetUserId, Boolean(body.isActive));
+      if (!result.ok) {
+        sendJson(res, 400, result);
+        return;
+      }
+      sendJson(res, 200, result);
+      return;
+    }
+
+    // DOKUMEN VAULT KPR (REAL DB)
+    if (pathname === '/api/vault/documents' && req.method === 'GET') {
+      const projectIdParam = String(parsedUrl.searchParams.get('projectId') || '').trim();
+      const isWideRole = ['TL', 'SM', 'DIREKSI', 'ADMIN', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role);
+      const rows = isWideRole
+        ? await sql`
+            SELECT d.*, l.full_name AS lead_full_name, l.phone_wa AS lead_phone_wa
+            FROM sales_os.vault_documents d
+            LEFT JOIN sales_os.pipeline_leads l ON l.id = d.lead_id
+            WHERE d.tenant_id = ${user.tenantId}
+              ${projectIdParam ? sql`AND d.project_id = ${projectIdParam}` : sql``}
+            ORDER BY d.created_at DESC
+          `
+        : await sql`
+            SELECT d.*, l.full_name AS lead_full_name, l.phone_wa AS lead_phone_wa
+            FROM sales_os.vault_documents d
+            LEFT JOIN sales_os.pipeline_leads l ON l.id = d.lead_id
+            WHERE d.tenant_id = ${user.tenantId}
+              ${projectIdParam ? sql`AND d.project_id = ${projectIdParam}` : sql``}
+              AND (d.owner_se_email = ${user.email} OR l.owner_se_email = ${user.email})
+            ORDER BY d.created_at DESC
+          `;
+      sendJson(res, 200, { ok: true, documents: rows });
+      return;
+    }
+
+    if (pathname === '/api/vault/documents' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || user.projectId || 'the-park-sukoharjo').trim();
+      const leadIdRaw = body.leadId ? String(body.leadId).trim() : '';
+      let leadName = String(body.leadName || '').trim();
+      let unitInterest = String(body.unitInterest || '').trim();
+      let ownerSeEmail = user.email;
+      let resolvedLeadId: string | null = null;
+
+      if (leadIdRaw) {
+        const leadRows = await sql`
+          SELECT id, full_name, unit_interest, owner_se_email
+          FROM sales_os.pipeline_leads
+          WHERE id = ${leadIdRaw}::uuid AND tenant_id = ${user.tenantId}
+          LIMIT 1
+        `;
+        if (leadRows.length === 0) {
+          sendJson(res, 404, { ok: false, error: 'Lead tidak ditemukan pada proyek/tenant ini.' });
+          return;
+        }
+        resolvedLeadId = String(leadRows[0].id);
+        leadName = String(leadRows[0].full_name);
+        if (!unitInterest) unitInterest = String(leadRows[0].unit_interest || '');
+        ownerSeEmail = String(leadRows[0].owner_se_email || user.email);
+      }
+
+      if (!leadName) {
+        sendJson(res, 400, { ok: false, error: 'Nama lead / debitur wajib dipilih atau diisi.' });
+        return;
+      }
+
+      const itemsRaw = Array.isArray(body.documents) && body.documents.length > 0
+        ? body.documents
+        : [
+            {
+              docType: body.docType,
+              fileName: body.fileName,
+              fileSize: body.fileSize,
+              accessGrantedBanks: body.accessGrantedBanks,
+            },
+          ];
+
+      const inserted: any[] = [];
+      for (const item of itemsRaw) {
+        const docType = String(item.docType || 'KTP').trim().toUpperCase();
+        const fileName = String(item.fileName || '').trim();
+        if (!fileName) continue;
+        const fileSize = String(item.fileSize || '1.0 MB').trim();
+        const banks = Array.isArray(item.accessGrantedBanks) ? item.accessGrantedBanks : [];
+        const rows = await sql`
+          INSERT INTO sales_os.vault_documents (
+            tenant_id, project_id, lead_id, owner_se_email, lead_name, unit_interest,
+            doc_type, file_name, file_size, status, access_granted_banks
+          ) VALUES (
+            ${user.tenantId}, ${projectId}, ${resolvedLeadId}::uuid, ${ownerSeEmail}, ${leadName},
+            ${unitInterest}, ${docType}, ${fileName}, ${fileSize}, 'PERLU_REVIEW', ${JSON.stringify(banks)}::jsonb
+          )
+          RETURNING *
+        `;
+        if (rows[0]) inserted.push(rows[0]);
+      }
+
+      if (inserted.length === 0) {
+        sendJson(res, 400, { ok: false, error: 'Minimal 1 berkas dokumen valid wajib diunggah.' });
+        return;
+      }
+      sendJson(res, 201, { ok: true, documents: inserted });
+      return;
+    }
+
+    if (pathname === '/api/vault/documents' && req.method === 'PATCH') {
+      const body = await readJsonBody(req);
+      const id = String(body.id || '').trim();
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'ID dokumen wajib diisi.' });
+        return;
+      }
+      const nextStatus = body.status ? String(body.status).trim().toUpperCase() : null;
+      if (nextStatus && !['TERVERIFIKASI', 'PERLU_REVIEW', 'DITOLAK', 'EXPIRED'].includes(nextStatus)) {
+        sendJson(res, 400, { ok: false, error: 'Status dokumen tidak valid.' });
+        return;
+      }
+      if (nextStatus && !['SM', 'ADMIN', 'TL', 'DIREKSI', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya SM, Admin, TL, atau Direksi yang dapat menyetujui/menolak dokumen.' });
+        return;
+      }
+      const banks = Array.isArray(body.accessGrantedBanks) ? body.accessGrantedBanks : null;
+      const reviewNotes = body.reviewNotes !== undefined ? String(body.reviewNotes) : null;
+
+      const updated = await sql`
+        UPDATE sales_os.vault_documents
+        SET
+          status = COALESCE(${nextStatus}, status),
+          reviewed_by = CASE WHEN ${nextStatus} IS NOT NULL THEN ${user.name} ELSE reviewed_by END,
+          review_notes = COALESCE(${reviewNotes}, review_notes),
+          access_granted_banks = COALESCE(${banks ? JSON.stringify(banks) : null}::jsonb, access_granted_banks),
+          updated_at = NOW()
+        WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId}
+        RETURNING *
+      `;
+      if (updated.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Dokumen tidak ditemukan.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, document: updated[0] });
+      return;
+    }
+
+    if (pathname === '/api/vault/documents' && req.method === 'DELETE') {
+      const id = String(parsedUrl.searchParams.get('id') || '').trim();
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'ID dokumen wajib diisi.' });
+        return;
+      }
+      const isWideRole = ['SM', 'ADMIN', 'DIREKSI', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role);
+      const deleted = isWideRole
+        ? await sql`DELETE FROM sales_os.vault_documents WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId} RETURNING id`
+        : await sql`DELETE FROM sales_os.vault_documents WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId} AND owner_se_email = ${user.email} RETURNING id`;
+      if (deleted.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Dokumen tidak ditemukan atau tidak memiliki akses hapus.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, id });
+      return;
+    }
+
+    // PENGAJUAN KPR BANK (REAL DB + AUTO-SYNC LEAD KPR)
+    if (pathname === '/api/kpr/applications' && req.method === 'GET') {
+      const projectIdParam = String(parsedUrl.searchParams.get('projectId') || '').trim();
+      const isWideRole = ['TL', 'SM', 'DIREKSI', 'ADMIN', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role);
+
+      const kprLeads = isWideRole
+        ? await sql`
+            SELECT l.id, l.project_id, l.owner_se_email, l.full_name, l.phone_wa, l.unit_interest, l.cluster_interest, l.unit_price_idr
+            FROM sales_os.pipeline_leads l
+            WHERE l.tenant_id = ${user.tenantId}
+              AND (UPPER(COALESCE(l.payment_scheme, '')) LIKE '%KPR%' OR l.stage = 'DP_KPR_PROCESS')
+              AND NOT EXISTS (
+                SELECT 1 FROM sales_os.bank_applications b
+                WHERE b.lead_id = l.id AND b.tenant_id = l.tenant_id
+              )
+          `
+        : await sql`
+            SELECT l.id, l.project_id, l.owner_se_email, l.full_name, l.phone_wa, l.unit_interest, l.cluster_interest, l.unit_price_idr
+            FROM sales_os.pipeline_leads l
+            WHERE l.tenant_id = ${user.tenantId}
+              AND l.owner_se_email = ${user.email}
+              AND (UPPER(COALESCE(l.payment_scheme, '')) LIKE '%KPR%' OR l.stage = 'DP_KPR_PROCESS')
+              AND NOT EXISTS (
+                SELECT 1 FROM sales_os.bank_applications b
+                WHERE b.lead_id = l.id AND b.tenant_id = l.tenant_id
+              )
+          `;
+
+      for (const lead of kprLeads) {
+        const estPlafond = Math.round(Number(lead.unit_price_idr || 650000000) * 0.8);
+        await sql`
+          INSERT INTO sales_os.bank_applications (
+            tenant_id, project_id, lead_id, owner_se_email, applicant_name, applicant_phone,
+            unit_code, cluster, target_bank, plafond_amount, status, status_notes, source_mode
+          ) VALUES (
+            ${user.tenantId},
+            ${projectIdParam || String(lead.project_id || user.projectId || 'the-park-sukoharjo')},
+            ${lead.id}::uuid,
+            ${String(lead.owner_se_email)},
+            ${String(lead.full_name)},
+            ${String(lead.phone_wa || '')},
+            ${String(lead.unit_interest || 'Unit KPR')},
+            ${String(lead.cluster_interest || '')},
+            'Bank BSI',
+            ${estPlafond},
+            'SUBMITTED_TO_BANK',
+            'Otomatis masuk dari Lead kategori KPR. Silakan sesuaikan bank tujuan, plafond & progres berkas.',
+            'LEAD_AUTO'
+          )
+        `;
+      }
+
+      const rows = isWideRole
+        ? await sql`
+            SELECT * FROM sales_os.bank_applications
+            WHERE tenant_id = ${user.tenantId}
+              ${projectIdParam ? sql`AND project_id = ${projectIdParam}` : sql``}
+            ORDER BY created_at DESC
+          `
+        : await sql`
+            SELECT * FROM sales_os.bank_applications
+            WHERE tenant_id = ${user.tenantId}
+              ${projectIdParam ? sql`AND project_id = ${projectIdParam}` : sql``}
+              AND owner_se_email = ${user.email}
+            ORDER BY created_at DESC
+          `;
+      sendJson(res, 200, { ok: true, applications: rows });
+      return;
+    }
+
+    if (pathname === '/api/kpr/applications' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || user.projectId || 'the-park-sukoharjo').trim();
+      const leadIdRaw = body.leadId ? String(body.leadId).trim() : '';
+      let resolvedLeadId: string | null = null;
+      let applicantName = String(body.applicantName || '').trim();
+      let applicantPhone = String(body.applicantPhone || '').trim();
+      let unitCode = String(body.unitCode || '').trim();
+      let cluster = String(body.cluster || '').trim();
+      let ownerSeEmail = user.email;
+      let sourceMode = 'MANUAL';
+
+      if (leadIdRaw) {
+        const leadRows = await sql`
+          SELECT id, full_name, phone_wa, unit_interest, cluster_interest, owner_se_email
+          FROM sales_os.pipeline_leads
+          WHERE id = ${leadIdRaw}::uuid AND tenant_id = ${user.tenantId}
+          LIMIT 1
+        `;
+        if (leadRows.length === 0) {
+          sendJson(res, 404, { ok: false, error: 'Lead tidak ditemukan.' });
+          return;
+        }
+        resolvedLeadId = String(leadRows[0].id);
+        applicantName = applicantName || String(leadRows[0].full_name);
+        applicantPhone = applicantPhone || String(leadRows[0].phone_wa || '');
+        unitCode = unitCode || String(leadRows[0].unit_interest || '');
+        cluster = cluster || String(leadRows[0].cluster_interest || '');
+        ownerSeEmail = String(leadRows[0].owner_se_email || user.email);
+        sourceMode = 'LEAD_SELECTED';
+      }
+
+      if (!applicantName || !unitCode) {
+        sendJson(res, 400, { ok: false, error: 'Nama pemohon dan unit wajib diisi.' });
+        return;
+      }
+
+      const targetBank = String(body.targetBank || 'Bank BSI').trim();
+      const plafondAmount = Math.max(0, Number(body.plafondAmount || 0));
+      const statusNotes = String(body.statusNotes || 'Pengajuan KPR baru ditambahkan.').trim();
+      const assignedAnalyst = body.assignedAnalyst ? String(body.assignedAnalyst).trim() : null;
+      if (!cluster) {
+        cluster = unitCode.toLowerCase().includes('nagoya')
+          ? 'Nagoya'
+          : unitCode.toLowerCase().includes('osaka')
+          ? 'Osaka'
+          : unitCode.toLowerCase().includes('tokyo')
+          ? 'Tokyo'
+          : 'Umum';
+      }
+
+      const inserted = await sql`
+        INSERT INTO sales_os.bank_applications (
+          tenant_id, project_id, lead_id, owner_se_email, applicant_name, applicant_phone,
+          unit_code, cluster, target_bank, plafond_amount, status, status_notes, assigned_analyst, source_mode
+        ) VALUES (
+          ${user.tenantId}, ${projectId}, ${resolvedLeadId}::uuid, ${ownerSeEmail}, ${applicantName},
+          ${applicantPhone}, ${unitCode}, ${cluster}, ${targetBank}, ${plafondAmount},
+          'SUBMITTED_TO_BANK', ${statusNotes}, ${assignedAnalyst}, ${sourceMode}
+        )
+        RETURNING *
+      `;
+      sendJson(res, 201, { ok: true, application: inserted[0] });
+      return;
+    }
+
+    if (pathname === '/api/kpr/applications' && req.method === 'PATCH') {
+      const body = await readJsonBody(req);
+      const id = String(body.id || '').trim();
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'ID pengajuan KPR wajib diisi.' });
+        return;
+      }
+      const nextStatus = body.status ? String(body.status).trim() : null;
+      const targetBank = body.targetBank ? String(body.targetBank).trim() : null;
+      const plafondAmount = body.plafondAmount !== undefined ? Number(body.plafondAmount) : null;
+      const statusNotes = body.statusNotes !== undefined ? String(body.statusNotes) : null;
+      const assignedAnalyst = body.assignedAnalyst !== undefined ? String(body.assignedAnalyst) : null;
+
+      const updated = await sql`
+        UPDATE sales_os.bank_applications
+        SET
+          status = COALESCE(${nextStatus}, status),
+          target_bank = COALESCE(${targetBank}, target_bank),
+          plafond_amount = COALESCE(${plafondAmount}, plafond_amount),
+          status_notes = COALESCE(${statusNotes}, status_notes),
+          assigned_analyst = COALESCE(${assignedAnalyst}, assigned_analyst),
+          sp3k_expiry_date = CASE WHEN ${nextStatus} = 'SP3K_TERBIT' AND sp3k_expiry_date IS NULL THEN (CURRENT_DATE + INTERVAL '30 days')::date ELSE sp3k_expiry_date END,
+          updated_at = NOW()
+        WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId}
+        RETURNING *
+      `;
+      if (updated.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Pengajuan KPR tidak ditemukan.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, application: updated[0] });
+      return;
+    }
+
+    // PERMISSIONS (USER & ROLE MATRIX)
+    if (pathname === '/api/permissions/me' && req.method === 'GET') {
+      const permissions = await getEffectivePermissionsForUser(
+        user.tenantId,
+        user.userId,
+        user.role
+      );
+      sendJson(res, 200, { ok: true, permissions, features: PLATFORM_FEATURES });
+      return;
+    }
+
+    if (pathname === '/api/superadmin/permissions' && req.method === 'GET') {
+      if (!['SUPERADMIN_IT', 'SUPERADMIN', 'ADMIN', 'SM'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Akses ditolak untuk manajemen permission.' });
+        return;
+      }
+      const scopeType = (parsedUrl.searchParams.get('scopeType') || 'USER').toUpperCase() as 'USER' | 'ROLE';
+      const targetUserId = parsedUrl.searchParams.get('targetUserId') || undefined;
+      const targetRole = parsedUrl.searchParams.get('targetRole') || undefined;
+      const users = await listTenantUsers(user.tenantId);
+      const matrix = await getScopePermissionMatrix(user.tenantId, scopeType, targetUserId, targetRole);
+      sendJson(res, 200, {
+        ok: true,
+        features: PLATFORM_FEATURES,
+        allowedRoles: BASIC_ORG_ROLES,
+        users,
+        matrix,
+      });
+      return;
+    }
+
+    if (pathname === '/api/superadmin/permissions' && req.method === 'PUT') {
+      if (!['SUPERADMIN_IT', 'SUPERADMIN', 'ADMIN'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Superadmin IT / Superadmin / Admin yang dapat menyimpan permission.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const scopeType = String(body.scopeType || 'USER').toUpperCase() === 'ROLE' ? 'ROLE' : 'USER';
+      const targetUserId = body.targetUserId ? String(body.targetUserId) : undefined;
+      const targetRole = body.targetRole ? String(body.targetRole) : undefined;
+      const permissions = (body.permissions || {}) as Record<string, any>;
+      await saveScopePermissions({
+        tenantId: user.tenantId,
+        scopeType,
+        targetUserId,
+        targetRole,
+        permissions,
+        updatedBy: user.email,
+      });
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // DASHBOARD SUMMARY AGREGASI NYATA
+    if (pathname === '/api/dashboard/summary' && req.method === 'GET') {
+      const projectIdParam = String(parsedUrl.searchParams.get('projectId') || '').trim();
+      const [usersRows, leadsRows, unitsRows, kprRows, vaultRows, fieldRows, escRows, auditRows, campaignRows] =
+        await Promise.all([
+          sql`SELECT id, name, email, role, is_active FROM sales_os.app_users WHERE tenant_id = ${user.tenantId}`,
+          sql`SELECT id, owner_se_email, owner_se_name, full_name, phone_wa, stage, grade, unit_interest, unit_price_idr, payment_scheme, lead_quality, spam_reason, is_in_pool, response_time_seconds, created_at, updated_at FROM sales_os.pipeline_leads WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC`,
+          sql`SELECT id, unit_code, cluster, status, price_idr FROM sales_os.project_units WHERE tenant_id = ${user.tenantId} ${projectIdParam ? sql`AND project_id = ${projectIdParam}` : sql``}`,
+          sql`SELECT id, applicant_name, unit_code, target_bank, plafond_amount, status, created_at FROM sales_os.bank_applications WHERE tenant_id = ${user.tenantId}`,
+          sql`SELECT id, lead_name, doc_type, status FROM sales_os.vault_documents WHERE tenant_id = ${user.tenantId}`,
+          sql`SELECT id, se_email, se_name, log_type, location_label, created_at FROM sales_os.se_field_logs ORDER BY created_at DESC LIMIT 200`,
+          sql`SELECT * FROM sales_os.escalation_requests WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC`,
+          sql`SELECT id, actor_name, actor_role, summary, action_type, created_at FROM sales_os.activity_audit_logs WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC LIMIT 30`,
+          sql`SELECT * FROM sales_os.ad_campaigns WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC`,
+        ]);
+
+      const seUsers = usersRows.filter((u: any) => u.role === 'SE' && u.is_active);
+      const seTeamPerformance = seUsers.map((se: any) => {
+        const email = String(se.email).toLowerCase();
+        const myLeads = leadsRows.filter((l: any) => String(l.owner_se_email).toLowerCase() === email);
+        const myVisits = myLeads.filter((l: any) => ['VISITED', 'HOT_NEGOTIATION', 'BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'].includes(l.stage)).length;
+        const myBookings = myLeads.filter((l: any) => ['BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'].includes(l.stage)).length;
+        const myNet = myLeads.filter((l: any) => l.stage === 'PPJB_AKAD').length;
+        const respTimes = myLeads.map((l: any) => Number(l.response_time_seconds || 0)).filter((n: number) => n > 0);
+        const avgRespMin = respTimes.length > 0 ? Math.round(respTimes.reduce((a: number, b: number) => a + b, 0) / respTimes.length / 60) : 3;
+        const myLogs = fieldRows.filter((f: any) => String(f.se_email).toLowerCase() === email);
+        const latestZone = myLogs[0]?.location_label || 'Lapangan / Kantor';
+        const score = Math.min(100, 40 + myLeads.length * 4 + myVisits * 6 + myBookings * 12);
+        return {
+          seId: String(se.id),
+          nama: String(se.name),
+          email,
+          zonaHariIni: String(latestZone),
+          leadBulanIni: myLeads.length,
+          prospekBulanIni: myLeads.filter((l: any) => l.grade === 'A' || l.grade === 'B').length,
+          kunjunganBulanIni: myVisits,
+          bookingBulanIni: myBookings,
+          netSalesBulanIni: myNet,
+          rataResponsMenit: avgRespMin,
+          laporanHariIni: myLogs.length > 0 ? 'tepat_waktu' : 'belum_kirim',
+          scorecardPoin: score,
+          scorecardKategori: score >= 85 ? 'Sangat Baik' : score >= 70 ? 'Baik' : 'Perlu Ditingkatkan',
+        };
+      });
+
+      const liveSlaLeads = leadsRows.slice(0, 12).map((l: any) => {
+        const respSec = Number(l.response_time_seconds || 180);
+        return {
+          id: String(l.id),
+          namaLead: String(l.full_name),
+          seNama: String(l.owner_se_name || l.owner_se_email),
+          durasiMenit: Math.max(1, Math.round(respSec / 60)),
+          statusSla: l.is_in_pool ? 'dialihkan_pool' : respSec > 300 ? 'warning_sla' : 'aman',
+          tahap: String(l.stage),
+        };
+      });
+
+      const bookingLeads = leadsRows.filter((l: any) => ['BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'].includes(l.stage));
+      const bookingTransactions = bookingLeads.map((l: any) => ({
+        id: String(l.id).slice(0, 8).toUpperCase(),
+        pembeli: String(l.full_name),
+        seName: String(l.owner_se_name || l.owner_se_email),
+        unit: String(l.unit_interest || '-'),
+        skema: String(l.payment_scheme || 'KPR'),
+        statusAdminH1: l.stage === 'PPJB_AKAD' || l.stage === 'DP_KPR_PROCESS' ? 'Terkonfirmasi' : 'Menunggu Verifikasi',
+        statusKprH7: `${vaultRows.filter((v: any) => String(v.lead_name).toLowerCase() === String(l.full_name).toLowerCase()).length} Berkas Vault`,
+      }));
+
+      const leadFeedbacks = leadsRows
+        .filter((l: any) => l.lead_quality || l.spam_reason)
+        .slice(0, 12)
+        .map((l: any) => ({
+          id: String(l.id),
+          leadName: String(l.full_name),
+          seName: String(l.owner_se_name || l.owner_se_email),
+          quality: String(l.lead_quality || 'WARM'),
+          reason: String(l.spam_reason || l.unit_interest || 'Kualitas sesuai target'),
+        }));
+
+      sendJson(res, 200, {
+        ok: true,
+        seTeamPerformance,
+        liveSlaLeads,
+        bookingTransactions,
+        escalations: escRows,
+        auditLogs: auditRows,
+        campaigns: campaignRows,
+        leadFeedbacks,
+        counts: {
+          totalUnits: unitsRows.length,
+          availableUnits: unitsRows.filter((u: any) => u.status === 'tersedia').length,
+          bookingUnits: unitsRows.filter((u: any) => u.status === 'booking').length,
+          soldUnits: unitsRows.filter((u: any) => u.status === 'terjual').length,
+          totalLeads: leadsRows.length,
+          kprApplications: kprRows.length,
+          vaultPending: vaultRows.filter((v: any) => v.status === 'PERLU_REVIEW').length,
+        },
+      });
+      return;
+    }
+
+    // ESCALATIONS (SE/SM -> DIREKSI)
+    if (pathname === '/api/escalations' && req.method === 'GET') {
+      const rows = await sql`
+        SELECT * FROM sales_os.escalation_requests
+        WHERE tenant_id = ${user.tenantId}
+        ORDER BY created_at DESC
+      `;
+      sendJson(res, 200, { ok: true, escalations: rows });
+      return;
+    }
+
+    if (pathname === '/api/escalations' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const jenis = String(body.jenis || 'Diskon Khusus').trim();
+      const pembeli = String(body.pembeli || '').trim();
+      const unit = String(body.unit || '').trim();
+      const proyek = String(body.proyek || 'The Park Townhouse Sukoharjo').trim();
+      const nilai = String(body.nilai || '').trim();
+      if (!pembeli || !unit || !nilai) {
+        sendJson(res, 400, { ok: false, error: 'Pembeli, unit, dan nilai eskalasi wajib diisi.' });
+        return;
+      }
+      const inserted = await sql`
+        INSERT INTO sales_os.escalation_requests (
+          tenant_id, project_id, jenis, pembeli, unit, proyek, nilai, rekomendasi_ai, requested_by
+        ) VALUES (
+          ${user.tenantId}, ${String(body.projectId || user.projectId || 'the-park-sukoharjo')},
+          ${jenis}, ${pembeli}, ${unit}, ${proyek}, ${nilai},
+          ${String(body.rekomendasiAi || 'Menunggu evaluasi margin oleh Direksi.')},
+          ${user.email}
+        )
+        RETURNING *
+      `;
+      sendJson(res, 201, { ok: true, escalation: inserted[0] });
+      return;
+    }
+
+    if (pathname === '/api/escalations' && req.method === 'PATCH') {
+      if (!['DIREKSI', 'SM', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Direksi / SM yang dapat memutuskan eskalasi.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const id = String(body.id || '').trim();
+      const status = String(body.status || '').trim();
+      if (!id || !['Disetujui', 'Ditolak'].includes(status)) {
+        sendJson(res, 400, { ok: false, error: 'ID dan status valid (Disetujui/Ditolak) wajib diisi.' });
+        return;
+      }
+      const updated = await sql`
+        UPDATE sales_os.escalation_requests
+        SET status = ${status}, decided_by = ${user.name}, decided_at = NOW()
+        WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId}
+        RETURNING *
+      `;
+      if (updated.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Eskalasi tidak ditemukan.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, escalation: updated[0] });
+      return;
+    }
+
+    // REFERRAL PROGRAM & PARTNER SCHEME CONFIG
+    if (pathname === '/api/referrals' && req.method === 'GET') {
+      const projectIdParam = String(parsedUrl.searchParams.get('projectId') || '').trim();
+      const rows = await sql`
+        SELECT * FROM sales_os.referral_leads
+        WHERE tenant_id = ${user.tenantId}
+          ${projectIdParam ? sql`AND project_id = ${projectIdParam}` : sql``}
+        ORDER BY created_at DESC
+      `;
+      sendJson(res, 200, { ok: true, referrals: rows });
+      return;
+    }
+
+    if (pathname === '/api/referrals' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || user.projectId || 'the-park-sukoharjo').trim();
+      const advocateName = String(body.advocateName || user.name).trim();
+      const referredFriendName = String(body.referredFriendName || '').trim();
+      const referredFriendPhone = String(body.referredFriendPhone || '').trim();
+      if (!referredFriendName) {
+        sendJson(res, 400, { ok: false, error: 'Nama teman/prospek referral wajib diisi.' });
+        return;
+      }
+
+      let linkedLeadId: string | null = null;
+      if (referredFriendPhone) {
+        const normalizedPhone = normalizePhoneWa(referredFriendPhone);
+        if (normalizedPhone) {
+          const existingLead = await sql`
+            SELECT id FROM sales_os.pipeline_leads
+            WHERE tenant_id = ${user.tenantId} AND phone_wa = ${normalizedPhone}
+            LIMIT 1
+          `;
+          if (existingLead[0]) {
+            linkedLeadId = String(existingLead[0].id);
+          } else {
+            const newLead = await sql`
+              INSERT INTO sales_os.pipeline_leads (
+                tenant_id, project_id, owner_se_email, owner_se_name, full_name, phone_wa,
+                source, stage, unit_interest, lead_origin
+              ) VALUES (
+                ${user.tenantId}, ${projectId}, ${user.email}, ${user.name},
+                ${referredFriendName}, ${normalizedPhone},
+                ${`Referral: ${advocateName}`}, 'NEW', ${String(body.unitInterest || 'Unit Pilihan')}, 'REFERRAL'
+              )
+              RETURNING id
+            `;
+            if (newLead[0]) linkedLeadId = String(newLead[0].id);
+          }
+        }
+      }
+
+      const inserted = await sql`
+        INSERT INTO sales_os.referral_leads (
+          tenant_id, project_id, lead_id, advocate_name, advocate_phone, advocate_type,
+          referred_friend_name, referred_friend_phone, unit_interest, reward_amount, partner_role
+        ) VALUES (
+          ${user.tenantId}, ${projectId}, ${linkedLeadId}::uuid, ${advocateName},
+          ${String(body.advocatePhone || '')}, ${String(body.advocateType || 'KONSUMEN_PEMILIK')},
+          ${referredFriendName}, ${referredFriendPhone}, ${String(body.unitInterest || '')},
+          ${Number(body.rewardAmount || 5000000)}, ${String(body.partnerRole || 'REFERRAL_PARTNER')}
+        )
+        RETURNING *
+      `;
+      sendJson(res, 201, { ok: true, referral: inserted[0] });
+      return;
+    }
+
+    if (pathname === '/api/referrals' && req.method === 'PATCH') {
+      const body = await readJsonBody(req);
+      const id = String(body.id || '').trim();
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'ID referral wajib diisi.' });
+        return;
+      }
+      const nextStatus = body.status ? String(body.status) : null;
+      const nextRewardStatus = body.rewardStatus ? String(body.rewardStatus) : null;
+      const updated = await sql`
+        UPDATE sales_os.referral_leads
+        SET
+          status = COALESCE(${nextStatus}, status),
+          reward_status = COALESCE(${nextRewardStatus}, reward_status),
+          updated_at = NOW()
+        WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId}
+        RETURNING *
+      `;
+      if (updated.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Referral tidak ditemukan.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, referral: updated[0] });
+      return;
+    }
+
+    if (pathname === '/api/partner-config' && req.method === 'GET') {
+      const projectId = String(parsedUrl.searchParams.get('projectId') || user.projectId || 'the-park-sukoharjo');
+      const rows = await sql`
+        SELECT config_json FROM sales_os.partner_scheme_configs
+        WHERE project_id = ${projectId} AND tenant_id = ${user.tenantId}
+        LIMIT 1
+      `;
+      sendJson(res, 200, { ok: true, config: rows[0]?.config_json || null });
+      return;
+    }
+
+    if (pathname === '/api/partner-config' && req.method === 'PUT') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || user.projectId || 'the-park-sukoharjo');
+      await sql`
+        INSERT INTO sales_os.partner_scheme_configs (project_id, tenant_id, config_json, updated_by, updated_at)
+        VALUES (${projectId}, ${user.tenantId}, ${JSON.stringify(body.config || {})}::jsonb, ${user.email}, NOW())
+        ON CONFLICT (project_id) DO UPDATE SET
+          config_json = EXCLUDED.config_json,
+          updated_by = EXCLUDED.updated_by,
+          updated_at = NOW()
+      `;
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // KELUHAN & GARANSI DLP
+    if (pathname === '/api/complaints' && req.method === 'GET') {
+      const projectIdParam = String(parsedUrl.searchParams.get('projectId') || '').trim();
+      const rows = await sql`
+        SELECT * FROM sales_os.complaint_tickets
+        WHERE tenant_id = ${user.tenantId}
+          ${projectIdParam ? sql`AND project_id = ${projectIdParam}` : sql``}
+        ORDER BY reported_at DESC
+      `;
+      sendJson(res, 200, { ok: true, tickets: rows });
+      return;
+    }
+
+    if (pathname === '/api/complaints' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || user.projectId || 'the-park-sukoharjo').trim();
+      const unitBlock = String(body.unitBlock || '').trim();
+      const residentName = String(body.residentName || '').trim();
+      const description = String(body.description || '').trim();
+      if (!unitBlock || !residentName || !description) {
+        sendJson(res, 400, { ok: false, error: 'Blok unit, nama penghuni, dan deskripsi keluhan wajib diisi.' });
+        return;
+      }
+      const ticketNo = `DLP-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+      const inserted = await sql`
+        INSERT INTO sales_os.complaint_tickets (
+          tenant_id, project_id, ticket_no, unit_block, resident_name, resident_phone,
+          category, description, dlp_expiry_date, sla_target_hours, technician_assigned, created_by
+        ) VALUES (
+          ${user.tenantId}, ${projectId}, ${ticketNo}, ${unitBlock}, ${residentName},
+          ${String(body.residentPhone || '')}, ${String(body.category || 'KEBOCORAN_ATAP')},
+          ${description}, ${String(body.dlpExpiryDate || 'Masa DLP Aktif')},
+          ${Number(body.slaTargetHours || 24)}, ${body.technicianAssigned ? String(body.technicianAssigned) : null},
+          ${user.email}
+        )
+        RETURNING *
+      `;
+      sendJson(res, 201, { ok: true, ticket: inserted[0] });
+      return;
+    }
+
+    if (pathname === '/api/complaints' && req.method === 'PATCH') {
+      const body = await readJsonBody(req);
+      const id = String(body.id || '').trim();
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'ID tiket wajib diisi.' });
+        return;
+      }
+      const nextStatus = body.status ? String(body.status) : null;
+      const tech = body.technicianAssigned !== undefined ? String(body.technicianAssigned) : null;
+      const updated = await sql`
+        UPDATE sales_os.complaint_tickets
+        SET
+          status = COALESCE(${nextStatus}, status),
+          technician_assigned = COALESCE(${tech}, technician_assigned),
+          updated_at = NOW()
+        WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId}
+        RETURNING *
+      `;
+      if (updated.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Tiket tidak ditemukan.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, ticket: updated[0] });
+      return;
+    }
+
+    // DIGITAL MARKETING CAMPAIGNS
+    if (pathname === '/api/marketing/campaigns' && req.method === 'GET') {
+      const projectIdParam = String(parsedUrl.searchParams.get('projectId') || '').trim();
+      const rows = await sql`
+        SELECT * FROM sales_os.ad_campaigns
+        WHERE tenant_id = ${user.tenantId}
+          ${projectIdParam ? sql`AND project_id = ${projectIdParam}` : sql``}
+        ORDER BY created_at DESC
+      `;
+      sendJson(res, 200, { ok: true, campaigns: rows });
+      return;
+    }
+
+    if (pathname === '/api/marketing/campaigns' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || user.projectId || 'the-park-sukoharjo').trim();
+      const campaignName = String(body.campaignName || '').trim();
+      if (!campaignName) {
+        sendJson(res, 400, { ok: false, error: 'Nama kampanye wajib diisi.' });
+        return;
+      }
+      const inserted = await sql`
+        INSERT INTO sales_os.ad_campaigns (
+          tenant_id, project_id, platform, campaign_name, spend_idr, leads_count, qualified_count, status
+        ) VALUES (
+          ${user.tenantId}, ${projectId}, ${String(body.platform || 'Meta Ads')},
+          ${campaignName}, ${Number(body.spendIdr || 0)}, ${Number(body.leadsCount || 0)},
+          ${Number(body.qualifiedCount || 0)}, ${String(body.status || 'AKTIF')}
+        )
+        RETURNING *
+      `;
+      sendJson(res, 201, { ok: true, campaign: inserted[0] });
+      return;
+    }
+
+    // PROJECT MODULE SETTINGS
+    if (pathname === '/api/project-settings' && req.method === 'GET') {
+      const projectId = String(parsedUrl.searchParams.get('projectId') || user.projectId || 'the-park-sukoharjo');
+      const moduleKey = String(parsedUrl.searchParams.get('moduleKey') || '').trim();
+      if (!moduleKey) {
+        sendJson(res, 400, { ok: false, error: 'moduleKey wajib diisi.' });
+        return;
+      }
+      const rows = await sql`
+        SELECT payload, updated_at FROM sales_os.project_module_configs
+        WHERE tenant_id = ${user.tenantId} AND project_id = ${projectId} AND module_key = ${moduleKey}
+        LIMIT 1
+      `;
+      sendJson(res, 200, { ok: true, payload: rows[0]?.payload || null, updatedAt: rows[0]?.updated_at || null });
+      return;
+    }
+
+    if (pathname === '/api/project-settings' && req.method === 'PUT') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || user.projectId || 'the-park-sukoharjo');
+      const moduleKey = String(body.moduleKey || '').trim();
+      if (!moduleKey) {
+        sendJson(res, 400, { ok: false, error: 'moduleKey wajib diisi.' });
+        return;
+      }
+      await sql`
+        INSERT INTO sales_os.project_module_configs (tenant_id, project_id, module_key, payload, updated_by, updated_at)
+        VALUES (${user.tenantId}, ${projectId}, ${moduleKey}, ${JSON.stringify(body.payload || {})}::jsonb, ${user.email}, NOW())
+        ON CONFLICT (tenant_id, project_id, module_key) DO UPDATE SET
+          payload = EXCLUDED.payload,
+          updated_by = EXCLUDED.updated_by,
+          updated_at = NOW()
+      `;
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // IT KNOWLEDGE AI TERPUSAT (1 SUMBER DATA + OCR LOKAL)
+    if (pathname === '/api/it/knowledge-ai' && req.method === 'GET') {
+      if (!['IT', 'SUPERADMIN_IT', 'SUPERADMIN', 'ADMIN', 'SM', 'DIREKSI'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Akses Knowledge AI hanya untuk Divisi IT & Manajemen.' });
+        return;
+      }
+      const projectId = String(parsedUrl.searchParams.get('projectId') || user.projectId || 'the-park-sukoharjo').trim();
+      const [central, docs, conflicts] = await Promise.all([
+        getCentralAiKnowledge(user.tenantId, projectId),
+        sql`
+          SELECT id, project_id, doc_type, filename, version, status, extracted_markdown, uploaded_by, created_at
+          FROM sales_os.source_documents
+          WHERE tenant_id = ${user.tenantId} AND project_id = ${projectId}
+          ORDER BY created_at DESC
+          LIMIT 50
+        `,
+        sql`
+          SELECT * FROM sales_os.truth_conflicts
+          WHERE tenant_id = ${user.tenantId} AND project_id = ${projectId}
+          ORDER BY CASE WHEN status = 'open' THEN 0 ELSE 1 END, created_at DESC
+          LIMIT 30
+        `,
+      ]);
+      sendJson(res, 200, { ok: true, central, documents: docs, conflicts });
+      return;
+    }
+
+    if (pathname === '/api/it/knowledge-ai/upload' && req.method === 'POST') {
+      if (!['IT', 'SUPERADMIN_IT', 'SUPERADMIN'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Divisi IT yang dapat mengunggah & melatih Knowledge AI.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || user.projectId || 'the-park-sukoharjo').trim();
+      const filename = String(body.filename || '').trim();
+      const contentBase64 = String(body.contentBase64 || '').trim();
+      if (!filename || !contentBase64) {
+        sendJson(res, 400, { ok: false, error: 'filename dan contentBase64 wajib diisi.' });
+        return;
+      }
+      const cleanB64 = contentBase64.includes(',') ? contentBase64.split(',')[1] : contentBase64;
+      const fileBuffer = Buffer.from(cleanB64, 'base64');
+      if (fileBuffer.length === 0 || fileBuffer.length > 20 * 1024 * 1024) {
+        sendJson(res, 400, { ok: false, error: 'Ukuran file harus > 0 dan maksimal 20 MB.' });
+        return;
+      }
+      const result = await ingestSourceDocument({
+        tenantId: user.tenantId,
+        projectId,
+        docType: String(body.docType || 'brosur_pdf'),
+        filename,
+        fileBuffer,
+        uploadedBy: user.email,
+      });
+      if (!result.ok) {
+        sendJson(res, 422, { ok: false, error: result.error });
+        return;
+      }
+      const central = await rebuildCentralKnowledgeFromDocs(user.tenantId, projectId, user.email);
+      sendJson(res, 201, { ...result, central });
+      return;
+    }
+
+    if (pathname === '/api/it/knowledge-ai' && req.method === 'PUT') {
+      if (!['IT', 'SUPERADMIN_IT', 'SUPERADMIN'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Divisi IT yang dapat memperbarui Master Knowledge AI.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || user.projectId || 'the-park-sukoharjo').trim();
+      const masterMarkdown = String(body.masterMarkdown || '');
+      const title = body.title ? String(body.title) : undefined;
+      const saved = await saveCentralAiKnowledge({
+        tenantId: user.tenantId,
+        projectId,
+        title,
+        masterMarkdown,
+        updatedBy: user.email,
+      });
+      sendJson(res, 200, { ok: true, central: saved });
+      return;
+    }
+
+    if (pathname === '/api/it/knowledge-ai/rebuild' && req.method === 'POST') {
+      if (!['IT', 'SUPERADMIN_IT', 'SUPERADMIN'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Divisi IT yang dapat merebuild Master Knowledge AI.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || user.projectId || 'the-park-sukoharjo').trim();
+      const central = await rebuildCentralKnowledgeFromDocs(user.tenantId, projectId, user.email);
+      sendJson(res, 200, { ok: true, central });
+      return;
+    }
+
+    if (pathname === '/api/it/knowledge-ai/document' && req.method === 'DELETE') {
+      if (!['IT', 'SUPERADMIN_IT', 'SUPERADMIN'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Divisi IT yang dapat menghapus dokumen Knowledge AI.' });
+        return;
+      }
+      const id = String(parsedUrl.searchParams.get('id') || '').trim();
+      const projectId = String(parsedUrl.searchParams.get('projectId') || user.projectId || 'the-park-sukoharjo').trim();
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'ID dokumen wajib diisi.' });
+        return;
+      }
+      await sql`
+        DELETE FROM sales_os.source_documents
+        WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId}
+      `;
+      const central = await rebuildCentralKnowledgeFromDocs(user.tenantId, projectId, user.email);
+      sendJson(res, 200, { ok: true, central });
+      return;
+    }
+
     sendJson(res, 404, { ok: false, error: `Endpoint tidak ditemukan: ${pathname}` });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Terjadi kesalahan internal server.';
@@ -4148,6 +5128,148 @@ async function ensureSeOpsTables(): Promise<void> {
       ADD COLUMN IF NOT EXISTS is_in_pool BOOLEAN NOT NULL DEFAULT false,
       ADD COLUMN IF NOT EXISTS pool_reason TEXT NOT NULL DEFAULT '',
       ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ DEFAULT NOW()
+  `;
+  await ensurePermissionTables();
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.vault_documents (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      lead_id UUID REFERENCES sales_os.pipeline_leads(id) ON DELETE SET NULL,
+      owner_se_email TEXT NOT NULL,
+      lead_name TEXT NOT NULL,
+      unit_interest TEXT NOT NULL DEFAULT '',
+      doc_type TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      file_size TEXT NOT NULL DEFAULT '1.0 MB',
+      status TEXT NOT NULL DEFAULT 'PERLU_REVIEW',
+      reviewed_by TEXT,
+      review_notes TEXT,
+      access_granted_banks JSONB NOT NULL DEFAULT '[]'::jsonb,
+      expires_at DATE NOT NULL DEFAULT (CURRENT_DATE + INTERVAL '30 days')::date,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.bank_applications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      lead_id UUID REFERENCES sales_os.pipeline_leads(id) ON DELETE SET NULL,
+      owner_se_email TEXT NOT NULL,
+      applicant_name TEXT NOT NULL,
+      applicant_phone TEXT NOT NULL DEFAULT '',
+      unit_code TEXT NOT NULL,
+      cluster TEXT NOT NULL DEFAULT '',
+      target_bank TEXT NOT NULL DEFAULT 'Bank BSI',
+      plafond_amount BIGINT NOT NULL DEFAULT 0,
+      submission_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      status TEXT NOT NULL DEFAULT 'SUBMITTED_TO_BANK',
+      status_notes TEXT NOT NULL DEFAULT '',
+      assigned_analyst TEXT,
+      sp3k_expiry_date DATE,
+      source_mode TEXT NOT NULL DEFAULT 'LEAD_SELECTED',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.escalation_requests (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      lead_id UUID REFERENCES sales_os.pipeline_leads(id) ON DELETE SET NULL,
+      jenis TEXT NOT NULL,
+      pembeli TEXT NOT NULL,
+      unit TEXT NOT NULL,
+      proyek TEXT NOT NULL,
+      nilai TEXT NOT NULL,
+      rekomendasi_ai TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'Menunggu Review',
+      requested_by TEXT NOT NULL,
+      decided_by TEXT,
+      decided_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.referral_leads (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      lead_id UUID REFERENCES sales_os.pipeline_leads(id) ON DELETE SET NULL,
+      advocate_name TEXT NOT NULL,
+      advocate_phone TEXT NOT NULL DEFAULT '',
+      advocate_type TEXT NOT NULL DEFAULT 'KONSUMEN_PEMILIK',
+      referred_friend_name TEXT NOT NULL,
+      referred_friend_phone TEXT NOT NULL DEFAULT '',
+      unit_interest TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'TERDAFTAR',
+      reward_amount BIGINT NOT NULL DEFAULT 5000000,
+      reward_status TEXT NOT NULL DEFAULT 'PENDING_AKAD',
+      partner_role TEXT NOT NULL DEFAULT 'REFERRAL_PARTNER',
+      lead_response_minutes INTEGER,
+      sla_breach BOOLEAN NOT NULL DEFAULT FALSE,
+      registered_at DATE NOT NULL DEFAULT CURRENT_DATE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.partner_scheme_configs (
+      project_id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      config_json JSONB NOT NULL,
+      updated_by TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.complaint_tickets (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      ticket_no TEXT NOT NULL,
+      unit_block TEXT NOT NULL,
+      resident_name TEXT NOT NULL,
+      resident_phone TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL,
+      description TEXT NOT NULL,
+      reported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      dlp_expiry_date TEXT NOT NULL DEFAULT '',
+      sla_target_hours INTEGER NOT NULL DEFAULT 24,
+      status TEXT NOT NULL DEFAULT 'TIKET_BARU',
+      technician_assigned TEXT,
+      created_by TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.ad_campaigns (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      campaign_name TEXT NOT NULL,
+      spend_idr BIGINT NOT NULL DEFAULT 0,
+      leads_count INTEGER NOT NULL DEFAULT 0,
+      qualified_count INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'AKTIF',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.project_module_configs (
+      tenant_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      module_key TEXT NOT NULL,
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_by TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (tenant_id, project_id, module_key)
+    )
   `;
 }
 

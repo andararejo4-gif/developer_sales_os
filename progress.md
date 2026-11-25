@@ -3,6 +3,46 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-093 | 2026-11-25 | Restrukturisasi Menu Admin Panel IT & Flow 2-Langkah Permission Fitur (6 Role Utama)
+- Status: selesai di lokal
+- Ubah: `src/components/superadmin/PermissionMatrixPanel.tsx` (alur 2 langkah: default tabel daftar user dengan tab filter 6 role utama mengecualikan `SUPERADMIN` & `SUPERADMIN_IT` -> klik user masuk halaman detail atur permission CRUD + tombol kembali & opsi Global Per-Role), `src/components/superadmin/ItCommandCenterDashboard.tsx` (pisah 4 halaman: `dashboard`, `permissions`, `knowledge`, `hierarchy` + metrik real & pintasan cepat di dashboard), `src/App.tsx` (menu sidebar khusus `SUPERADMIN_IT`: Permission Fitur, Knowledge AI Terpusat, Hierarki Tenant & Support)
+- Alasan/keputusan: Sebelumnya semua modul menumpuk di satu halaman Dashboard IT dan panel permission masih memuat akun Superadmin dalam split-view. Pemisahan halaman + flow tabel user -> detail membuat navigasi lebih terstruktur dan fokus pada 6 role operasional.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`)
+- Berikutnya: Uji alur klik menu sidebar & tabel -> detail permission di browser pada akun `SUPERADMIN_IT`.
+- Catatan: Filter `CORE_SIX_ROLES` di `PermissionMatrixPanel.tsx` secara ketat mengecualikan `SUPERADMIN` dan `SUPERADMIN_IT`.
+
+## P-092 | 2026-11-25 | Pop-up Pengingat & Notification Center Dinamis Semua Role + Auto-Load .env Backend
+- Status: selesai di lokal
+- Ubah: `src/components/RoleNotificationCenter.tsx` (baru: `RoleNotificationBell` & `buildRoleGreetingAndNotifications`), `src/App.tsx` (greeting `showAssistantGreeting` & header bell memakai data real `/api/dashboard/summary` per role), `server/db.ts` (auto-load `.env` via `process.loadEnvFile()` bila `DATABASE_URL` belum terset)
+- Alasan/keputusan: (1) Pop-up pengingat sebelumnya static untuk SE dan tombol notifikasi tidak membuka panel di role lain. (2) Error `404` disebabkan proses lama `server.mjs` (22:40) belum di-restart, lalu berubah jadi `500` saat `node dist-server.mjs` dijalankan tanpa `--env-file=.env` sehingga jatuh ke fallback port `5433` padahal PostgreSQL berjalan di `5435` (`.env`).
+- Verifikasi: `npm run build`, `bun build server/index.ts --outfile dist-server.mjs --target node --packages=external`, server jalan di `:3040` terhubung PostgreSQL `:5435` tanpa error startup
+- Berikutnya: Refresh browser & uji Knowledge AI IT + pop-up pengingat di semua role.
+- Catatan: `server/db.ts` kini otomatis membaca `.env` saat dijalankan via `node dist-server.mjs` tanpa flag tambahan.
+
+## P-091 | 2026-11-25 | Knowledge AI Terpusat di Panel IT + Integrasi OCR Lokal & AI Engine
+- Status: selesai di lokal
+- Ubah: `db/migrations/0024_ai_central_knowledge.sql`, `server/truth-engine.ts` (`getCentralAiKnowledge`, `rebuildCentralKnowledgeFromDocs`, `saveCentralAiKnowledge`), `server/index.ts` (`/api/it/knowledge-ai*`), `server/ai-engine.ts` (suntik `masterMarkdown` ke `systemPrompt`), `src/components/it/ItKnowledgeAiPanel.tsx`, `src/components/superadmin/ItCommandCenterDashboard.tsx`, `src/App.tsx` (panel & navigasi Knowledge AI di role IT)
+- Alasan/keputusan: Memusatkan seluruh materi training/knowledge AI (termasuk hasil ekstrak brosur PDF/gambar via `doc-extractor.py` + `RapidOCR` lokal) ke 1 data `sales_os.ai_central_knowledge` yang dikelola Divisi IT.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`), `bun build server/index.ts`, dan uji DB + ekstraktor lokal
+- Berikutnya: Jalankan server & uji unggah brosur PDF/gambar melalui browser di dashboard IT.
+- Catatan: Pastikan Python + `pymupdf` + `rapidocr_onnxruntime` terpasang pada lingkungan server produksi.
+
+## P-090 | 2026-11-25 | Permission Matrix Superadmin IT + Migrasi Dashboard, Referral, DLP & Marketing ke DB
+- Status: selesai di lokal
+- Ubah: `db/migrations/0023_permissions_and_full_db.sql`, `server/permissions.ts` (matriks izin per-user & global-role CRUD), `server/index.ts` (`/api/permissions/me`, `/api/superadmin/permissions`, `/api/dashboard/summary`, `/api/escalations`, `/api/referrals`, `/api/partner-config`, `/api/complaints`, `/api/marketing/campaigns`, `/api/project-settings`), `src/components/superadmin/PermissionMatrixPanel.tsx`, `src/components/superadmin/ItCommandCenterDashboard.tsx`, `src/components/CustomerComplaintsPage.tsx`, `src/components/ReferralProgramPage.tsx`, `src/App.tsx`
+- Alasan/keputusan: Memberi kontrol permission CRUD granular per-user & global-role di Superadmin IT serta menyambungkan modul Referral, Keluhan DLP, Eskalasi Direksi, dan ringkasan dashboard SM/TL/Admin/IT/DM ke PostgreSQL.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`), `bun build server/index.ts`, dan uji alur DB/API
+- Berikutnya: Jalankan server & lakukan uji end-to-end dengan PostgreSQL aktif.
+- Catatan: Resolusi permission memprioritaskan override Per-User di atas Global Role.
+
+## P-089 | 2026-11-25 | Vault KPR & KPR Bank DB Asli (Lead-Linked), Approval SM/Admin, & Kelola User 6 Role
+- Status: selesai di lokal (migrasi 0022 belum dijalankan ke DB produksi)
+- Ubah: `db/migrations/0022_vault_kpr_and_org_users.sql`, `server/auth.ts` (`BASIC_ORG_ROLES`, `listTenantUsers`, `createTenantUser`, `updateTenantUserStatus`), `server/index.ts` (`/api/org/users`, `/api/vault/documents`, `/api/kpr/applications` dengan auto-sync lead KPR), `src/components/SecureDocumentVaultPage.tsx` (pilih dari lead + input manual, multi-dokumen sekaligus, dikelompokkan per nama debitur, approval SM/Admin), `src/components/BankSubmissionWorkflowPage.tsx` (auto-sync lead KPR, pilih lead + manual, edit/majukan tahap ke DB), `src/components/OrgUserManagementModal.tsx`, `src/App.tsx` (tombol Kelola User 6 Role di SM & Admin + navigasi Vault/KPR)
+- Alasan/keputusan: Menghilangkan data dummy `localStorage` pada Vault KPR & KPR Bank, mendukung multi-dokumen per nama pengguna dari daftar lead, serta memberi Admin & SM manajemen user 6 role dasar.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`), `bun build server/index.ts`, dan `bun test tests`
+- Berikutnya: Jalankan migrasi `0022` pada PostgreSQL & lanjutkan Fase 3 (migrasi `CustomerComplaintsPage`, `ReferralProgramPage`, dan tabel ringkasan dummy di `SM`/`ADMIN`/`DIREKSI`)
+- Catatan: Role `SM`, `ADMIN`, dan `DIREKSI` di `App.tsx` masih memiliki beberapa ringkasan dashboard (`BOOKING_TRANSACTIONS`, `SE_TEAM_DATA`, `ESCALATION_DATA`) yang belum tersambung ke endpoint DB.
+
 ## P-088 | 2026-11-25 | Merge IT-kantor ke branch 2FA + penguatan 2FA & akses mitra
 - Status: selesai di lokal (branch `feat/totp-2fa`, belum push/deploy)
 - Ubah: `server/auth.ts` (batas 5 percobaan/15 menit, secret aktif tak bisa ditimpa, klaim step & recovery atomik), `server/partner-access.ts` (tolak-default mitra), `server/index.ts`, `src/App.tsx` (logout mencabut sesi server), `src/components/LoginModal.tsx` (tombol akun demo dihapus), `src/lib/auth/dummy-accounts.ts` (login/OTP offline dihapus), `tests/auth-dummy.test.ts`, `tests/totp-2fa-guardrails.test.ts`, `tests/totp-auth-flow.test.ts`

@@ -1,22 +1,25 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ShieldCheck,
   Lock,
   Upload,
   Clock,
-  Download,
-  Eye,
   Building2,
   Search,
   Filter,
   CheckCircle2,
   AlertCircle,
   Plus,
+  Trash2,
+  XCircle,
+  UserCheck,
+  FileText,
 } from 'lucide-react';
-import { loadPersistedState, savePersistedState } from '../lib/navigation/router';
+import { loadAuthSession } from '../lib/auth/dummy-accounts';
 
 export interface VaultDocument {
   id: string;
+  leadId?: string | null;
   docType: 'KTP' | 'NPWP' | 'SLIP_GAJI' | 'REKENING_KORAN' | 'SURAT_NIKAH' | 'SPT_TAHUNAN';
   leadName: string;
   unitInterest: string;
@@ -24,8 +27,22 @@ export interface VaultDocument {
   fileSize: string;
   uploadedAt: string;
   expiresAt: string;
-  status: 'TERVERIFIKASI' | 'PERLU_REVIEW' | 'EXPIRED';
+  status: 'TERVERIFIKASI' | 'PERLU_REVIEW' | 'DITOLAK' | 'EXPIRED';
+  reviewedBy?: string | null;
   accessGrantedBanks: string[];
+}
+
+interface PipelineLeadOption {
+  id: string;
+  full_name: string;
+  unit_interest: string;
+  payment_scheme?: string;
+}
+
+interface DraftDocRow {
+  docType: VaultDocument['docType'];
+  fileName: string;
+  fileSize: string;
 }
 
 interface SecureDocumentVaultPageProps {
@@ -34,74 +51,61 @@ interface SecureDocumentVaultPageProps {
   userRole?: string;
 }
 
+const BANK_OPTIONS = ['Bank BSI', 'Bank BTN', 'Bank Mandiri', 'Bank BRI'] as const;
+
+function getAuthHeaders(): HeadersInit {
+  const session = loadAuthSession();
+  return {
+    'Content-Type': 'application/json',
+    ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+  };
+}
+
+function mapApiDoc(row: any): VaultDocument {
+  const created = row.created_at ? new Date(row.created_at) : new Date();
+  const expires = row.expires_at ? String(row.expires_at).slice(0, 10) : '-';
+  let banks: string[] = [];
+  if (Array.isArray(row.access_granted_banks)) {
+    banks = row.access_granted_banks;
+  } else if (typeof row.access_granted_banks === 'string') {
+    try {
+      const parsed = JSON.parse(row.access_granted_banks);
+      if (Array.isArray(parsed)) banks = parsed;
+    } catch {
+      banks = [];
+    }
+  }
+  return {
+    id: String(row.id),
+    leadId: row.lead_id ? String(row.lead_id) : null,
+    docType: (row.doc_type || 'KTP') as VaultDocument['docType'],
+    leadName: String(row.lead_full_name || row.lead_name || 'Tanpa Nama'),
+    unitInterest: String(row.unit_interest || '-'),
+    fileName: String(row.file_name || ''),
+    fileSize: String(row.file_size || '1.0 MB'),
+    uploadedAt: created.toLocaleString('id-ID', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+    expiresAt: expires,
+    status: (row.status || 'PERLU_REVIEW') as VaultDocument['status'],
+    reviewedBy: row.reviewed_by ? String(row.reviewed_by) : null,
+    accessGrantedBanks: banks,
+  };
+}
+
 export const SecureDocumentVaultPage: React.FC<SecureDocumentVaultPageProps> = ({
   projectName = 'The Park Townhouse Sukoharjo',
   projectId = 'the-park-sukoharjo',
+  userRole = 'SE',
 }) => {
-  const [documents, setDocuments] = useState<VaultDocument[]>(() =>
-    loadPersistedState<VaultDocument[]>(`devos_vault_docs_${projectId}`, [
-      {
-        id: 'doc_1',
-        docType: 'KTP',
-        leadName: 'Pak Andi Pratama',
-        unitInterest: 'Nagoya A-01',
-        fileName: 'ktp_andi_pratama_masked.pdf',
-        fileSize: '1.2 MB',
-        uploadedAt: '2026-11-24 14:20 WIB',
-        expiresAt: '2026-12-24 (29 hari lagi)',
-        status: 'TERVERIFIKASI',
-        accessGrantedBanks: ['Bank BSI', 'Bank BTN'],
-      },
-      {
-        id: 'doc_2',
-        docType: 'NPWP',
-        leadName: 'Pak Andi Pratama',
-        unitInterest: 'Nagoya A-01',
-        fileName: 'npwp_debitur_andi.pdf',
-        fileSize: '850 KB',
-        uploadedAt: '2026-11-24 14:22 WIB',
-        expiresAt: '2026-12-24 (29 hari lagi)',
-        status: 'TERVERIFIKASI',
-        accessGrantedBanks: ['Bank BSI'],
-      },
-      {
-        id: 'doc_3',
-        docType: 'SLIP_GAJI',
-        leadName: 'Ibu Ratna Dewi',
-        unitInterest: 'Osaka B-03',
-        fileName: 'slip_gaji_3bln_pt_majumakmur.pdf',
-        fileSize: '2.4 MB',
-        uploadedAt: '2026-11-25 09:10 WIB',
-        expiresAt: '2026-12-25 (30 hari lagi)',
-        status: 'PERLU_REVIEW',
-        accessGrantedBanks: ['Bank BSI', 'Bank BTN', 'Bank Mandiri'],
-      },
-      {
-        id: 'doc_4',
-        docType: 'REKENING_KORAN',
-        leadName: 'Ibu Ratna Dewi',
-        unitInterest: 'Osaka B-03',
-        fileName: 'rekening_koran_mandiri_3bln.pdf',
-        fileSize: '4.8 MB',
-        uploadedAt: '2026-11-25 09:15 WIB',
-        expiresAt: '2026-12-25 (30 hari lagi)',
-        status: 'TERVERIFIKASI',
-        accessGrantedBanks: ['Bank Mandiri'],
-      },
-      {
-        id: 'doc_5',
-        docType: 'SURAT_NIKAH',
-        leadName: 'Pak Budi Hartono',
-        unitInterest: 'Tokyo C-05',
-        fileName: 'buku_nikah_budi_hartono.pdf',
-        fileSize: '1.6 MB',
-        uploadedAt: '2026-11-23 11:00 WIB',
-        expiresAt: '2026-12-23 (28 hari lagi)',
-        status: 'TERVERIFIKASI',
-        accessGrantedBanks: ['Bank BTN', 'Bank BRI'],
-      },
-    ])
-  );
+  const [documents, setDocuments] = useState<VaultDocument[]>([]);
+  const [leads, setLeads] = useState<PipelineLeadOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL');
@@ -109,129 +113,299 @@ export const SecureDocumentVaultPage: React.FC<SecureDocumentVaultPageProps> = (
   const [toast, setToast] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
-  // Form State
-  const [newLeadName, setNewLeadName] = useState('');
-  const [newUnit, setNewUnit] = useState('');
-  const [newDocType, setNewDocType] = useState<VaultDocument['docType']>('KTP');
-  const [newBankBsi, setNewBankBsi] = useState(true);
-  const [newBankBtn, setNewBankBtn] = useState(false);
-  const [newBankMandiri, setNewBankMandiri] = useState(false);
+  // Mode input: pilih lead (default) atau manual di luar lead
+  const [inputMode, setInputMode] = useState<'LEAD' | 'MANUAL'>('LEAD');
+  const [selectedLeadId, setSelectedLeadId] = useState('');
+  const [manualLeadName, setManualLeadName] = useState('');
+  const [unitInterest, setUnitInterest] = useState('');
+  const [draftDocs, setDraftDocs] = useState<DraftDocRow[]>([
+    { docType: 'KTP', fileName: '', fileSize: '1.0 MB' },
+  ]);
+  const [selectedBanks, setSelectedBanks] = useState<string[]>(['Bank BSI']);
+
+  const canApprove = ['SM', 'ADMIN', 'TL', 'DIREKSI', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(
+    userRole
+  );
 
   const showToastMsg = (msg: string) => {
     setToast(msg);
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3200);
   };
 
-  const handleToggleBank = (docId: string, bank: string) => {
-    const updated = documents.map((doc) => {
-      if (doc.id === docId) {
-        const has = doc.accessGrantedBanks.includes(bank);
-        const banks = has
-          ? doc.accessGrantedBanks.filter((b) => b !== bank)
-          : [...doc.accessGrantedBanks, bank];
-        return { ...doc, accessGrantedBanks: banks };
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const headers = getAuthHeaders();
+      const [docsRes, leadsRes] = await Promise.all([
+        fetch(`/api/vault/documents?projectId=${encodeURIComponent(projectId)}`, {
+          credentials: 'include',
+          headers,
+        }),
+        fetch('/api/pipeline/leads', { credentials: 'include', headers }),
+      ]);
+      if (docsRes.ok) {
+        const dJson = await docsRes.json();
+        setDocuments(Array.isArray(dJson.documents) ? dJson.documents.map(mapApiDoc) : []);
       }
-      return doc;
-    });
-    setDocuments(updated);
-    savePersistedState(`devos_vault_docs_${projectId}`, updated);
-    showToastMsg(`Hak akses dokumen untuk ${bank} berhasil diperbarui.`);
+      if (leadsRes.ok) {
+        const lJson = await leadsRes.json();
+        const leadRows: PipelineLeadOption[] = Array.isArray(lJson.leads) ? lJson.leads : [];
+        setLeads(leadRows);
+        if (leadRows.length > 0 && !selectedLeadId) {
+          setSelectedLeadId(leadRows[0].id);
+          setUnitInterest(leadRows[0].unit_interest || '');
+        }
+      }
+    } catch {
+      showToastMsg('Gagal memuat data Vault dari server.');
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleSelectLead = (leadId: string) => {
+    setSelectedLeadId(leadId);
+    const found = leads.find((l) => l.id === leadId);
+    if (found) {
+      setUnitInterest(found.unit_interest || '');
+    }
   };
 
-  const handleAddDocument = (e: React.FormEvent) => {
+  const handleAddDraftRow = () => {
+    setDraftDocs((prev) => [...prev, { docType: 'NPWP', fileName: '', fileSize: '1.0 MB' }]);
+  };
+
+  const handleRemoveDraftRow = (idx: number) => {
+    setDraftDocs((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleDraftChange = (idx: number, patch: Partial<DraftDocRow>) => {
+    setDraftDocs((prev) => prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
+  };
+
+  const handleFilePick = (idx: number, file: File | undefined) => {
+    if (!file) return;
+    const sizeMb =
+      file.size >= 1024 * 1024
+        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+        : `${Math.max(1, Math.round(file.size / 1024))} KB`;
+    handleDraftChange(idx, { fileName: file.name, fileSize: sizeMb });
+  };
+
+  const handleAddDocuments = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newLeadName.trim()) {
-      showToastMsg('Nama calon debitur wajib diisi');
+    if (inputMode === 'LEAD' && !selectedLeadId) {
+      showToastMsg('Pilih nama lead terlebih dahulu.');
+      return;
+    }
+    if (inputMode === 'MANUAL' && !manualLeadName.trim()) {
+      showToastMsg('Nama debitur wajib diisi.');
+      return;
+    }
+    const validDocs = draftDocs.filter((d) => d.fileName.trim().length > 0);
+    if (validDocs.length === 0) {
+      showToastMsg('Minimal 1 berkas dokumen (nama file) wajib diisi.');
       return;
     }
 
-    const granted: string[] = [];
-    if (newBankBsi) granted.push('Bank BSI');
-    if (newBankBtn) granted.push('Bank BTN');
-    if (newBankMandiri) granted.push('Bank Mandiri');
-
-    const newDoc: VaultDocument = {
-      id: `doc_${Date.now()}`,
-      docType: newDocType,
-      leadName: newLeadName.trim(),
-      unitInterest: newUnit.trim() || 'Unit Standard',
-      fileName: `${newDocType.toLowerCase()}_${newLeadName.toLowerCase().replace(/\s+/g, '_')}_encrypted.pdf`,
-      fileSize: '1.5 MB',
-      uploadedAt: 'Hari ini (Baru)',
-      expiresAt: '30 hari ke depan',
-      status: 'PERLU_REVIEW',
-      accessGrantedBanks: granted.length > 0 ? granted : ['Bank BSI'],
-    };
-
-    const next = [newDoc, ...documents];
-    setDocuments(next);
-    savePersistedState(`devos_vault_docs_${projectId}`, next);
-    setNewLeadName('');
-    setNewUnit('');
-    setShowAddForm(false);
-    showToastMsg('Dokumen KPR baru berhasil diunggah ke Vault Terenkripsi AES-256.');
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/vault/documents', {
+        method: 'POST',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          projectId,
+          leadId: inputMode === 'LEAD' ? selectedLeadId : null,
+          leadName: inputMode === 'MANUAL' ? manualLeadName.trim() : undefined,
+          unitInterest: unitInterest.trim(),
+          documents: validDocs.map((d) => ({
+            docType: d.docType,
+            fileName: d.fileName.trim(),
+            fileSize: d.fileSize,
+            accessGrantedBanks: selectedBanks,
+          })),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        showToastMsg(json.error || 'Gagal menyimpan dokumen ke database.');
+        return;
+      }
+      const created = Array.isArray(json.documents) ? json.documents.map(mapApiDoc) : [];
+      setDocuments((prev) => [...created, ...prev]);
+      setDraftDocs([{ docType: 'KTP', fileName: '', fileSize: '1.0 MB' }]);
+      setManualLeadName('');
+      setShowAddForm(false);
+      showToastMsg(`${created.length} dokumen berhasil disimpan ke database.`);
+    } catch {
+      showToastMsg('Gagal terhubung ke server.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const filteredDocs = documents.filter((doc) => {
-    const matchSearch =
-      doc.leadName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.fileName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.unitInterest.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchType = filterType === 'ALL' || doc.docType === filterType;
-    const matchStatus = filterStatus === 'ALL' || doc.status === filterStatus;
-    return matchSearch && matchType && matchStatus;
-  });
+  const handleToggleBankAccess = async (doc: VaultDocument, bankName: string) => {
+    const hasAccess = doc.accessGrantedBanks.includes(bankName);
+    const nextBanks = hasAccess
+      ? doc.accessGrantedBanks.filter((b) => b !== bankName)
+      : [...doc.accessGrantedBanks, bankName];
+
+    try {
+      const res = await fetch('/api/vault/documents', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ id: doc.id, accessGrantedBanks: nextBanks }),
+      });
+      if (res.ok) {
+        setDocuments((prev) =>
+          prev.map((d) => (d.id === doc.id ? { ...d, accessGrantedBanks: nextBanks } : d))
+        );
+        showToastMsg(
+          hasAccess
+            ? `Akses ${bankName} untuk ${doc.fileName} dicabut`
+            : `Akses ${bankName} untuk ${doc.fileName} dibuka`
+        );
+      }
+    } catch {
+      showToastMsg('Gagal memperbarui akses bank.');
+    }
+  };
+
+  const handleApproval = async (
+    doc: VaultDocument,
+    status: 'TERVERIFIKASI' | 'DITOLAK'
+  ) => {
+    try {
+      const res = await fetch('/api/vault/documents', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ id: doc.id, status }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        showToastMsg(json.error || 'Gagal memperbarui status verifikasi.');
+        return;
+      }
+      setDocuments((prev) =>
+        prev.map((d) => (d.id === doc.id ? mapApiDoc(json.document) : d))
+      );
+      showToastMsg(
+        status === 'TERVERIFIKASI'
+          ? `Dokumen ${doc.fileName} disetujui.`
+          : `Dokumen ${doc.fileName} ditolak.`
+      );
+    } catch {
+      showToastMsg('Gagal menghubungi server.');
+    }
+  };
+
+  const handleDeleteDoc = async (doc: VaultDocument) => {
+    try {
+      const res = await fetch(`/api/vault/documents?id=${encodeURIComponent(doc.id)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+        showToastMsg(`Dokumen ${doc.fileName} dihapus.`);
+      }
+    } catch {
+      showToastMsg('Gagal menghapus dokumen.');
+    }
+  };
+
+  const filteredDocs = useMemo(() => {
+    return documents.filter((doc) => {
+      const matchSearch =
+        doc.leadName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        doc.unitInterest.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        doc.fileName.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchType = filterType === 'ALL' || doc.docType === filterType;
+      const matchStatus = filterStatus === 'ALL' || doc.status === filterStatus;
+      return matchSearch && matchType && matchStatus;
+    });
+  }, [documents, searchTerm, filterType, filterStatus]);
+
+  // Kelompokkan berdasarkan nama pengguna / debitur agar multi-dokumen terlihat rapi per nama
+  const groupedByUser = useMemo(() => {
+    const map = new Map<
+      string,
+      { key: string; leadName: string; unitInterest: string; docs: VaultDocument[] }
+    >();
+    for (const doc of filteredDocs) {
+      const key = `${doc.leadId || doc.leadName.toLowerCase()}__${doc.leadName}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.docs.push(doc);
+      } else {
+        map.set(key, {
+          key,
+          leadName: doc.leadName,
+          unitInterest: doc.unitInterest,
+          docs: [doc],
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [filteredDocs]);
 
   const verifiedCount = documents.filter((d) => d.status === 'TERVERIFIKASI').length;
   const reviewCount = documents.filter((d) => d.status === 'PERLU_REVIEW').length;
 
   return (
-    <div className="space-y-5 pb-20 md:pb-8">
-      {/* Header Halaman Utama (Quiet Chrome) */}
-      <div className="bg-white border border-warmborder rounded-2xl p-5 sm:p-6 space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-start sm:items-center gap-3.5 min-w-0">
-            <div className="size-10 sm:size-11 rounded-xl bg-sandstone border border-warmborder text-espresso flex items-center justify-center shrink-0">
-              <Lock className="size-5 text-olive" />
+    <div className="space-y-6">
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50 bg-espresso text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2 border border-white/10">
+          <ShieldCheck className="size-4 text-amber-400" />
+          <span>{toast}</span>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="size-12 rounded-2xl bg-olive/10 border border-olive/20 flex items-center justify-center shrink-0">
+              <Lock className="size-6 text-olive" />
             </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold text-espresso">
-                  Dokumen Vault KPR
-                </h1>
-                <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-sandstone text-espresso/80 border border-warmborder flex items-center gap-1 shrink-0">
-                  <ShieldCheck className="size-3.5 text-olive" /> AES-256 GCM
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl font-extrabold text-espresso">Dokumen Vault KPR</h1>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-olive/10 text-olive text-[11px] font-bold border border-olive/20">
+                  <ShieldCheck className="size-3" /> Data Nyata PostgreSQL
                 </span>
               </div>
-              <p className="text-xs text-warmmuted mt-0.5">
-                {projectName} &middot; Berkas Pemohon KPR &amp; Hak Akses Perbankan
+              <p className="text-xs text-warmmuted mt-1">
+                {projectName} · Berkas Pemohon KPR Dikelompokkan per Nama Debitur &amp; Hak Akses Perbankan
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="h-9 px-3.5 rounded-lg bg-terracotta hover:bg-terracotta/90 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Plus className="size-3.5 shrink-0" />
-              <span>{showAddForm ? 'Tutup Form' : 'Unggah Dokumen'}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Banner Kepatuhan Regulasi & Privasi */}
-        <div className="pt-3 border-t border-warmborder/60 text-xs text-warmmuted flex items-start gap-2">
-          <ShieldCheck className="size-4 text-olive shrink-0 mt-0.5" />
-          <p className="leading-relaxed">
-            <strong className="text-espresso">UU PDP &amp; Standar Perbankan:</strong> Berkas terenkripsi dengan pre-signed URL (kadaluarsa 30 hari). Akses terbatas hanya untuk bank mitra yang disetujui.
-          </p>
+          <button
+            onClick={() => setShowAddForm((v) => !v)}
+            className="px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 shadow-sm"
+          >
+            <Plus className="size-4" /> {showAddForm ? 'Tutup Form' : 'Unggah Dokumen Debitur'}
+          </button>
         </div>
       </div>
 
-      {/* 4 Kartu Metrik Ringkas */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Ringkasan KPI */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white border border-warmborder rounded-xl p-4">
+          <span className="text-[11px] text-warmmuted block">Total Debitur Terdaftar</span>
+          <span className="text-xl font-bold text-espresso mt-1 block tabular-nums">
+            {groupedByUser.length} <span className="text-xs font-normal text-warmmuted">Nama</span>
+          </span>
+        </div>
         <div className="bg-white border border-warmborder rounded-xl p-4">
           <span className="text-[11px] text-warmmuted block">Total Dokumen Vault</span>
           <span className="text-xl font-bold text-espresso mt-1 block tabular-nums">
@@ -240,148 +414,242 @@ export const SecureDocumentVaultPage: React.FC<SecureDocumentVaultPageProps> = (
         </div>
         <div className="bg-white border border-warmborder rounded-xl p-4">
           <span className="text-[11px] text-warmmuted block">Terverifikasi &amp; Aman</span>
-          <span className="text-xl font-bold text-espresso mt-1 block tabular-nums">
+          <span className="text-xl font-bold text-olive mt-1 block tabular-nums">
             {verifiedCount} <span className="text-xs font-normal text-olive font-medium">Berkas</span>
           </span>
         </div>
         <div className="bg-white border border-warmborder rounded-xl p-4">
-          <span className="text-[11px] text-warmmuted block">Perlu Review</span>
-          <span className="text-xl font-bold text-espresso mt-1 block tabular-nums">
+          <span className="text-[11px] text-warmmuted block">Menunggu Review SM/Admin</span>
+          <span className="text-xl font-bold text-terracotta mt-1 block tabular-nums">
             {reviewCount} <span className="text-xs font-normal text-terracotta font-medium">Berkas</span>
-          </span>
-        </div>
-        <div className="bg-white border border-warmborder rounded-xl p-4">
-          <span className="text-[11px] text-warmmuted block">Bank Mitra Terkoneksi</span>
-          <span className="text-xl font-bold text-espresso mt-1 block tabular-nums">
-            4 Bank <span className="text-xs font-normal text-warmmuted">(BSI, BTN, Mandiri, BRI)</span>
           </span>
         </div>
       </div>
 
-      {/* Form Tambah Dokumen (Inline Page Form, Bukan Popup) */}
+      {/* Form Tambah Multi-Dokumen */}
       {showAddForm && (
         <form
-          onSubmit={handleAddDocument}
-          className="bg-white border-2 border-terracotta/30 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 animate-in fade-in duration-200"
+          onSubmit={handleAddDocuments}
+          className="bg-white border-2 border-terracotta/30 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4"
         >
-          <div className="flex items-center justify-between pb-3 border-b border-warmborder">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-warmborder">
             <h3 className="text-sm font-extrabold text-espresso flex items-center gap-2">
-              <Upload className="size-4 text-terracotta" /> Form Unggah Dokumen Sensitif Debitur KPR
+              <Upload className="size-4 text-terracotta" /> Unggah Multi-Dokumen per Debitur
             </h3>
-            <span className="text-xs text-warmmuted">Enkripsi otomatis saat simpan</span>
+            <div className="flex items-center gap-1.5 bg-sandstone p-1 rounded-xl text-xs">
+              <button
+                type="button"
+                onClick={() => setInputMode('LEAD')}
+                className={`px-3 py-1 rounded-lg font-bold cursor-pointer ${
+                  inputMode === 'LEAD' ? 'bg-espresso text-white' : 'text-warmmuted'
+                }`}
+              >
+                Pilih dari Lead
+              </button>
+              <button
+                type="button"
+                onClick={() => setInputMode('MANUAL')}
+                className={`px-3 py-1 rounded-lg font-bold cursor-pointer ${
+                  inputMode === 'MANUAL' ? 'bg-espresso text-white' : 'text-warmmuted'
+                }`}
+              >
+                Input Manual
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
-            <div>
-              <label className="font-bold text-espresso block mb-1">Nama Calon Debitur / Nasabah</label>
-              <input
-                type="text"
-                value={newLeadName}
-                onChange={(e) => setNewLeadName(e.target.value)}
-                placeholder="Contoh: Budi Santoso"
-                className="w-full h-10 px-3 rounded-xl border border-warmborder bg-sandstone text-espresso focus:outline-none focus:ring-1 focus:ring-terracotta font-medium"
-                required
-              />
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            {inputMode === 'LEAD' ? (
+              <div>
+                <label className="font-bold text-espresso block mb-1">
+                  Pilih Nama Lead (Dari Pipeline)
+                </label>
+                <select
+                  value={selectedLeadId}
+                  onChange={(e) => handleSelectLead(e.target.value)}
+                  className="w-full h-10 px-3 rounded-xl border border-warmborder bg-sandstone text-espresso font-semibold"
+                  required
+                >
+                  {leads.length === 0 ? (
+                    <option value="">Belum ada lead di pipeline</option>
+                  ) : (
+                    leads.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.full_name} {l.unit_interest ? `· ${l.unit_interest}` : ''}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label className="font-bold text-espresso block mb-1">
+                  Nama Calon Debitur (Manual di Luar Lead)
+                </label>
+                <input
+                  type="text"
+                  value={manualLeadName}
+                  onChange={(e) => setManualLeadName(e.target.value)}
+                  placeholder="Contoh: Pak Budi Santoso"
+                  className="w-full h-10 px-3 rounded-xl border border-warmborder bg-sandstone text-espresso font-medium"
+                  required
+                />
+              </div>
+            )}
+
             <div>
               <label className="font-bold text-espresso block mb-1">Unit Pilihan Konsumen</label>
               <input
                 type="text"
-                value={newUnit}
-                onChange={(e) => setNewUnit(e.target.value)}
+                value={unitInterest}
+                onChange={(e) => setUnitInterest(e.target.value)}
                 placeholder="Contoh: Nagoya A-02"
-                className="w-full h-10 px-3 rounded-xl border border-warmborder bg-sandstone text-espresso focus:outline-none focus:ring-1 focus:ring-terracotta font-medium"
+                className="w-full h-10 px-3 rounded-xl border border-warmborder bg-sandstone text-espresso font-medium"
               />
             </div>
-            <div>
-              <label className="font-bold text-espresso block mb-1">Jenis Dokumen KPR</label>
-              <select
-                value={newDocType}
-                onChange={(e) => setNewDocType(e.target.value as VaultDocument['docType'])}
-                className="w-full h-10 px-3 rounded-xl border border-warmborder bg-sandstone text-espresso focus:outline-none focus:ring-1 focus:ring-terracotta font-bold"
+          </div>
+
+          {/* Daftar Multi-Dokumen */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="font-bold text-espresso text-xs">
+                Daftar Dokumen yang Diunggah untuk Nama Ini ({draftDocs.length} Berkas)
+              </label>
+              <button
+                type="button"
+                onClick={handleAddDraftRow}
+                className="px-3 py-1.5 rounded-lg bg-sandstone hover:bg-warmborder text-espresso text-xs font-bold flex items-center gap-1 cursor-pointer"
               >
-                <option value="KTP">KTP (Kartu Tanda Penduduk)</option>
-                <option value="NPWP">NPWP Pribadi</option>
-                <option value="SLIP_GAJI">Slip Gaji 3 Bulan Terakhir</option>
-                <option value="REKENING_KORAN">Rekening Koran 3 Bulan</option>
-                <option value="SURAT_NIKAH">Buku / Surat Nikah</option>
-                <option value="SPT_TAHUNAN">SPT Tahunan PPh 21</option>
-              </select>
+                <Plus className="size-3.5" /> Tambah Baris Dokumen
+              </button>
             </div>
+
+            {draftDocs.map((row, idx) => (
+              <div
+                key={idx}
+                className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-sandstone/60 p-3 rounded-xl border border-warmborder text-xs"
+              >
+                <div className="sm:col-span-3">
+                  <select
+                    value={row.docType}
+                    onChange={(e) =>
+                      handleDraftChange(idx, {
+                        docType: e.target.value as VaultDocument['docType'],
+                      })
+                    }
+                    className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-white text-espresso font-bold"
+                  >
+                    <option value="KTP">KTP</option>
+                    <option value="NPWP">NPWP</option>
+                    <option value="SLIP_GAJI">Slip Gaji 3 Bln</option>
+                    <option value="REKENING_KORAN">Rekening Koran 3 Bln</option>
+                    <option value="SURAT_NIKAH">Buku / Surat Nikah</option>
+                    <option value="SPT_TAHUNAN">SPT Tahunan PPh 21</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-5">
+                  <input
+                    type="text"
+                    value={row.fileName}
+                    onChange={(e) => handleDraftChange(idx, { fileName: e.target.value })}
+                    placeholder="Nama berkas, mis: ktp_debitur.pdf"
+                    className="w-full h-9 px-3 rounded-lg border border-warmborder bg-white text-espresso"
+                    required
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <input
+                    type="file"
+                    onChange={(e) => handleFilePick(idx, e.target.files?.[0])}
+                    className="w-full text-[11px] text-warmmuted file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:bg-espresso file:text-white file:font-semibold"
+                  />
+                </div>
+                <div className="sm:col-span-1 flex justify-end">
+                  {draftDocs.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveDraftRow(idx)}
+                      className="p-2 rounded-lg text-rose-600 hover:bg-rose-50 cursor-pointer"
+                      title="Hapus baris"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
 
+          {/* Akses Bank */}
           <div>
-            <label className="font-bold text-espresso block mb-1 text-xs">Beri Akses Langsung ke Bank Mitra KPR:</label>
+            <label className="font-bold text-espresso block mb-1 text-xs">
+              Beri Akses Langsung ke Bank Mitra KPR:
+            </label>
             <div className="flex flex-wrap gap-4 pt-1">
-              <label className="inline-flex items-center gap-2 text-xs font-semibold text-espresso cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={newBankBsi}
-                  onChange={(e) => setNewBankBsi(e.target.checked)}
-                  className="rounded text-terracotta focus:ring-terracotta"
-                />
-                Bank Syariah Indonesia (BSI)
-              </label>
-              <label className="inline-flex items-center gap-2 text-xs font-semibold text-espresso cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={newBankBtn}
-                  onChange={(e) => setNewBankBtn(e.target.checked)}
-                  className="rounded text-terracotta focus:ring-terracotta"
-                />
-                Bank Tabungan Negara (BTN)
-              </label>
-              <label className="inline-flex items-center gap-2 text-xs font-semibold text-espresso cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={newBankMandiri}
-                  onChange={(e) => setNewBankMandiri(e.target.checked)}
-                  className="rounded text-terracotta focus:ring-terracotta"
-                />
-                Bank Mandiri KPR
-              </label>
+              {BANK_OPTIONS.map((bank) => {
+                const checked = selectedBanks.includes(bank);
+                return (
+                  <label
+                    key={bank}
+                    className="inline-flex items-center gap-2 text-xs font-semibold text-espresso cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() =>
+                        setSelectedBanks((prev) =>
+                          checked ? prev.filter((b) => b !== bank) : [...prev, bank]
+                        )
+                      }
+                      className="rounded text-terracotta focus:ring-terracotta"
+                    />
+                    {bank}
+                  </label>
+                );
+              })}
             </div>
           </div>
 
-          <div className="pt-2 flex justify-end gap-2 border-t border-warmborder">
+          <div className="flex justify-end gap-2 pt-2 border-t border-warmborder">
             <button
               type="button"
               onClick={() => setShowAddForm(false)}
-              className="px-4 py-2 rounded-xl border border-warmborder text-xs font-bold text-espresso hover:bg-sandstone cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-xs font-bold text-espresso cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-bold cursor-pointer shadow-xs"
+              disabled={submitting}
+              className="px-5 py-2 rounded-xl bg-terracotta hover:bg-terracotta/90 disabled:opacity-50 text-xs font-bold text-white cursor-pointer"
             >
-              Simpan &amp; Enkripsi ke Vault
+              {submitting ? 'Menyimpan...' : `Simpan ${draftDocs.length} Dokumen ke DB`}
             </button>
           </div>
         </form>
       )}
 
-      {/* Toolbar Filter & Pencarian */}
-      <div className="bg-white border border-warmborder rounded-2xl p-4 shadow-2xs flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      {/* Filter & Search Bar */}
+      <div className="bg-white border border-warmborder rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
         <div className="relative flex-1">
-          <Search className="size-4 text-warmmuted absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="size-4 text-warmmuted absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
+            placeholder="Cari berdasarkan nama debitur, nomor unit, atau nama berkas..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Cari berdasarkan nama debitur, nomor unit, atau nama berkas..."
-            className="w-full h-10 pl-9 pr-3 rounded-xl border border-warmborder bg-sandstone text-xs text-espresso focus:outline-none focus:ring-1 focus:ring-terracotta font-medium"
+            className="w-full h-10 pl-10 pr-4 rounded-xl border border-warmborder bg-sandstone text-xs font-medium text-espresso focus:outline-none focus:ring-1 focus:ring-terracotta"
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <div className="flex items-center gap-1.5 text-xs text-warmmuted font-bold">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-warmmuted font-medium">
             <Filter className="size-3.5" /> Filter:
           </div>
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
-            className="h-10 px-3 rounded-xl border border-warmborder bg-sandstone text-xs font-bold text-espresso focus:outline-none focus:ring-1 focus:ring-terracotta"
+            className="h-10 px-3 rounded-xl border border-warmborder bg-sandstone text-xs font-bold text-espresso"
           >
             <option value="ALL">Semua Tipe Berkas</option>
             <option value="KTP">KTP</option>
@@ -389,133 +657,162 @@ export const SecureDocumentVaultPage: React.FC<SecureDocumentVaultPageProps> = (
             <option value="SLIP_GAJI">Slip Gaji</option>
             <option value="REKENING_KORAN">Rekening Koran</option>
             <option value="SURAT_NIKAH">Buku Nikah</option>
+            <option value="SPT_TAHUNAN">SPT Tahunan</option>
           </select>
+
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="h-10 px-3 rounded-xl border border-warmborder bg-sandstone text-xs font-bold text-espresso focus:outline-none focus:ring-1 focus:ring-terracotta"
+            className="h-10 px-3 rounded-xl border border-warmborder bg-sandstone text-xs font-bold text-espresso"
           >
             <option value="ALL">Semua Status</option>
             <option value="TERVERIFIKASI">Terverifikasi</option>
             <option value="PERLU_REVIEW">Perlu Review</option>
+            <option value="DITOLAK">Ditolak</option>
           </select>
         </div>
       </div>
 
-      {/* Tabel Dokumen Vault */}
-      <div className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-sandstone/70 border-b border-warmborder text-[11px] font-black uppercase tracking-wider text-warmmuted">
-              <tr>
-                <th className="py-3 px-4">Debitur &amp; Unit</th>
-                <th className="py-3 px-4">Tipe &amp; Nama Berkas</th>
-                <th className="py-3 px-4">Status &amp; Masa Berlaku</th>
-                <th className="py-3 px-4">Hak Akses Bank</th>
-                <th className="py-3 px-4 text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-warmborder">
-              {filteredDocs.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-warmmuted">
-                    Tidak ada dokumen vault yang cocok dengan kriteria pencarian.
-                  </td>
-                </tr>
-              ) : (
-                filteredDocs.map((doc) => (
-                  <tr key={doc.id} className="hover:bg-sandstone/30 transition-colors">
-                    <td className="py-3.5 px-4">
-                      <div className="font-bold text-espresso text-xs">{doc.leadName}</div>
-                      <div className="text-[11px] text-warmmuted flex items-center gap-1 mt-0.5">
-                        <Building2 className="size-3 text-terracotta" /> {doc.unitInterest}
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-espresso text-white text-[10px] font-extrabold shrink-0">
+      {/* Daftar Terkelompok per Nama Pengguna */}
+      {loading ? (
+        <div className="bg-white border border-warmborder rounded-2xl p-8 text-center text-xs text-warmmuted">
+          Memuat dokumen vault dari database...
+        </div>
+      ) : groupedByUser.length === 0 ? (
+        <div className="bg-white border border-warmborder rounded-2xl p-8 text-center text-xs text-warmmuted">
+          Belum ada dokumen vault pada proyek ini. Klik <strong>Unggah Dokumen Debitur</strong> untuk menambahkan dari daftar Lead.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {groupedByUser.map((group) => (
+            <div
+              key={group.key}
+              className="bg-white border border-warmborder rounded-2xl overflow-hidden shadow-sm"
+            >
+              {/* Header Nama Pengguna */}
+              <div className="px-5 py-3.5 bg-sandstone/70 border-b border-warmborder flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="size-9 rounded-xl bg-espresso text-white flex items-center justify-center font-bold text-xs">
+                    <UserCheck className="size-4 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-espresso">{group.leadName}</h3>
+                    <p className="text-[11px] text-warmmuted flex items-center gap-1">
+                      <Building2 className="size-3 text-terracotta" /> {group.unitInterest || 'Unit belum ditentukan'}
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full bg-white border border-warmborder text-[11px] font-bold text-espresso">
+                  {group.docs.length} Dokumen Tersimpan
+                </span>
+              </div>
+
+              {/* Daftar Dokumen Milik Pengguna Tersebut */}
+              <div className="divide-y divide-warmborder">
+                {group.docs.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 hover:bg-sandstone/30"
+                  >
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-2 py-0.5 rounded bg-espresso text-white text-[10px] font-bold">
                           {doc.docType}
                         </span>
-                        <span className="font-mono text-xs text-espresso font-semibold truncate max-w-[180px] sm:max-w-[240px]">
-                          {doc.fileName}
+                        <span className="font-mono text-xs font-bold text-espresso flex items-center gap-1.5">
+                          <FileText className="size-3.5 text-terracotta" /> {doc.fileName}
                         </span>
+                        <span className="text-[11px] text-warmmuted">({doc.fileSize})</span>
                       </div>
-                      <div className="text-[11px] text-warmmuted mt-0.5 flex items-center gap-2">
-                        <span>{doc.fileSize}</span>
-                        <span>&bull;</span>
+                      <div className="text-[11px] text-warmmuted flex items-center gap-3 flex-wrap">
                         <span>Diunggah: {doc.uploadedAt}</span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-1.5">
-                        {doc.status === 'TERVERIFIKASI' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-olive/10 text-olive border border-olive/30">
-                            <CheckCircle2 className="size-3" /> Terverifikasi
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-300">
-                            <AlertCircle className="size-3" /> Perlu Review
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="size-3" /> Berlaku s/d: {doc.expiresAt}
+                        </span>
+                        {doc.reviewedBy && (
+                          <span className="text-olive font-semibold">
+                            Direview: {doc.reviewedBy}
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-warmmuted flex items-center gap-1 mt-1">
-                        <Clock className="size-3 text-warmmuted" /> Berlaku s/d: {doc.expiresAt}
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="flex flex-wrap gap-1.5 max-w-[200px]">
-                        {['Bank BSI', 'Bank BTN', 'Bank Mandiri'].map((bank) => {
-                          const active = doc.accessGrantedBanks.includes(bank);
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Status */}
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                          doc.status === 'TERVERIFIKASI'
+                            ? 'bg-olive/10 text-olive border-olive/20'
+                            : doc.status === 'DITOLAK'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-amber-50 text-terracotta border-amber-200'
+                        }`}
+                      >
+                        {doc.status === 'TERVERIFIKASI' ? (
+                          <CheckCircle2 className="size-3" />
+                        ) : doc.status === 'DITOLAK' ? (
+                          <XCircle className="size-3" />
+                        ) : (
+                          <AlertCircle className="size-3" />
+                        )}
+                        {doc.status}
+                      </span>
+
+                      {/* Akses Bank */}
+                      <div className="flex flex-wrap gap-1">
+                        {BANK_OPTIONS.slice(0, 3).map((bank) => {
+                          const hasAccess = doc.accessGrantedBanks.includes(bank);
                           return (
                             <button
                               key={bank}
                               type="button"
-                              onClick={() => handleToggleBank(doc.id, bank)}
-                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-colors cursor-pointer ${
-                                active
-                                  ? 'bg-olive text-white border-olive shadow-2xs'
-                                  : 'bg-sandstone text-warmmuted border-warmborder hover:bg-sandstone/80'
+                              onClick={() => handleToggleBankAccess(doc, bank)}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                                hasAccess
+                                  ? 'bg-olive text-white'
+                                  : 'bg-sandstone text-warmmuted hover:bg-warmborder'
                               }`}
-                              title={`Klik untuk mengaktifkan / menonaktifkan akses ${bank}`}
                             >
-                              {bank} {active ? '✓' : '+'}
+                              {bank} {hasAccess ? '✓' : '+'}
                             </button>
                           );
                         })}
                       </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="inline-flex items-center gap-1.5 justify-end">
-                        <button
-                          type="button"
-                          onClick={() => showToastMsg(`Membuka berkas terenkripsi ${doc.fileName} via secure viewer...`)}
-                          className="size-8 rounded-lg bg-sandstone hover:bg-warmborder text-espresso flex items-center justify-center cursor-pointer transition-colors"
-                          title="Lihat Berkas Terenkripsi"
-                        >
-                          <Eye className="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => showToastMsg(`Menghasilkan Signed URL aman (kadaluarsa 10 menit) untuk ${doc.fileName}...`)}
-                          className="size-8 rounded-lg bg-espresso hover:bg-espresso/90 text-white flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
-                          title="Unduh Berkas Aman"
-                        >
-                          <Download className="size-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
-      {/* Floating Notification Toast */}
-      {toast && (
-        <div className="fixed bottom-20 md:bottom-6 right-4 z-50 bg-espresso text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg border border-white/10 animate-fade-in">
-          {toast}
+                      {/* Tombol Approve/Tolak untuk SM/Admin/TL/Direksi */}
+                      {canApprove && doc.status !== 'TERVERIFIKASI' && (
+                        <button
+                          type="button"
+                          onClick={() => handleApproval(doc, 'TERVERIFIKASI')}
+                          className="px-2.5 py-1 rounded-lg bg-olive text-white text-[11px] font-bold hover:opacity-90 cursor-pointer"
+                        >
+                          Setujui
+                        </button>
+                      )}
+                      {canApprove && doc.status === 'PERLU_REVIEW' && (
+                        <button
+                          type="button"
+                          onClick={() => handleApproval(doc, 'DITOLAK')}
+                          className="px-2.5 py-1 rounded-lg bg-rose-600 text-white text-[11px] font-bold hover:opacity-90 cursor-pointer"
+                        >
+                          Tolak
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDoc(doc)}
+                        className="p-1.5 rounded-lg bg-sandstone hover:bg-rose-100 text-warmmuted hover:text-rose-700 cursor-pointer"
+                        title="Hapus Dokumen"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

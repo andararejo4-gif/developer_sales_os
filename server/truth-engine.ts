@@ -78,6 +78,20 @@ export async function ensureTruthTables(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.ai_central_knowledge (
+      tenant_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT 'Master Knowledge AI Terpusat',
+      master_markdown TEXT NOT NULL DEFAULT '',
+      source_doc_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+      version INTEGER NOT NULL DEFAULT 1,
+      updated_by TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (tenant_id, project_id)
+    )
+  `;
 }
 
 export async function runPythonExtractor(filePath: string): Promise<{
@@ -248,4 +262,101 @@ export async function ingestSourceDocument(params: {
     conflictsCreated,
     pages: extractRes.pages,
   };
+}
+
+export async function getCentralAiKnowledge(tenantId: string, projectId: string) {
+  const rows = await sql`
+    SELECT tenant_id, project_id, title, master_markdown, source_doc_ids, version, updated_by, updated_at
+    FROM sales_os.ai_central_knowledge
+    WHERE tenant_id = ${tenantId} AND project_id = ${projectId}
+    LIMIT 1
+  `;
+  if (rows[0]) {
+    return {
+      title: String(rows[0].title || 'Master Knowledge AI Terpusat'),
+      masterMarkdown: String(rows[0].master_markdown || ''),
+      sourceDocIds: Array.isArray(rows[0].source_doc_ids) ? rows[0].source_doc_ids : [],
+      version: Number(rows[0].version || 1),
+      updatedBy: rows[0].updated_by ? String(rows[0].updated_by) : null,
+      updatedAt: rows[0].updated_at ? String(rows[0].updated_at) : null,
+    };
+  }
+  const activeDocs = await sql`
+    SELECT id, filename, doc_type, extracted_markdown
+    FROM sales_os.source_documents
+    WHERE tenant_id = ${tenantId} AND project_id = ${projectId} AND status = 'active'
+    ORDER BY created_at ASC
+  `;
+  const combined = activeDocs
+    .map((d: any) => `# [${String(d.doc_type).toUpperCase()}] ${d.filename}\n\n${d.extracted_markdown || ''}`)
+    .join('\n\n---\n\n');
+  return {
+    title: 'Master Knowledge AI Terpusat',
+    masterMarkdown: combined,
+    sourceDocIds: activeDocs.map((d: any) => String(d.id)),
+    version: 1,
+    updatedBy: null,
+    updatedAt: null,
+  };
+}
+
+export async function rebuildCentralKnowledgeFromDocs(
+  tenantId: string,
+  projectId: string,
+  actorEmail: string
+) {
+  const activeDocs = await sql`
+    SELECT id, filename, doc_type, version, extracted_markdown
+    FROM sales_os.source_documents
+    WHERE tenant_id = ${tenantId} AND project_id = ${projectId} AND status = 'active'
+    ORDER BY created_at ASC
+  `;
+  const combined = activeDocs
+    .map(
+      (d: any) =>
+        `# [${String(d.doc_type).toUpperCase()} v${d.version}] ${d.filename}\n\n${d.extracted_markdown || ''}`
+    )
+    .join('\n\n---\n\n');
+  const docIds = activeDocs.map((d: any) => String(d.id));
+
+  const saved = await sql`
+    INSERT INTO sales_os.ai_central_knowledge (
+      tenant_id, project_id, title, master_markdown, source_doc_ids, version, updated_by, updated_at
+    ) VALUES (
+      ${tenantId}, ${projectId}, 'Master Knowledge AI Terpusat', ${combined}, ${JSON.stringify(docIds)}::jsonb, 1, ${actorEmail}, NOW()
+    )
+    ON CONFLICT (tenant_id, project_id) DO UPDATE SET
+      master_markdown = EXCLUDED.master_markdown,
+      source_doc_ids = EXCLUDED.source_doc_ids,
+      version = sales_os.ai_central_knowledge.version + 1,
+      updated_by = EXCLUDED.updated_by,
+      updated_at = NOW()
+    RETURNING *
+  `;
+  return saved[0];
+}
+
+export async function saveCentralAiKnowledge(params: {
+  tenantId: string;
+  projectId: string;
+  title?: string;
+  masterMarkdown: string;
+  updatedBy: string;
+}) {
+  const title = (params.title || 'Master Knowledge AI Terpusat').trim();
+  const saved = await sql`
+    INSERT INTO sales_os.ai_central_knowledge (
+      tenant_id, project_id, title, master_markdown, version, updated_by, updated_at
+    ) VALUES (
+      ${params.tenantId}, ${params.projectId}, ${title}, ${params.masterMarkdown}, 1, ${params.updatedBy}, NOW()
+    )
+    ON CONFLICT (tenant_id, project_id) DO UPDATE SET
+      title = EXCLUDED.title,
+      master_markdown = EXCLUDED.master_markdown,
+      version = sales_os.ai_central_knowledge.version + 1,
+      updated_by = EXCLUDED.updated_by,
+      updated_at = NOW()
+    RETURNING *
+  `;
+  return saved[0];
 }

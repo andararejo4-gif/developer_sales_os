@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Wrench,
   Clock,
@@ -9,7 +9,15 @@ import {
   Plus,
   Shield,
 } from 'lucide-react';
-import { loadPersistedState, savePersistedState } from '../lib/navigation/router';
+import { loadAuthSession } from '../lib/auth/dummy-accounts';
+
+function getAuthHeaders(): HeadersInit {
+  const session = loadAuthSession();
+  return {
+    'Content-Type': 'application/json',
+    ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+  };
+}
 
 export interface ComplaintTicket {
   id: string;
@@ -36,52 +44,44 @@ export const CustomerComplaintsPage: React.FC<CustomerComplaintsPageProps> = ({
   projectName = 'The Park Townhouse Sukoharjo',
   projectId = 'the-park-sukoharjo',
 }) => {
-  const [tickets, setTickets] = useState<ComplaintTicket[]>(() =>
-    loadPersistedState<ComplaintTicket[]>(`devos_complaints_${projectId}`, [
-      {
-        id: 'comp_1',
-        ticketNo: 'DLP-2026-001',
-        unitBlock: 'Nagoya A-02',
-        residentName: 'Pak Hendra Pratama',
-        residentPhone: '0812-3456-7890',
-        category: 'KEBOCORAN_ATAP',
-        description: 'Terdapat rembesan air di plafon kamar utama saat hujan lebat sore kemarin.',
-        reportedAt: '2026-11-24 16:30 WIB',
-        dlpExpiryDate: '2027-02-28 (Masa DLP Aktif)',
-        slaTargetHours: 24,
-        status: 'DALAM_PERBAIKAN',
-        technicianAssigned: 'Tim Sipil (Mandor Joko)',
-      },
-      {
-        id: 'comp_2',
-        ticketNo: 'DLP-2026-002',
-        unitBlock: 'Osaka B-04',
-        residentName: 'Ibu Ratna Susanti',
-        residentPhone: '0857-1122-3344',
-        category: 'PINTU_JENDELA',
-        description: 'Kunci pintu geser aluminium taman belakang sedikit seret saat dikunci.',
-        reportedAt: '2026-11-25 08:15 WIB',
-        dlpExpiryDate: '2027-03-15 (Masa DLP Aktif)',
-        slaTargetHours: 48,
-        status: 'SURVEI_TEKNISI',
-        technicianAssigned: 'Tim Finishing (Pak Dedi)',
-      },
-      {
-        id: 'comp_3',
-        ticketNo: 'DLP-2026-003',
-        unitBlock: 'Tokyo C-01',
-        residentName: 'Pak Irwan Nugroho',
-        residentPhone: '0818-4455-6677',
-        category: 'KELISTRIKAN',
-        description: 'MCB meteran turun saat menyalakan pompa air pendorong dan water heater bersamaan.',
-        reportedAt: '2026-11-23 10:00 WIB',
-        dlpExpiryDate: '2027-01-20 (Masa DLP Aktif)',
-        slaTargetHours: 12,
-        status: 'SELESAI_BAST',
-        technicianAssigned: 'Tim ME (Pak Aris)',
-      },
-    ])
-  );
+  const [tickets, setTickets] = useState<ComplaintTicket[]>([]);
+
+  const loadTickets = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/complaints?projectId=${encodeURIComponent(projectId)}`, {
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const rows = Array.isArray(json.tickets) ? json.tickets : [];
+        setTickets(
+          rows.map((r: any) => ({
+            id: String(r.id),
+            ticketNo: String(r.ticket_no),
+            unitBlock: String(r.unit_block),
+            residentName: String(r.resident_name),
+            residentPhone: String(r.resident_phone || ''),
+            category: (r.category || 'KEBOCORAN_ATAP') as ComplaintTicket['category'],
+            description: String(r.description),
+            reportedAt: r.reported_at
+              ? new Date(r.reported_at).toLocaleString('id-ID')
+              : '-',
+            dlpExpiryDate: String(r.dlp_expiry_date || 'Masa DLP Aktif'),
+            slaTargetHours: Number(r.sla_target_hours || 24),
+            status: (r.status || 'TIKET_BARU') as ComplaintTicket['status'],
+            technicianAssigned: r.technician_assigned ? String(r.technician_assigned) : undefined,
+          }))
+        );
+      }
+    } catch {
+      /* abaikan error jaringan sementara */
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    loadTickets();
+  }, [loadTickets]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('ALL');
@@ -101,45 +101,59 @@ export const CustomerComplaintsPage: React.FC<CustomerComplaintsPageProps> = ({
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleAddTicket = (e: React.FormEvent) => {
+  const handleAddTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!unitBlock.trim() || !residentName.trim() || !description.trim()) {
       showToastMsg('Nomor unit, nama penghuni, dan deskripsi keluhan wajib diisi.');
       return;
     }
 
-    const nextNo = `DLP-2026-00${tickets.length + 1}`;
-    const newTicket: ComplaintTicket = {
-      id: `comp_${Date.now()}`,
-      ticketNo: nextNo,
-      unitBlock: unitBlock.trim(),
-      residentName: residentName.trim(),
-      residentPhone: residentPhone.trim() || '0812-xxxx-xxxx',
-      category,
-      description: description.trim(),
-      reportedAt: 'Hari ini (Baru)',
-      dlpExpiryDate: '100 Hari sejak Serah Terima',
-      slaTargetHours: 24,
-      status: 'TIKET_BARU',
-    };
-
-    const next = [newTicket, ...tickets];
-    setTickets(next);
-    savePersistedState(`devos_complaints_${projectId}`, next);
-
-    setUnitBlock('');
-    setResidentName('');
-    setResidentPhone('');
-    setDescription('');
-    setShowAddForm(false);
-    showToastMsg(`Tiket garansi ${nextNo} berhasil dibuat dan diteruskan ke tim teknisi lapangan.`);
+    try {
+      const res = await fetch('/api/complaints', {
+        method: 'POST',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          projectId,
+          unitBlock: unitBlock.trim(),
+          residentName: residentName.trim(),
+          residentPhone: residentPhone.trim(),
+          category,
+          description: description.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        await loadTickets();
+        setUnitBlock('');
+        setResidentName('');
+        setResidentPhone('');
+        setDescription('');
+        setShowAddForm(false);
+        showToastMsg(`Tiket garansi ${json.ticket?.ticket_no || ''} berhasil disimpan ke database.`);
+      } else {
+        showToastMsg(json.error || 'Gagal menyimpan tiket keluhan.');
+      }
+    } catch {
+      showToastMsg('Gagal terhubung ke server.');
+    }
   };
 
-  const handleUpdateStatus = (ticketId: string, nextStatus: ComplaintTicket['status']) => {
-    const updated = tickets.map((t) => (t.id === ticketId ? { ...t, status: nextStatus } : t));
-    setTickets(updated);
-    savePersistedState(`devos_complaints_${projectId}`, updated);
-    showToastMsg('Status tiket perbaikan berhasil diperbarui.');
+  const handleUpdateStatus = async (ticketId: string, nextStatus: ComplaintTicket['status']) => {
+    try {
+      const res = await fetch('/api/complaints', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ id: ticketId, status: nextStatus }),
+      });
+      if (res.ok) {
+        setTickets((prev) => prev.map((t) => (t.id === ticketId ? { ...t, status: nextStatus } : t)));
+        showToastMsg('Status tiket perbaikan berhasil diperbarui di database.');
+      }
+    } catch {
+      showToastMsg('Gagal memperbarui status tiket.');
+    }
   };
 
   const filteredTickets = tickets.filter((t) => {

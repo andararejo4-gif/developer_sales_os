@@ -628,3 +628,124 @@ export function buildSessionCookieHeader(token: string, maxAgeSeconds = 7 * 24 *
 export function buildClearSessionCookieHeader(): string {
   return `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
+
+export const BASIC_ORG_ROLES = [
+  'SE',
+  'TL',
+  'SM',
+  'DIREKSI',
+  'ADMIN',
+  'DIGITAL_MARKETING',
+] as const;
+
+export type BasicOrgRole = (typeof BASIC_ORG_ROLES)[number];
+
+export async function listTenantUsers(tenantId: string) {
+  const rows = await sql`
+    SELECT id, email, name, role, tenant_id, project_id, phone, is_active, totp_enabled, created_at
+    FROM sales_os.app_users
+    WHERE tenant_id = ${tenantId}
+    ORDER BY created_at DESC
+  `;
+  return rows.map((r: any) => ({
+    id: String(r.id),
+    email: String(r.email),
+    name: String(r.name),
+    role: String(r.role),
+    tenantId: String(r.tenant_id),
+    projectId: String(r.project_id),
+    phone: r.phone ? String(r.phone) : null,
+    isActive: Boolean(r.is_active),
+    totpEnabled: Boolean(r.totp_enabled),
+    createdAt: r.created_at,
+  }));
+}
+
+export async function createTenantUser(
+  actor: AuthenticatedUser,
+  params: {
+    name: string;
+    email: string;
+    phone?: string;
+    role: string;
+    password: string;
+    projectId?: string;
+  }
+) {
+  if (!['ADMIN', 'SM', 'DIREKSI', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(actor.role)) {
+    return { ok: false as const, error: 'Hanya role Admin dan Sales Manager yang berhak menambahkan user baru.' };
+  }
+  const role = String(params.role || '').trim().toUpperCase();
+  if (!BASIC_ORG_ROLES.includes(role as BasicOrgRole)) {
+    return {
+      ok: false as const,
+      error: `Role harus salah satu dari 6 role dasar: ${BASIC_ORG_ROLES.join(', ')}.`,
+    };
+  }
+  const name = String(params.name || '').trim();
+  const email = String(params.email || '').trim().toLowerCase();
+  const password = String(params.password || '');
+  if (!name || !email || !email.includes('@')) {
+    return { ok: false as const, error: 'Nama lengkap dan email valid wajib diisi.' };
+  }
+  if (password.length < 8) {
+    return { ok: false as const, error: 'Kata sandi awal minimal 8 karakter.' };
+  }
+
+  const existing = await sql`SELECT id FROM sales_os.app_users WHERE email = ${email} LIMIT 1`;
+  if (existing.length > 0) {
+    return { ok: false as const, error: 'Email tersebut sudah terdaftar di platform.' };
+  }
+
+  const passwordHash = hashPassword(password);
+  const projectId = String(params.projectId || actor.projectId || 'the-park-sukoharjo').trim();
+  const inserted = await sql`
+    INSERT INTO sales_os.app_users (
+      email, name, role, tenant_id, project_id, phone, password_hash, is_active
+    ) VALUES (
+      ${email}, ${name}, ${role}, ${actor.tenantId}, ${projectId},
+      ${params.phone?.trim() || null}, ${passwordHash}, TRUE
+    )
+    RETURNING id, email, name, role, tenant_id, project_id, phone, is_active, totp_enabled, created_at
+  `;
+  const row = inserted[0];
+  return {
+    ok: true as const,
+    user: {
+      id: String(row.id),
+      email: String(row.email),
+      name: String(row.name),
+      role: String(row.role),
+      tenantId: String(row.tenant_id),
+      projectId: String(row.project_id),
+      phone: row.phone ? String(row.phone) : null,
+      isActive: Boolean(row.is_active),
+      totpEnabled: Boolean(row.totp_enabled),
+      createdAt: row.created_at,
+    },
+  };
+}
+
+export async function updateTenantUserStatus(
+  actor: AuthenticatedUser,
+  targetUserId: string,
+  isActive: boolean
+) {
+  if (!['ADMIN', 'SM', 'DIREKSI', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(actor.role)) {
+    return { ok: false as const, error: 'Tidak memiliki akses mengubah status user.' };
+  }
+  if (actor.userId && actor.userId === targetUserId && !isActive) {
+    return { ok: false as const, error: 'Tidak dapat menonaktifkan akun Anda sendiri.' };
+  }
+  const updated = await sql`
+    UPDATE sales_os.app_users
+    SET is_active = ${isActive}, updated_at = NOW()
+    WHERE id = ${targetUserId}::uuid
+      AND tenant_id = ${actor.tenantId}
+    RETURNING id, is_active
+  `;
+  if (updated.length === 0) {
+    return { ok: false as const, error: 'User tidak ditemukan pada organisasi Anda.' };
+  }
+  return { ok: true as const, id: String(updated[0].id), isActive: Boolean(updated[0].is_active) };
+}

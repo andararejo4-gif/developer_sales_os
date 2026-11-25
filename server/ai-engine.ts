@@ -18,6 +18,7 @@ import {
   type PersonaCode,
 } from '../src/lib/kb/playbook-v1-2-knowledge';
 import { composeTurnReply, type ChatTurn, type ReplyMode, type TurnReply } from './wa-turn-engine';
+import { getCentralAiKnowledge } from './truth-engine';
 
 export interface UnclearFieldFeedback {
   field: string;
@@ -858,12 +859,23 @@ async function analyzeLead(input: LeadAnalysisInput): Promise<LeadAiEvaluation> 
       ? `REKENING RESMI SAH DEVELOPER: Segala transaksi booking atau DP HANYA BOLEH diarahkan ke rekening resmi berikut: ${input.companyBankAccounts.map((b) => `${b.bankName} ${b.accountNumber} a.n ${b.accountHolder}`).join(' | ')}. DILARANG MENYEBUT REKENING PRIBADI ATAU REKENING LAIN!`
       : 'REKENING RESMI SAH DEVELOPER: Booking fee resmi Rp5.000.000 hanya transfer ke rekening BCA 0158829100 a.n PT Andara Rejo Makmur. DILARANG MENYEBUT REKENING PRIBADI!';
 
+  const centralKnowledge = await getCentralAiKnowledge(
+    (input as any).tenantId || 'andara_rejo_makmur',
+    (input as any).projectId || 'the-park-sukoharjo'
+  ).catch(() => null);
+  const centralKnowledgeSnippet = centralKnowledge?.masterMarkdown?.trim()
+    ? `\n[MASTER KNOWLEDGE AI TERPUSAT - DIVISI IT (v${centralKnowledge.version})]:\n${centralKnowledge.masterMarkdown.trim().slice(0, 6000)}`
+    : '';
+
   const systemPrompt = [
     'Kamu adalah Analis Senior Properti & Copywriter Sales WhatsApp Terbaik untuk PT Andara Rejo Makmur (Proyek: The Park Townhouse Sukoharjo, Jombor, Bendosari).',
     'Fakta Proyek & Ketentuan Resmi: 30 unit boutique 2 lantai Japandi Modern, garasi dalam, one-gate RFID + CCTV 4K 24 jam + smart door lock, clubhouse di Cluster Nagoya (kolam renang, gym, cafe, mini golf 9 hole, game station) TANPA biaya membership. Cluster Nagoya (Jl. Tentara Pelajar, mulai Rp650 jt), Osaka & Tokyo (Koridor Jl. Jenderal Sudirman, Rp775 jt - Rp1,15 M). Skema: Cash Keras, Cash Tempo 12/24 bln, KPR DP 10%. Dilarang klaim "pasti naik harga/untung/bebas banjir/pasti KPR".',
     bankWhitelistInfo,
+    centralKnowledgeSnippet,
     'ATURAN EFISIENSI: Jangan bertele-tele di internal reasoning; langsung hasilkan objek JSON final yang ringkas, akurat, dan pesan `followup_draft_message` Bahasa Indonesia yang sangat hangat, manusiawi, persuasif, dan TIDAK KAKU SEPERTI BOT.',
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   const prevRingkas = (input.previousAnalysis?.ringkas || '').trim();
   const prevRekomendasi = (input.previousAnalysis?.rekomendasi || []).slice(0, 3);
