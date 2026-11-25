@@ -704,7 +704,7 @@ export const SeNotificationBell: React.FC<SeNotificationBellProps> = ({
         type="button"
         onClick={() => setIsOpen((v) => !v)}
         aria-label="Notifikasi Tugas Wajib SE"
-        className="relative min-h-[40px] min-w-[40px] px-2.5 rounded-xl bg-sandstone hover:bg-warmborder border border-warmborder text-espresso flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+        className="relative size-10 rounded-xl bg-sandstone hover:bg-warmborder border border-warmborder text-espresso flex items-center justify-center gap-1.5 cursor-pointer transition-colors shrink-0"
       >
         <Bell className={`size-4 ${urgentCount > 0 ? 'text-rose-600' : 'text-espresso'}`} />
         {totalCount > 0 && (

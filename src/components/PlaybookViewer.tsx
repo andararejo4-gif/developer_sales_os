@@ -14,6 +14,8 @@ import {
   ShieldAlert,
   MessageSquare,
   Sparkles,
+  Target,
+  CheckCircle2,
 } from 'lucide-react';
 import { getPlaybook, initProjectPlaybook } from '../lib/playbook/playbook-generator';
 import { generatePlaybookDocx } from '../lib/exporters/playbook-docx';
@@ -25,8 +27,8 @@ import {
 } from '../lib/navigation/router';
 import type { PlaybookPlan, PlaybookRole } from '../lib/playbook/types';
 
-type PlaybookTab = 'sop' | 'scripts' | 'bant' | 'kpi' | 'funnel';
-const VALID_PLAYBOOK_TABS: PlaybookTab[] = ['sop', 'scripts', 'bant', 'kpi', 'funnel'];
+type PlaybookTab = 'sop' | 'scripts' | 'bant' | 'kpi' | 'funnel' | 'roleplay';
+const VALID_PLAYBOOK_TABS: PlaybookTab[] = ['sop', 'scripts', 'bant', 'kpi', 'funnel', 'roleplay'];
 
 interface PlaybookViewerProps {
   projectId?: string;
@@ -151,7 +153,7 @@ export function PlaybookViewer({
     <div className={outerClass}>
       <div className={cardClass}>
         {/* Header */}
-        <div className="px-4 py-4 sm:px-6 sm:py-5 bg-sandstone/60 border-b border-warmborder flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
+        <div className="px-4 py-4 sm:px-6 sm:py-5 bg-sandstone/60 border-b border-warmborder flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 shrink-0">
           <div className="flex items-start sm:items-center gap-3 min-w-0">
             <div className="size-10 sm:size-11 rounded-2xl bg-terracotta text-white flex items-center justify-center shadow-sm shrink-0">
               <BookOpen className="size-5 sm:size-6" />
@@ -250,6 +252,7 @@ export function PlaybookViewer({
                 { key: 'bant', label: 'Kualifikasi BANT' },
                 { key: 'kpi', label: 'Matriks KPI' },
                 { key: 'funnel', label: 'Reverse Funnel' },
+                { key: 'roleplay', label: 'Latihan & Sertifikasi SE (F65)' },
               ] as const
             ).map((t) => (
               <button
@@ -399,7 +402,7 @@ export function PlaybookViewer({
               {/* TAB 1: SOP HARIAN */}
               {activeTab === 'sop' && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
                     <h3 className="text-sm font-extrabold text-espresso">
                       Rutinitas Kerja Harian ({role})
                     </h3>
@@ -412,43 +415,57 @@ export function PlaybookViewer({
                     {playbook.dailySop.map((sop, idx) => (
                       <div
                         key={idx}
-                        className="p-4 rounded-2xl bg-white border border-warmborder shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3"
+                        className="p-4 sm:p-5 rounded-2xl bg-white border border-warmborder shadow-xs hover:border-warmborder/80 transition-all space-y-3"
                       >
-                        <div className="flex items-start gap-3.5">
-                          <div className="size-9 rounded-xl bg-sandstone border border-warmborder flex items-center justify-center font-bold text-xs text-espresso shrink-0">
-                            {idx + 1}
+                        {/* Baris Atas: Nomor Urut, Waktu/Frekuensi, Channel, SLA */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-warmborder/50 pb-2.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="size-7 rounded-lg bg-espresso text-white font-black text-xs inline-flex items-center justify-center shrink-0 shadow-2xs">
+                              {idx + 1}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-terracotta/10 text-terracotta border border-terracotta/20 text-xs font-bold shrink-0">
+                              <Clock className="size-3.5 shrink-0" />
+                              <span>{sop.timeOrFrequency}</span>
+                            </span>
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-sandstone text-espresso border border-warmborder text-xs font-semibold shrink-0">
+                              {sop.channel}
+                            </span>
                           </div>
-                          <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-terracotta flex items-center gap-1">
-                            <Clock className="size-3" />
-                            {sop.timeOrFrequency}
-                          </span>
-                          <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-sandstone text-warmmuted">
-                            {sop.channel}
-                          </span>
+
                           {sop.slaMinutes && (
-                            <span className="px-2 py-0.2 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
-                              SLA ≤ {sop.slaMinutes}m
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-100/80 text-amber-900 border border-amber-300 text-xs font-extrabold shrink-0">
+                              SLA ≤ {sop.slaMinutes} Menit
                             </span>
                           )}
                         </div>
-                        <h4 className="text-xs font-extrabold text-espresso mt-0.5">
-                          {sop.activityName}
-                        </h4>
-                        <p className="text-xs text-warmmuted mt-1 leading-relaxed">
-                          {sop.instruction}
-                        </p>
-                      </div>
-                    </div>
 
-                    <div className="md:text-right shrink-0 p-2.5 rounded-xl bg-amber-50/50 border border-amber-100 md:max-w-xs">
-                      <span className="text-[10px] font-bold text-warmmuted block">Target Output:</span>
-                      <span className="text-xs font-bold text-espresso">{sop.targetOutput}</span>
-                    </div>
+                        {/* Konten Utama: Aktivitas & Instruksi */}
+                        <div className="space-y-1">
+                          <h4 className="text-sm sm:text-base font-extrabold text-espresso leading-snug">
+                            {sop.activityName}
+                          </h4>
+                          <p className="text-xs sm:text-sm text-warmmuted leading-relaxed">
+                            {sop.instruction}
+                          </p>
+                        </div>
+
+                        {/* Target Output Box yang Luas dan Rapi */}
+                        <div className="p-3 sm:p-3.5 rounded-xl bg-sandstone/50 border border-warmborder/80 flex items-start gap-2.5">
+                          <div className="size-5 rounded-md bg-terracotta/10 text-terracotta flex items-center justify-center shrink-0 mt-0.5">
+                            <Target className="size-3.5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[10px] font-bold text-warmmuted uppercase tracking-wider block">
+                              Target Output
+                            </span>
+                            <p className="text-xs sm:text-sm font-semibold text-espresso mt-0.5 leading-snug">
+                              {sop.targetOutput}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
             </div>
           )}
 
@@ -620,6 +637,88 @@ export function PlaybookViewer({
                   <p className="text-2xl font-black text-olive mt-1">{playbook.reverseFunnelTargets.closing}</p>
                   <span className="text-[10px] text-olive font-extrabold">Unit Sold</span>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: ROLE-PLAY & PRODUCT CERTIFICATION (F65) */}
+          {activeTab === 'roleplay' && (
+            <div className="space-y-5">
+              <div className="p-4 sm:p-5 rounded-3xl bg-white border border-warmborder shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-lg bg-terracotta/10 text-terracotta font-black text-xs">
+                      F65
+                    </span>
+                    <h4 className="text-sm sm:text-base font-extrabold text-espresso">
+                      Simulasi Latihan Percakapan &amp; Uji Sertifikasi Produk SE
+                    </h4>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-lime-100 text-olive border border-lime-300">
+                      Standardized Evaluation
+                    </span>
+                  </div>
+                  <p className="text-xs text-warmmuted">
+                    SOP §11.5: Uji kompetensi SE menghadapi 3 keberatan konsumen tersering sebelum terjun ke lapangan.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[
+                  {
+                    title: 'Skenario 1: Keberatan Harga',
+                    objection: '"Harganya mulai Rp650 Juta agak tinggi dibanding perumahan lain di Sukoharjo."',
+                    bestOption: 'A. Jelaskan value 2 lantai, garasi dalam, one-gate RFID, dan fasilitas Clubhouse tanpa iuran membership seumur hidup.',
+                    badOption: 'B. Langsung menawarkan potongan harga Rp50 Juta tanpa persetujuan SM.',
+                    point: 'Fakta: Nagoya B.02-B.04 sudah termasuk fasilitas clubhouse kolam renang & mini golf.',
+                  },
+                  {
+                    title: 'Skenario 2: Keraguan Lokasi',
+                    objection: '"Lokasinya di Jombor agak masuk ke selatan dibanding Solo Baru."',
+                    bestOption: 'A. Tunjukkan data riil jarak hanya ±7 menit ke RS Indriati & pusat Solo Baru, jalan cor lebar, suasana lebih tenang.',
+                    badOption: 'B. Mengatakan perumahan lain di Solo Baru sering macet dan bising.',
+                    point: 'Fakta: Akses hanya 7-10 menit ke pusat bisnis Solo Baru dengan jalan lebar 2 mobil.',
+                  },
+                  {
+                    title: 'Skenario 3: Ketakutan KPR Ditolak',
+                    objection: '"Saya takut pengajuan KPR di bank ditolak atau proses berkasnya berbelit-belit."',
+                    bestOption: 'A. Tawarkan asistensi berkas dan pengajuan paralel ke 2 bank mitra (BSI & BTN), plus opsi alternatif Cash Bertahap 24x.',
+                    badOption: 'B. Menjanjikan "Pasti 100% lolos KPR tanpa BI Checking". (Pelanggaran SOP!)',
+                    point: 'Fakta: Bank rekanan BSI, BTN, Mandiri; pengembang mendampingi hingga akad.',
+                  },
+                ].map((item, i) => (
+                  <div key={i} className="p-4 rounded-2xl bg-white border border-warmborder shadow-2xs space-y-3 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-sandstone text-terracotta uppercase">
+                          {item.title}
+                        </span>
+                        <span className="text-[10px] font-bold text-olive">Tersertifikasi</span>
+                      </div>
+                      <p className="text-xs font-bold text-espresso italic mt-2 p-2.5 rounded-xl bg-sandstone/30 border border-warmborder/60">
+                        {item.objection}
+                      </p>
+                      <div className="mt-2.5 space-y-1.5 text-xs">
+                        <p className="font-extrabold text-olive text-[11px] flex items-center gap-1">
+                          <CheckCircle2 className="size-3 text-olive" /> Respon Standar Lulus (100 Poin):
+                        </p>
+                        <p className="text-[11px] text-warmmuted leading-relaxed">
+                          {item.bestOption}
+                        </p>
+                        <p className="font-extrabold text-rose-700 text-[11px] flex items-center gap-1 pt-1 border-t border-warmborder/40">
+                          <X className="size-3 text-rose-700" /> Respon Terlarang (0 Poin):
+                        </p>
+                        <p className="text-[11px] text-warmmuted leading-relaxed">
+                          {item.badOption}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-sandstone/50 border border-warmborder text-[10px] text-warmmuted">
+                      <strong>Acuan Bukti:</strong> {item.point}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

@@ -30,6 +30,9 @@ import {
   ChevronDown,
   Award,
   FileCheck,
+  Lock,
+  Share2,
+  Wrench,
 } from 'lucide-react';
 import type { RoleKey, UserProfile } from '../../data';
 import type { CompanyProject } from '../../lib/projects/projects-data';
@@ -45,6 +48,11 @@ export interface MobileMoreActions {
   onOpenCommission: () => void;
   onOpenKb: () => void;
   onOpenLoveLetter: () => void;
+  onOpenVault?: () => void;
+  onOpenReferral?: () => void;
+  onOpenGaransi?: () => void;
+  onOpenKprBank?: () => void;
+  onOpenControlTower?: () => void;
   onOpenSuperadmin: () => void;
   onOpenUnitPark?: () => void;
   onOpenKinerjaSe?: () => void;
@@ -143,6 +151,14 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
       { label: 'Pre-Seed Prospek VIP', onClick: actions.onOpenSuperadmin, href: '#preseed', icon: Sparkles },
       { label: 'Kurasi Fasilitas Regional (POI)', onClick: actions.onOpenSuperadmin, href: '#poi-curation', icon: Star },
     ],
+    REFERRAL_PARTNER: [
+      { label: 'Materi Storytelling Unit', onClick: actions.onOpenLoveLetter, href: '#surat-cinta', icon: HeartHandshake },
+      { label: 'Brosur & Materi Promo', onClick: actions.onOpenKb, href: '#kb', icon: Database },
+    ],
+    SALES_PARTNER: [
+      { label: 'Brosur & Spesifikasi Unit', onClick: actions.onOpenKb, href: '#kb', icon: Database },
+      { label: '99 Keunggulan Unit', onClick: actions.onOpenLoveLetter, href: '#surat-cinta', icon: HeartHandshake },
+    ],
   };
 
   const seMenuItems: SheetActionItem[] = [
@@ -152,6 +168,11 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
     { label: 'Absen, GPS, Call', subtitle: 'Presensi GPS, bukti foto & log panggilan', icon: PhoneCall, onClick: actions.onOpenFieldOps, tone: 'olive' },
     { label: 'Knowledge Base Produk', subtitle: 'Spesifikasi, siteplan, harga & simulasi KPR', icon: Database, onClick: actions.onOpenKb, tone: 'olive' },
     { label: 'Surat Cinta 99 Keunggulan', subtitle: 'Materi storytelling & 99 nilai jual proyek', icon: HeartHandshake, onClick: actions.onOpenLoveLetter, tone: 'terracotta' },
+    { label: 'Dokumen Vault KPR (F74)', subtitle: 'Penyimpanan berkas KPR terenkripsi AES-256', icon: Lock, onClick: actions.onOpenVault, tone: 'olive' },
+    { label: 'Program Referral (F79)', subtitle: 'Pelacakan link referral & reward Rp 5 Juta', icon: Share2, onClick: actions.onOpenReferral, tone: 'terracotta' },
+    { label: 'Keluhan & Garansi DLP (F86)', subtitle: 'Klaim garansi 100 hari & tiket perbaikan', icon: Wrench, onClick: actions.onOpenGaransi, tone: 'amber' },
+    { label: 'Alur KPR Bank (F75)', subtitle: 'Status SLIK, appraisal & SP3K bank mitra', icon: Building2, onClick: actions.onOpenKprBank, tone: 'olive' },
+    { label: 'Control Tower Portofolio (F90)', subtitle: 'Cashflow multi-proyek level direksi', icon: TrendingUp, onClick: actions.onOpenControlTower, tone: 'terracotta' },
   ];
 
   const isPlatformInternal = role === 'SUPERADMIN' || role === 'SUPERADMIN_IT';
@@ -166,6 +187,11 @@ export const MobileMoreSheet: React.FC<MobileMoreSheetProps> = ({
     { label: 'Aturan Komisi Penjualan', subtitle: 'Skema pembagian komisi 100%', icon: Percent, onClick: actions.onOpenCommission, tone: 'olive' },
     { label: 'Knowledge Base Produk', subtitle: 'Fakta terverifikasi & kuis produk', icon: Database, onClick: actions.onOpenKb, tone: 'olive' },
     { label: 'Surat Cinta 99 Keunggulan', subtitle: 'Dokumen keunggulan proyek', icon: HeartHandshake, onClick: actions.onOpenLoveLetter, tone: 'terracotta' },
+    { label: 'Dokumen Vault KPR (F74)', subtitle: 'Penyimpanan berkas KPR terenkripsi AES-256', icon: Lock, onClick: actions.onOpenVault, tone: 'olive' },
+    { label: 'Program Referral (F79)', subtitle: 'Pelacakan link referral & reward Rp 5 Juta', icon: Share2, onClick: actions.onOpenReferral, tone: 'terracotta' },
+    { label: 'Keluhan & Garansi DLP (F86)', subtitle: 'Klaim garansi 100 hari & tiket perbaikan', icon: Wrench, onClick: actions.onOpenGaransi, tone: 'amber' },
+    { label: 'Alur KPR Bank (F75)', subtitle: 'Status SLIK, appraisal & SP3K bank mitra', icon: Building2, onClick: actions.onOpenKprBank, tone: 'olive' },
+    { label: 'Control Tower Portofolio (F90)', subtitle: 'Cashflow multi-proyek level direksi', icon: TrendingUp, onClick: actions.onOpenControlTower, tone: 'terracotta' },
   ];
 
   const projectMenuItems: SheetActionItem[] =

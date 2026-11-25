@@ -98,6 +98,51 @@ export function DailyRouteViewer({
   const [skipReasonInput, setSkipReasonInput] = useState('');
   const [toast, setToast] = useState<string | null>(null);
 
+  // F62: Rain, absence & route replanning states
+  const [isRainMode, setIsRainMode] = useState<boolean>(() =>
+    loadPersistedState<boolean>(`devos_route_rain_${projectId}`, false)
+  );
+  const [substituteSe, setSubstituteSe] = useState<string | null>(() =>
+    loadPersistedState<string | null>(`devos_route_sub_${projectId}`, null)
+  );
+
+  const toggleRainMode = () => {
+    const next = !isRainMode;
+    setIsRainMode(next);
+    savePersistedState(`devos_route_rain_${projectId}`, next);
+    if (next) {
+      showToast('Mode Cuaca Buruk Aktif: Titik rute dialihkan ke lokasi indoor/mall terdekat.');
+    } else {
+      showToast('Kembali ke rute normal lapangan.');
+    }
+  };
+
+  const handleSetSubstitute = (name: string | null) => {
+    setSubstituteSe(name);
+    savePersistedState(`devos_route_sub_${projectId}`, name);
+    if (name) {
+      showToast(`Rute hari ${selectedDay} berhasil ditugaskan ke ${name}`);
+    } else {
+      showToast('Penugasan rute dikembalikan ke SE awal.');
+    }
+  };
+
+  const indoorSubstitutes: Record<string, string> = {
+    'Alun-Alun Satya Negara Sukoharjo': 'The Park Mall Solo Baru (Lobby Atrium Indoor)',
+    'Gelora Merdeka Sukoharjo': 'Pakuwon Mall Solo Baru (Ground Floor Customer Walk)',
+    'Taman Pakujoyo Gayam': 'RS Indriati Solo Baru (Kantin Dokter & Ruang Tunggu)',
+    'CFD Jl. Veteran Sukoharjo': 'Bank BSI KC Solo Baru (Customer Lounge)',
+  };
+
+  const effectiveWaypoints: CustomWaypoint[] = isRainMode
+    ? waypoints.map((w) => ({
+        ...w,
+        name: indoorSubstitutes[w.name] || `${w.name} (Zona Indoor / Beratap)`,
+        category: (indoorSubstitutes[w.name] ? 'Pusat Belanja & Mal' : w.category) as DailyRouteWaypoint['category'],
+        canvassingObjective: `Replan Hujan: Sapa pengunjung di area beratap/indoor tanpa basah kuyup. ${w.canvassingObjective}`,
+      }))
+    : waypoints;
+
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
@@ -241,7 +286,7 @@ export function DailyRouteViewer({
     <div className={outerClass}>
       <div className={cardClass}>
         {/* Header */}
-        <div className="px-4 py-4 sm:px-6 sm:py-5 bg-sandstone/60 border-b border-warmborder flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
+        <div className="px-4 py-4 sm:px-6 sm:py-5 bg-sandstone/60 border-b border-warmborder flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 shrink-0">
           <div className="flex items-start sm:items-center gap-3 min-w-0">
             <div className="size-10 sm:size-11 rounded-2xl bg-terracotta text-white flex items-center justify-center shadow-sm shrink-0">
               <Navigation className="size-5 sm:size-6" />
@@ -309,6 +354,43 @@ export function DailyRouteViewer({
               </button>
             ))}
           </div>
+        </div>
+
+        {/* F62: Kontrol Cuaca Buruk & SE Pengganti (Rain, absence & route replanning) */}
+        <div className="px-4 sm:px-6 py-2.5 bg-white border-b border-warmborder flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleRainMode}
+              className={`min-h-[36px] px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                isRainMode
+                  ? 'bg-blue-600 text-white border-blue-700 shadow-2xs'
+                  : 'bg-sandstone/60 text-espresso hover:bg-warmborder border-warmborder'
+              }`}
+            >
+              <span>{isRainMode ? '🌧️ Mode Hujan Aktif (Indoor)' : '🌦️ Replan Hujan (Indoor · F62)'}</span>
+            </button>
+
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-warmmuted text-[11px] font-bold">SE Bertugas:</span>
+              <select
+                aria-label="Pilih SE yang bertugas"
+                value={substituteSe || ''}
+                onChange={(e) => handleSetSubstitute(e.target.value ? e.target.value : null)}
+                className="h-8 px-2 rounded-lg border border-warmborder bg-sandstone/30 text-xs font-bold text-espresso cursor-pointer focus:outline-none"
+              >
+                <option value="">Raka Pratama (SE Utama)</option>
+                <option value="Budi Santoso">Budi Santoso (SE Piket / Pengganti)</option>
+                <option value="Siti Rahma">Siti Rahma (SE Cadangan)</option>
+              </select>
+            </div>
+          </div>
+
+          {isRainMode && (
+            <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
+              SOP §11.2: Rute dialihkan ke lokasi beratap / indoor mall untuk keselamatan sales &amp; brosur.
+            </span>
+          )}
         </div>
 
         {/* Route Summary Metrics Banner */}
@@ -467,7 +549,7 @@ export function DailyRouteViewer({
             )}
 
             <div className="space-y-3">
-              {waypoints.map((wp) => (
+              {effectiveWaypoints.map((wp) => (
                 <div
                   key={`${wp.order}-${wp.name}`}
                   className={`p-4 rounded-2xl bg-white border shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 ${
@@ -484,15 +566,15 @@ export function DailyRouteViewer({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sandstone text-warmmuted">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sandstone text-warmmuted whitespace-nowrap shrink-0">
                           {wp.category}
                         </span>
                         {wp.isCustom && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-terracotta border border-amber-200">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-terracotta border border-amber-200 whitespace-nowrap shrink-0">
                             Rute Mandiri SE
                           </span>
                         )}
-                        <span className="text-xs font-bold text-olive">
+                        <span className="text-xs font-bold text-olive whitespace-nowrap shrink-0">
                           ± {wp.estimatedDriveMinutes} mnt
                         </span>
                       </div>

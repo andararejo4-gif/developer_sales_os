@@ -727,7 +727,7 @@ export function FieldOpsModal({
           {activeTab === 'absen' && (
             <div className="space-y-4 sm:space-y-5">
               {/* KARTU PRESENSI MANDIRI (SE, SM, ADMIN, DIREKSI) */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-warmborder flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4 shadow-xs">
+              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-warmborder flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 sm:gap-4 shadow-xs">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-olive">
@@ -758,11 +758,10 @@ export function FieldOpsModal({
                     {liveGpsInfo ? ` · GPS: ${liveGpsInfo.streetAddress}` : ''}
                   </p>
                 </div>
-                <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2.5 w-full sm:w-auto shrink-0">
-                  <label className="min-h-[44px] px-2 sm:px-3.5 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-espresso border border-warmborder text-[11px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap">
-                    <Camera className="size-3.5 sm:size-4 text-terracotta shrink-0" />
-                    <span className="sm:hidden truncate">{photoProofUrl ? 'Foto ✓' : 'Foto'}</span>
-                    <span className="hidden sm:inline">{photoProofUrl ? 'Foto Terlampir ✓' : 'Lampirkan Foto'}</span>
+                <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto shrink-0">
+                  <label className="min-h-[40px] px-3 py-2 rounded-xl bg-sandstone hover:bg-warmborder text-espresso border border-warmborder text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0">
+                    <Camera className="size-4 text-terracotta shrink-0" />
+                    <span>{photoProofUrl ? 'Foto Terlampir ✓' : 'Lampirkan Foto'}</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -773,11 +772,10 @@ export function FieldOpsModal({
                   </label>
                   <button
                     onClick={handleCheckIn}
-                    className="min-h-[44px] px-2 sm:px-4 py-2 rounded-xl bg-olive text-white text-[11px] sm:text-xs font-bold hover:bg-olive/90 cursor-pointer inline-flex items-center justify-center gap-1 sm:gap-1.5 shadow-xs whitespace-nowrap"
+                    className="min-h-[40px] px-3.5 py-2 rounded-xl bg-olive text-white text-xs font-bold hover:bg-olive/90 cursor-pointer inline-flex items-center justify-center gap-1.5 shadow-xs whitespace-nowrap shrink-0"
                   >
-                    <CheckCircle2 className="size-3.5 sm:size-4 shrink-0" />
-                    <span className="sm:hidden">Check-In</span>
-                    <span className="hidden sm:inline">Check-In GPS ({userRole})</span>
+                    <CheckCircle2 className="size-4 shrink-0" />
+                    <span>Check-In GPS ({userRole})</span>
                   </button>
                   <button
                     onClick={handleCheckOut}
@@ -815,7 +813,7 @@ export function FieldOpsModal({
               {/* JIKA MANAGER (SM / ADMIN): TAMPILKAN QUICK RADAR SE + REKAP ABSENSI TIM SE */}
               {isManager && (
                 <>
-                  <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-espresso to-[#3F2B20] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                  <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-espresso to-[#3F2B20] text-white flex flex-col lg:flex-row lg:items-center justify-between gap-3 shadow-xs">
                     <div className="flex items-center gap-3">
                       <div className="size-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
                         <Radio className="size-5 text-amber-300 animate-pulse" />
@@ -1122,7 +1120,7 @@ export function FieldOpsModal({
               />
 
               <div className="p-5 rounded-2xl bg-white border border-warmborder space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                   <div>
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-terracotta">
                       Live Field Tracking (Semua Paket)

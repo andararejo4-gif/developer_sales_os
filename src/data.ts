@@ -10,7 +10,9 @@ export type RoleKey =
   | 'IT'
   | 'DIGITAL_MARKETING'
   | 'SUPERADMIN'
-  | 'SUPERADMIN_IT';
+  | 'SUPERADMIN_IT'
+  | 'REFERRAL_PARTNER'
+  | 'SALES_PARTNER';
 
 export interface UserProfile {
   name: string;
@@ -113,6 +115,26 @@ export const USERS_BY_ROLE: Record<RoleKey, UserProfile> = {
     avatarText: 'IT',
     badge: 'IT Core Platform · Multi-Tenant & AI Engine',
     proyek: 'Developer Sales OS (Core Multi-Tenant)',
+  },
+  REFERRAL_PARTNER: {
+    name: 'Ibu Anita Wijaya',
+    role: 'REFERRAL_PARTNER',
+    roleLabel: 'Referral Partner (Konsumen Pemilik)',
+    email: 'anita.wijaya92@gmail.com',
+    noWa: '+6281298765432',
+    avatarText: 'AW',
+    badge: 'Referral Partner · Pemilik Nagoya A-03',
+    proyek: 'The Park Townhouse Sukoharjo',
+  },
+  SALES_PARTNER: {
+    name: 'Dimas Anggoro',
+    role: 'SALES_PARTNER',
+    roleLabel: 'Sales Partner / Agen Properti Luar',
+    email: 'dimas.property.solo@gmail.com',
+    noWa: '+6285722334455',
+    avatarText: 'DA',
+    badge: 'Sales Partner · Mandat Resmi',
+    proyek: 'The Park Townhouse Sukoharjo',
   },
 };
 
