@@ -55,26 +55,34 @@ describe('Audit Remediation - Temuan T3: Privasi WhatsApp & UU PDP No. 27/2022',
   });
 
   it('harus menyertakan klausul disclaimer opt-out pada draf pesan awal untuk kepatuhan UU PDP', async () => {
-    const result = await analyzeLeadWithAi({
-      fullName: 'Ibu Rina Novita',
-      phoneWa: '6281234567890',
-      domicile: 'Jombor Sukoharjo',
-      source: 'Instagram Ads',
-      stage: 'LEAD_BARU',
-      personaCode: 'P1',
-      unitInterest: 'Type 60 Nagoya',
-      paymentScheme: 'KPR',
-      bantB: 2,
-      bantA: 2,
-      bantN: 2,
-      bantT: 2,
-      salesNotes: 'Tanya info rumah 2 lantai',
-      seName: 'Raka Pratama',
-      interactionCount: 1,
-    });
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new Error('offline-unit-test');
+    }) as typeof fetch;
+    try {
+      const result = await analyzeLeadWithAi({
+        fullName: 'Ibu Rina Novita',
+        phoneWa: '6281234567890',
+        domicile: 'Jombor Sukoharjo',
+        source: 'Instagram Ads',
+        stage: 'LEAD_BARU',
+        personaCode: 'P1',
+        unitInterest: 'Type 60 Nagoya',
+        paymentScheme: 'KPR',
+        bantB: 2,
+        bantA: 2,
+        bantN: 2,
+        bantT: 2,
+        salesNotes: 'Tanya info rumah 2 lantai',
+        seName: 'Raka Pratama',
+        interactionCount: 1,
+      });
 
-    expect(result.followup_draft_message).toContain('STOP');
-    expect(result.followup_draft_message).toContain('UU PDP');
+      expect(result.followup_draft_message).toContain('STOP');
+      expect(result.followup_draft_message).toContain('UU PDP');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
   });
 });
 

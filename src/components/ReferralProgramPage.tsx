@@ -19,6 +19,7 @@ import {
   Video,
 } from 'lucide-react';
 import { CreatorDeskTab } from './creator/CreatorDeskTab';
+import { buildCreatorSmartLink, buildShortTrackLink, maskLeadPiiForPartner } from '../lib/creator/creator-desk-store';
 import { loadAuthSession } from '../lib/auth/dummy-accounts';
 import {
   DEFAULT_PARTNER_CONFIG,
@@ -154,11 +155,52 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
 
   const partnerSlug =
     userRole === 'REFERRAL_PARTNER'
-      ? 'anita_wijaya'
+      ? 'ANITA-RP'
       : userRole === 'SALES_PARTNER'
-      ? 'dimas_property'
-      : 'advocate_portal';
-  const referralUrl = `https://theparktownhouse.com/ref?src=${partnerSlug}&proj=${projectId}`;
+      ? 'DIMAS-SP'
+      : 'ANDARA-MITRA';
+  const [shortCodeUrl, setShortCodeUrl] = useState<string | null>(null);
+  const [creatingShortLink, setCreatingShortLink] = useState(false);
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://developerproperti.giivepro.com';
+  const referralUrl =
+    shortCodeUrl ||
+    buildCreatorSmartLink({
+      origin: currentOrigin,
+      slug: projectId,
+      creatorCode: partnerSlug,
+      persona: 'keluarga',
+    });
+
+  const handleCreatePartnerShortLink = async () => {
+    setCreatingShortLink(true);
+    try {
+      const res = await fetch('/api/smart-links', {
+        method: 'POST',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          projectId,
+          partnerRole: userRole === 'SALES_PARTNER' ? 'SALES_PARTNER' : 'REFERRAL_PARTNER',
+          creatorCode: partnerSlug,
+          personaCode: 'keluarga',
+          targetUrl: `/site/${encodeURIComponent(projectId)}?p=keluarga&k=${encodeURIComponent(partnerSlug)}`,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.ok && json.link?.short_code) {
+        const shortUrl = buildShortTrackLink(currentOrigin, String(json.link.short_code));
+        setShortCodeUrl(shortUrl);
+        navigator.clipboard?.writeText(shortUrl).catch(() => {});
+        showToastMsg(`Shortlink ${json.link.short_code} dibuat & disalin!`);
+      } else {
+        showToastMsg(json.error || 'Gagal membuat shortlink /c/.');
+      }
+    } catch {
+      showToastMsg('Gagal terhubung ke server untuk membuat shortlink.');
+    } finally {
+      setCreatingShortLink(false);
+    }
+  };
 
   const showToastMsg = (msg: string) => {
     setToast(msg);
@@ -445,13 +487,23 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
               {referralUrl}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleShareWa}
-            className="h-8 px-3 rounded-lg bg-sandstone hover:bg-warmborder text-espresso font-medium text-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-colors"
-          >
-            <span>Bagikan via WhatsApp</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              disabled={creatingShortLink}
+              onClick={handleCreatePartnerShortLink}
+              className="h-8 px-3 rounded-lg bg-espresso hover:bg-espresso/90 text-white font-medium text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors disabled:opacity-60"
+            >
+              <span>{creatingShortLink ? 'Membuat...' : 'Buat Shortlink /c/'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleShareWa}
+              className="h-8 px-3 rounded-lg bg-sandstone hover:bg-warmborder text-espresso font-medium text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+            >
+              <span>Bagikan via WhatsApp</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -686,8 +738,23 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="font-semibold text-espresso">{item.referredFriendName}</div>
-                      <div className="text-[11px] text-warmmuted mt-0.5">{item.referredFriendPhone}</div>
+                      {(() => {
+                        const isExternalPartner = userRole === 'REFERRAL_PARTNER' || userRole === 'SALES_PARTNER';
+                        const display = isExternalPartner
+                          ? maskLeadPiiForPartner(item.referredFriendName, item.referredFriendPhone)
+                          : { maskedName: item.referredFriendName, maskedPhone: item.referredFriendPhone };
+                        return (
+                          <>
+                            <div className="font-semibold text-espresso">
+                              {display.maskedName}
+                              {isExternalPartner && (
+                                <span className="ml-1.5 text-[9px] font-normal text-warmmuted">(E6 Terlindungi)</span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-warmmuted mt-0.5">{display.maskedPhone}</div>
+                          </>
+                        );
+                      })()}
                       <div className="text-[11px] text-espresso/80 flex items-center gap-1 mt-0.5">
                         <Building2 className="size-3 text-warmmuted" /> {item.unitInterest}
                       </div>

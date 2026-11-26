@@ -8,7 +8,7 @@ import { PlanCheckoutModal } from '../PlanCheckoutModal';
 gsap.registerPlugin(ScrollTrigger);
 
 interface SwimlaneAndPricingV3Props {
-  onOpenWizard: () => void;
+  onOpenWizard: (planCode?: 'gold' | 'platinum' | 'diamond') => void;
 }
 
 const TIME_SLOTS = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'];
@@ -393,7 +393,7 @@ export const SwimlaneAndPricingV3: React.FC<SwimlaneAndPricingV3Props> = ({ onOp
 
                   <div className="mt-6 flex flex-col items-center">
                     <button
-                      onClick={onOpenWizard}
+                      onClick={() => onOpenWizard(plan.code)}
                       className={`w-full min-h-[48px] rounded-full font-bold text-sm transition-colors cursor-pointer ${
                         isRec
                           ? 'bg-[#0B3D2E] text-[#C6F432] hover:bg-[#135440]'

@@ -24,6 +24,7 @@ interface PublicHomepageV3Props {
 export const PublicHomepageV3: React.FC<PublicHomepageV3Props> = ({ onEnterDashboard }) => {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [selectedWizardPlan, setSelectedWizardPlan] = useState<'gold' | 'platinum' | 'diamond'>('platinum');
   const [isLoveLetterOpen, setIsLoveLetterOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isMarketResearchOpen, setIsMarketResearchOpen] = useState(false);
@@ -99,7 +100,10 @@ export const PublicHomepageV3: React.FC<PublicHomepageV3Props> = ({ onEnterDashb
         />
 
         <SwimlaneAndPricingV3
-          onOpenWizard={() => setIsWizardOpen(true)}
+          onOpenWizard={(planCode) => {
+            if (planCode) setSelectedWizardPlan(planCode);
+            setIsWizardOpen(true);
+          }}
         />
 
         <FaqAndFooterV3
@@ -122,8 +126,10 @@ export const PublicHomepageV3: React.FC<PublicHomepageV3Props> = ({ onEnterDashb
 
       <OnboardingWizardModal
         isOpen={isWizardOpen}
+        selectedPlan={selectedWizardPlan}
         onClose={() => setIsWizardOpen(false)}
         onOpenFullViewer={() => setIsLoveLetterOpen(true)}
+        onEnterDashboard={onEnterDashboard}
       />
 
       <LoveLetterViewerModal

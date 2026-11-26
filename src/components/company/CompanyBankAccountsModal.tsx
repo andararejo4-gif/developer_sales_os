@@ -6,6 +6,15 @@
 import React, { useEffect, useState } from 'react';
 import { Building2, Plus, Edit2, Trash2, Star, X, AlertCircle } from 'lucide-react';
 import type { RoleKey, UserProfile } from '../../data';
+import { loadAuthSession } from '../../lib/auth/dummy-accounts';
+
+function getBankAuthHeaders(): HeadersInit {
+  const session = loadAuthSession();
+  return {
+    'Content-Type': 'application/json',
+    ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+  };
+}
 
 export interface CompanyBankAccount {
   id: string;
@@ -21,60 +30,7 @@ export interface CompanyBankAccount {
   updated_at: string;
 }
 
-const BANK_ACCOUNTS_STORAGE_KEY = 'devos_company_bank_accounts';
-
-export const DEFAULT_COMPANY_BANK_ACCOUNTS: CompanyBankAccount[] = [
-  {
-    id: 'acc-bca-01',
-    project_id: 'the-park-townhouse',
-    bank_name: 'Bank BCA',
-    account_number: '016489545',
-    account_holder: 'PT Andara Rejo Makmur',
-    is_primary: true,
-    is_active: true,
-    notes: 'Rekening utama booking fee dan DP unit The Park Townhouse',
-    created_by: 'direksi@andararejomakmur.co.id',
-    created_at: '2026-11-20T08:00:00.000Z',
-    updated_at: '2026-11-20T08:00:00.000Z',
-  },
-  {
-    id: 'acc-mandiri-02',
-    project_id: 'the-park-townhouse',
-    bank_name: 'Bank Mandiri',
-    account_number: '1380022334455',
-    account_holder: 'PT Andara Rejo Makmur',
-    is_primary: false,
-    is_active: true,
-    notes: 'Rekening operasional pelunasan akad KPR dan cicilan in-house',
-    created_by: 'direksi@andararejomakmur.co.id',
-    created_at: '2026-11-20T08:00:00.000Z',
-    updated_at: '2026-11-20T08:00:00.000Z',
-  },
-];
-
-function loadStoredBankAccounts(): CompanyBankAccount[] {
-  if (typeof localStorage === 'undefined') return DEFAULT_COMPANY_BANK_ACCOUNTS;
-  try {
-    const raw = localStorage.getItem(BANK_ACCOUNTS_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(BANK_ACCOUNTS_STORAGE_KEY, JSON.stringify(DEFAULT_COMPANY_BANK_ACCOUNTS));
-      return DEFAULT_COMPANY_BANK_ACCOUNTS;
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_COMPANY_BANK_ACCOUNTS;
-  } catch {
-    return DEFAULT_COMPANY_BANK_ACCOUNTS;
-  }
-}
-
-function saveStoredBankAccounts(accs: CompanyBankAccount[]) {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(BANK_ACCOUNTS_STORAGE_KEY, JSON.stringify(accs));
-  } catch {
-    /* ignore */
-  }
-}
+export const DEFAULT_COMPANY_BANK_ACCOUNTS: CompanyBankAccount[] = [];
 
 interface CompanyBankAccountsModalProps {
   isOpen: boolean;
@@ -93,7 +49,7 @@ export const CompanyBankAccountsModal: React.FC<CompanyBankAccountsModalProps> =
   projectId = 'the-park-townhouse',
   projectName = 'The Park Townhouse',
 }) => {
-  const [accounts, setAccounts] = useState<CompanyBankAccount[]>(() => loadStoredBankAccounts());
+  const [accounts, setAccounts] = useState<CompanyBankAccount[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -101,13 +57,13 @@ export const CompanyBankAccountsModal: React.FC<CompanyBankAccountsModalProps> =
   // Form Fields
   const [bankName, setBankName] = useState<string>('BCA');
   const [accountNumber, setAccountNumber] = useState<string>('');
-  const [accountHolder, setAccountHolder] = useState<string>('PT Andara Rejo Makmur');
+  const [accountHolder, setAccountHolder] = useState<string>(projectName);
   const [isPrimary, setIsPrimary] = useState<boolean>(false);
   const [notes, setNotes] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const canManage = ['SM', 'ADMIN', 'DIREKSI', 'IT'].includes(role);
+  const canManage = ['SM', 'ADMIN', 'DIREKSI', 'IT', 'SUPERADMIN_IT'].includes(role);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -118,40 +74,35 @@ export const CompanyBankAccountsModal: React.FC<CompanyBankAccountsModalProps> =
     try {
       setLoading(true);
       const res = await fetch('/api/company/bank-accounts', {
-        headers: {
-          'X-User-Email': user.email,
-          'X-User-Role': role,
-        },
+        credentials: 'include',
+        headers: getBankAuthHeaders(),
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.ok && Array.isArray(data.data) && data.data.length > 0) {
+        if (data.ok && Array.isArray(data.data)) {
           setAccounts(data.data);
-          saveStoredBankAccounts(data.data);
-          setLoading(false);
           return;
         }
       }
+      setAccounts([]);
     } catch {
-      // Backend API offline / proxy timeout -> fallback ke localStorage
+      setAccounts([]);
     } finally {
       setLoading(false);
     }
-    const local = loadStoredBankAccounts();
-    setAccounts(local);
   };
 
   useEffect(() => {
     if (isOpen) {
       fetchAccounts();
     }
-  }, [isOpen]);
+  }, [isOpen, projectId]);
 
   const handleOpenAdd = () => {
     setEditingId(null);
     setBankName('BCA');
     setAccountNumber('');
-    setAccountHolder('PT Andara Rejo Makmur');
+    setAccountHolder(projectName);
     setIsPrimary(accounts.length === 0);
     setNotes('');
     setIsFormOpen(true);
@@ -175,7 +126,7 @@ export const CompanyBankAccountsModal: React.FC<CompanyBankAccountsModalProps> =
     }
 
     setSubmitting(true);
-    const holder = accountHolder.trim() || 'PT Andara Rejo Makmur';
+    const holder = accountHolder.trim() || projectName;
 
     try {
       const method = editingId ? 'PUT' : 'POST';
@@ -189,90 +140,52 @@ export const CompanyBankAccountsModal: React.FC<CompanyBankAccountsModalProps> =
         notes: notes.trim(),
       };
 
-      await fetch('/api/company/bank-accounts', {
+      const res = await fetch('/api/company/bank-accounts', {
         method,
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'X-User-Email': user.email,
-          'X-User-Role': role,
+          ...getBankAuthHeaders(),
         },
         body: JSON.stringify(body),
       });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) {
+        showToast(json.error || 'Gagal menyimpan rekening resmi.');
+        setSubmitting(false);
+        return;
+      }
+
+      await fetchAccounts();
+      showToast(editingId ? 'Rekening berhasil diperbarui!' : 'Rekening resmi baru berhasil ditambahkan!');
+      setIsFormOpen(false);
+      setEditingId(null);
     } catch {
-      // Offline fallback: tetap lanjut simpan ke penyimpanan lokal
+      showToast('Gagal terhubung ke server untuk menyimpan rekening.');
+    } finally {
+      setSubmitting(false);
     }
-
-    // Persistensi fallback ke localStorage
-    const current = loadStoredBankAccounts();
-    const now = new Date().toISOString();
-    let updated: CompanyBankAccount[];
-
-    if (editingId) {
-      updated = current.map((item) => {
-        if (item.id === editingId) {
-          return {
-            ...item,
-            bank_name: bankName.trim(),
-            account_number: accountNumber.trim(),
-            account_holder: holder,
-            is_primary: isPrimary,
-            notes: notes.trim(),
-            updated_at: now,
-          };
-        }
-        if (isPrimary && item.project_id === projectId) {
-          return { ...item, is_primary: false, updated_at: now };
-        }
-        return item;
-      });
-    } else {
-      const newAcc: CompanyBankAccount = {
-        id: `acc-${Date.now()}`,
-        project_id: projectId,
-        bank_name: bankName.trim(),
-        account_number: accountNumber.trim(),
-        account_holder: holder,
-        is_primary: isPrimary,
-        is_active: true,
-        notes: notes.trim(),
-        created_by: user.email,
-        created_at: now,
-        updated_at: now,
-      };
-      const adjusted = isPrimary
-        ? current.map((item) => (item.project_id === projectId ? { ...item, is_primary: false } : item))
-        : current;
-      updated = [newAcc, ...adjusted];
-    }
-
-    saveStoredBankAccounts(updated);
-    setAccounts(updated);
-    showToast(editingId ? 'Rekening berhasil diperbarui!' : 'Rekening resmi baru berhasil ditambahkan!');
-    setIsFormOpen(false);
-    setEditingId(null);
-    setSubmitting(false);
   };
 
   const handleDelete = async (id: string, bank: string) => {
     if (!window.confirm(`Yakin ingin menghapus rekening resmi ${bank}?`)) return;
 
     try {
-      await fetch(`/api/company/bank-accounts?id=${encodeURIComponent(id)}`, {
+      const res = await fetch(`/api/company/bank-accounts?id=${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: {
-          'X-User-Email': user.email,
-          'X-User-Role': role,
-        },
+        credentials: 'include',
+        headers: getBankAuthHeaders(),
       });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) {
+        showToast(json.error || 'Gagal menghapus rekening.');
+        return;
+      }
+      await fetchAccounts();
+      showToast('Rekening berhasil dihapus.');
     } catch {
-      // Offline fallback
+      showToast('Gagal terhubung ke server untuk menghapus rekening.');
     }
-
-    const current = loadStoredBankAccounts();
-    const updated = current.filter((a) => a.id !== id);
-    saveStoredBankAccounts(updated);
-    setAccounts(updated);
-    showToast('Rekening berhasil dihapus.');
   };
 
   if (!isOpen) return null;
@@ -315,7 +228,7 @@ export const CompanyBankAccountsModal: React.FC<CompanyBankAccountsModalProps> =
             <span>Keamanan Pembayaran &amp; Rekening Sah Perusahaan</span>
           </div>
           <p className="text-warmmuted text-[11px] leading-relaxed">
-            AI dilarang merekomendasikan nomor rekening di luar daftar ini. Seluruh booking fee dan pelunasan konsumen wajib ditransfer ke rekening resmi atas nama PT Andara Rejo Makmur.
+            AI dilarang merekomendasikan nomor rekening di luar daftar ini. Seluruh booking fee dan pelunasan konsumen wajib ditransfer ke rekening resmi terdaftar untuk proyek <strong>{projectName}</strong>.
           </p>
         </div>
 
@@ -510,7 +423,7 @@ export const CompanyBankAccountsModal: React.FC<CompanyBankAccountsModalProps> =
         {/* Footer */}
         <div className="flex items-center justify-between pt-3 border-t border-warmborder shrink-0">
           <span className="text-[11px] text-warmmuted">
-            Status login: <strong>{user.name}</strong> ({role})
+            Status login: <strong>{loadAuthSession()?.name || user.name}</strong> ({loadAuthSession()?.role || role})
           </span>
           <button
             type="button"

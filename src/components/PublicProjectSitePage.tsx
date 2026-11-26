@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Building2, Calculator, CheckCircle2, MapPin, ShieldCheck, Send } from 'lucide-react';
+import { Building2, Calculator, CheckCircle2, MapPin, ShieldCheck, Send, Radio } from 'lucide-react';
 import { calculateMortgageInstallment } from '../lib/website-generator/the-park-landing-data';
 import { formatRupiah } from '../lib/sales-target/calculator';
 
@@ -41,6 +41,7 @@ export function PublicProjectSitePage({ slug }: { slug: string }) {
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [liveSessions, setLiveSessions] = useState<Array<{ id: string; title: string; starts_at: string; location_label: string }>>([]);
 
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const seRef = searchParams?.get('se') || '';
@@ -99,6 +100,14 @@ export function PublicProjectSitePage({ slug }: { slug: string }) {
       .finally(() => {
         if (active) setLoading(false);
       });
+    fetch(`/api/public/live/${encodeURIComponent(slug)}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (active && json.ok && Array.isArray(json.sessions)) {
+          setLiveSessions(json.sessions);
+        }
+      })
+      .catch(() => {});
     return () => {
       active = false;
     };
@@ -386,6 +395,50 @@ export function PublicProjectSitePage({ slug }: { slug: string }) {
               </button>
             </div>
           </form>
+        </section>
+
+        {/* Ruang /live: Jadwal Siaran Live & RSVP Pengingat (F83 + Brief Kreator) */}
+        <section id="live" className="rounded-2xl border border-[#E5DED4] bg-white p-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <div className="flex items-center gap-2">
+              <Radio className="h-5 w-5 text-[#1E4D3B]" />
+              <h3 className="text-lg font-bold">Jadwal Siaran Live &amp; Tur Virtual (/live)</h3>
+            </div>
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-[#1E4D3B]">
+              {liveSessions.length > 0 ? `${liveSessions.length} Sesi Terjadwal` : 'Sesi Harian 19.30 WIB'}
+            </span>
+          </div>
+          {liveSessions.length === 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#E5DED4] bg-[#FAF8F4] p-4 text-sm">
+              <div>
+                <div className="font-semibold">Live Tur Rumah Contoh &amp; Tanya-Jawab KPR</div>
+                <div className="text-xs text-[#6B5E53]">Setiap hari pukul 19.30 WIB bersama Tim Resmi &amp; Kreator</div>
+              </div>
+              <a
+                href="#form-minat"
+                className="rounded-lg bg-[#1E4D3B] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#163B2D]"
+              >
+                Daftar Pengingat Live
+              </a>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {liveSessions.map((s) => (
+                <div key={s.id} className="rounded-xl border border-[#E5DED4] bg-[#FAF8F4] p-4 text-sm">
+                  <div className="font-semibold">{s.title}</div>
+                  <div className="text-xs text-[#6B5E53] mt-1">
+                    {new Date(s.starts_at).toLocaleString('id-ID')} · {s.location_label || 'Live Online'}
+                  </div>
+                  <a
+                    href="#form-minat"
+                    className="mt-3 inline-block rounded-lg bg-[#1E4D3B] px-3 py-1.5 text-xs font-semibold text-white"
+                  >
+                    RSVP Pengingat
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       </main>
     </div>

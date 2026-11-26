@@ -134,6 +134,7 @@ import { CustomerComplaintsPage } from './components/CustomerComplaintsPage';
 import { BankSubmissionWorkflowPage } from './components/BankSubmissionWorkflowPage';
 import { OrgUserManagementModal } from './components/OrgUserManagementModal';
 import { OrgUserManagementPage } from './components/OrgUserManagementPage';
+import { R2OperationsWorkbench } from './components/operations/R2OperationsWorkbench';
 import { fetchPlanOverridesFromDb, getDeveloperPlan } from './lib/plans/plan-override';
 import { ItKnowledgeAiPanel } from './components/it/ItKnowledgeAiPanel';
 import { ExecutiveControlTowerPage } from './components/ExecutiveControlTowerPage';
@@ -233,7 +234,8 @@ export default function App() {
   const [projects, setProjects] = useState<CompanyProject[]>(() => loadAllProjects());
   const [activeProjectId, setActiveProjectId] = useState<string>(() => loadSavedProjectId());
   const [showNewProjectModal, setShowNewProjectModal] = useState<boolean>(false);
-  const activeProject = getProjectById(activeProjectId);
+  const activeProject =
+    projects.find((p) => p.id === activeProjectId) || projects[0] || getProjectById(activeProjectId);
 
   // Active Sales Target Scenario per Project (Dikendalikan oleh SM)
   const [activeScenario, setActiveScenario] = useState<ScenarioType>(() =>
@@ -249,15 +251,73 @@ export default function App() {
   useEffect(() => {
     if (!authSession?.token) return;
     let cancelled = false;
-    void hydrateAllRemoteState().then((items) => {
-      if (cancelled || !items || Object.keys(items).length === 0) return;
-      setProjects(loadAllProjects());
-      const nextProjectId = loadSavedProjectId();
-      setActiveProjectId(nextProjectId);
-      setActiveScenario(
-        loadPersistedState<ScenarioType>(`devos_target_scenario_${nextProjectId}`, 'realistis')
-      );
-    });
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${authSession.token}`,
+    };
+
+    void fetch('/api/tenant/projects', { credentials: 'include', headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (cancelled) return;
+        if (json?.ok && Array.isArray(json.projects) && json.projects.length > 0) {
+          const isDefaultAndara = json.tenantId === 'andara_rejo_makmur';
+          if (isDefaultAndara) {
+            void hydrateAllRemoteState().then((items) => {
+              if (cancelled || !items || Object.keys(items).length === 0) return;
+              setProjects(loadAllProjects());
+              const nextProjectId = loadSavedProjectId();
+              setActiveProjectId(nextProjectId);
+              setActiveScenario(
+                loadPersistedState<ScenarioType>(`devos_target_scenario_${nextProjectId}`, 'realistis')
+              );
+            });
+            return;
+          }
+          const tenantProjects: CompanyProject[] = json.projects.map((p: any) => {
+            const coordsList = Array.isArray(p.cluster_coords)
+              ? p.cluster_coords.map((c: any, idx: number) => ({
+                  id: `gps-${idx + 1}`,
+                  namaCluster: String(c.namaCluster || c.name || `Cluster ${idx + 1}`),
+                  koordinat: String(c.koordinat || `${c.lat || ''}, ${c.lng || ''}`),
+                  isPrimary: idx === 0,
+                }))
+              : [];
+            return {
+              id: String(p.project_id),
+              kode: String(p.project_id).slice(0, 6).toUpperCase(),
+              nama: String(p.project_name),
+              tipe: 'Menengah' as const,
+              lokasi: String(p.location_label || `${p.city || ''}, ${p.province || ''}`),
+              koordinatGps: coordsList[0]?.koordinat || '-6.974500, 110.363500',
+              titikKoordinatList: coordsList,
+              radiusRisetKm: 25,
+              totalUnit: Number(p.unit_count || 10),
+              terjual: Number(p.sold_count || 0),
+              tersedia: Math.max(0, Number(p.unit_count || 10) - Number(p.sold_count || 0)),
+              kisaranHarga: 'Sesuai Pricelist Resmi',
+              status: 'Aktif' as const,
+              targetBulanan: 5,
+              pencapaianBulanIni: 0,
+              deskripsi: `${p.project_name} oleh ${p.developer_name}`,
+              generatedOutputs: {
+                suratCinta: true,
+                risetPasar: true,
+                targetPenjualan: true,
+                kalenderKonten: true,
+                playbook: true,
+                website: true,
+              },
+            };
+          });
+          setProjects(tenantProjects);
+          const firstId = tenantProjects[0].id;
+          setActiveProjectId(firstId);
+          saveSelectedProjectId(firstId);
+        }
+      })
+      .catch(() => {});
+
     return () => {
       cancelled = true;
     };
@@ -2999,6 +3059,8 @@ export default function App() {
                   </div>
                 </div>
               </section>
+
+              <R2OperationsWorkbench role={role} projectId={activeProjectId} projectName={activeProject.nama} />
             </div>
           )}
 
@@ -3661,6 +3723,8 @@ export default function App() {
                   ))}
                 </div>
               </section>
+
+              <R2OperationsWorkbench role={role} projectId={activeProjectId} projectName={activeProject.nama} />
             </div>
           )}
 
@@ -4058,6 +4122,8 @@ export default function App() {
                   </table>
                 </div>
               </section>
+
+              <R2OperationsWorkbench role={role} projectId={activeProjectId} projectName={activeProject.nama} />
             </div>
           )}
 
@@ -4329,6 +4395,7 @@ export default function App() {
           )}
 
           {activeView === 'dashboard' && role === 'SUPERADMIN_IT' && (
+            <div className="space-y-6">
             <ItCommandCenterDashboard
               activeSection={
                 activeSection === 'it-permissions'
@@ -4365,6 +4432,13 @@ export default function App() {
                 setToast(`Mode Bantuan Aktif: Masuk sebagai ${u.name} (${u.roleLabel})`);
               }}
             />
+            {activeSection !== 'it-permissions' &&
+              activeSection !== 'it-knowledge' &&
+              activeSection !== 'knowledge-ai' &&
+              activeSection !== 'it-hierarchy' && (
+                <R2OperationsWorkbench role={role} projectId={activeProjectId} projectName={activeProject.nama} />
+              )}
+            </div>
           )}
         </div>
       </main>

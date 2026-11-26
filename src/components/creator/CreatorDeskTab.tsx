@@ -17,6 +17,7 @@ import { loadAuthSession } from '../../lib/auth/dummy-accounts';
 import { loadPersistedState, savePersistedState } from '../../lib/navigation/router';
 import {
   buildCreatorSmartLink,
+  buildShortTrackLink,
   calculateKantongAAmount,
   calculatePph21Estimate,
   INITIAL_DEMO_CREATORS,
@@ -26,6 +27,7 @@ import {
   type CreatorProfile,
   type CreatorRoleType,
   type LedgerStatus,
+  type SmartLinkRecord,
 } from '../../lib/creator/creator-desk-store';
 
 interface CreatorDeskTabProps {
@@ -86,6 +88,7 @@ export const CreatorDeskTab: React.FC<CreatorDeskTabProps> = ({
     });
     return Array.isArray(saved?.ledger) ? saved.ledger : [];
   });
+  const [smartLinks, setSmartLinks] = useState<SmartLinkRecord[]>([]);
 
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => {
@@ -101,14 +104,33 @@ export const CreatorDeskTab: React.FC<CreatorDeskTabProps> = ({
   const loadFromServer = useCallback(async () => {
     try {
       const headers = getAuthHeaders();
-      const [cRes, sRes, lRes] = await Promise.all([
+      const [cRes, sRes, lRes, slRes] = await Promise.all([
         fetch(`/api/creators?projectId=${encodeURIComponent(projectId)}`, { credentials: 'include', headers }),
         fetch(`/api/creator-submissions?projectId=${encodeURIComponent(projectId)}`, {
           credentials: 'include',
           headers,
         }),
         fetch(`/api/creator-ledger?projectId=${encodeURIComponent(projectId)}`, { credentials: 'include', headers }),
+        fetch(`/api/smart-links?projectId=${encodeURIComponent(projectId)}`, { credentials: 'include', headers }),
       ]);
+      if (slRes.ok) {
+        const slJson = await slRes.json();
+        if (Array.isArray(slJson.links)) {
+          setSmartLinks(
+            slJson.links.map((r: any) => ({
+              id: String(r.id),
+              shortCode: String(r.short_code),
+              partnerRole: String(r.partner_role || 'CREATOR'),
+              creatorCode: String(r.creator_code),
+              contentCode: String(r.content_code || ''),
+              personaCode: String(r.persona_code || ''),
+              targetUrl: String(r.target_url || ''),
+              clickCount: Number(r.click_count || 0),
+              createdAt: String(r.created_at || '').slice(0, 10),
+            }))
+          );
+        }
+      }
 
       if (cRes.ok) {
         const cJson = await cRes.json();
@@ -204,6 +226,45 @@ export const CreatorDeskTab: React.FC<CreatorDeskTabProps> = ({
       persona: smartPersona,
     });
   }, [projectId, selectedCreatorCode, smartContentCode, smartPersona]);
+
+  const [savingShortLink, setSavingShortLink] = useState(false);
+
+  const handleSaveShortLink = async () => {
+    setSavingShortLink(true);
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://developerproperti.giivepro.com';
+      const targetUrl = `/site/${encodeURIComponent(projectId)}?p=${encodeURIComponent(smartPersona)}&k=${encodeURIComponent(selectedCreatorCode)}&c=${encodeURIComponent(smartContentCode.trim())}`;
+      const res = await fetch('/api/smart-links', {
+        method: 'POST',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          projectId,
+          partnerRole: 'CREATOR',
+          creatorCode: selectedCreatorCode,
+          contentCode: smartContentCode.trim(),
+          personaCode: smartPersona,
+          shortCode: smartContentCode.trim().replace(/[^a-zA-Z0-9_-]/g, ''),
+          targetUrl,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.ok && json.link?.short_code) {
+        const shortUrl = buildShortTrackLink(origin, String(json.link.short_code));
+        navigator.clipboard?.writeText(shortUrl).catch(() => {});
+        await loadFromServer();
+        showToast(`Shortlink /c/${json.link.short_code} disimpan & disalin!`);
+      } else {
+        showToast(json.error || 'Gagal menyimpan shortlink /c/.');
+      }
+    } catch {
+      showToast('Gagal terhubung ke server untuk menyimpan shortlink.');
+    } finally {
+      setSavingShortLink(false);
+    }
+  };
+
+  const totalClicks = useMemo(() => smartLinks.reduce((acc, s) => acc + s.clickCount, 0), [smartLinks]);
 
   const handleCopySmartLink = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -521,20 +582,58 @@ export const CreatorDeskTab: React.FC<CreatorDeskTabProps> = ({
               <option value="orangtua">orangtua (P6)</option>
             </select>
           </div>
-          <div className="flex items-end">
+          <div className="flex items-end gap-2">
             <button
               type="button"
               onClick={handleCopySmartLink}
-              className="w-full h-9 px-3 rounded-lg bg-espresso hover:bg-espresso/90 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+              className="flex-1 h-9 px-3 rounded-lg bg-sandstone hover:bg-warmborder text-espresso text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
             >
               {copiedLink ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-              <span>{copiedLink ? 'Tersalin' : 'Salin Smart Link'}</span>
+              <span>{copiedLink ? 'Tersalin' : 'Salin URL'}</span>
+            </button>
+            <button
+              type="button"
+              disabled={savingShortLink}
+              onClick={handleSaveShortLink}
+              className="flex-1 h-9 px-3 rounded-lg bg-espresso hover:bg-espresso/90 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
+            >
+              <Link2 className="size-3.5" />
+              <span>{savingShortLink ? 'Menyimpan...' : 'Buat /c/'}</span>
             </button>
           </div>
         </div>
         <div className="px-3 py-2 rounded-lg bg-sandstone/60 border border-warmborder font-mono text-[11px] text-espresso truncate">
           {generatedSmartLink}
         </div>
+        {smartLinks.length > 0 && (
+          <div className="pt-2 border-t border-warmborder/60 space-y-1.5">
+            <div className="text-[11px] font-semibold text-warmmuted">
+              Shortlink Aktif &amp; Counter Klik ({totalClicks.toLocaleString('id-ID')} total klik)
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {smartLinks.slice(0, 6).map((sl) => {
+                const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                const url = buildShortTrackLink(origin, sl.shortCode);
+                return (
+                  <button
+                    key={sl.id}
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(url).catch(() => {});
+                      showToast(`Tautan /c/${sl.shortCode} disalin!`);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-sandstone/70 hover:bg-warmborder/60 border border-warmborder text-[11px] flex items-center gap-2 cursor-pointer"
+                  >
+                    <span className="font-mono font-semibold text-espresso">/c/{sl.shortCode}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-olive/10 text-olive font-bold tabular-nums">
+                      {sl.clickCount} klik
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* KPI Ringkas Kreator & Dua Kantong */}
