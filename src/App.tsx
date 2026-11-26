@@ -1689,18 +1689,20 @@ export default function App() {
               <HeartHandshake className="size-4 shrink-0" />
               <span>Surat Cinta 99 Keunggulan</span>
             </button>
-            <button
-              type="button"
-              onClick={() => handleItemClick(() => openView('vault'))}
-              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
-                activeView === 'vault'
-                  ? 'bg-amber-50 text-terracotta font-bold'
-                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
-              }`}
-            >
-              <Lock className="size-4 shrink-0 text-olive" />
-              <span>Dokumen Vault KPR</span>
-            </button>
+            {role !== 'SM' && role !== 'ADMIN' && (
+              <button
+                type="button"
+                onClick={() => handleItemClick(() => openView('vault'))}
+                className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                  activeView === 'vault'
+                    ? 'bg-amber-50 text-terracotta font-bold'
+                    : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+                }`}
+              >
+                <Lock className="size-4 shrink-0 text-olive" />
+                <span>Dokumen Vault KPR</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => handleItemClick(() => openView('referral'))}
@@ -2149,7 +2151,7 @@ export default function App() {
                 {isPlatformSuperadmin ? 'Developer Sales OS Platform' : activeProject.nama}
               </p>
               <h1 className="text-sm font-extrabold text-espresso leading-tight truncate">
-                Dashboard {role}
+                Dashboard {role.replace(/_/g, ' ')}
               </h1>
             </div>
           </div>

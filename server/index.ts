@@ -1082,6 +1082,22 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
   };
 }
 
+// In-memory store ringan untuk Live Location SE (ala WA Live Location)
+const liveSeLocationsMap = new Map<
+  string,
+  {
+    seEmail: string;
+    seName: string;
+    role: string;
+    lat: number;
+    lng: number;
+    accuracy?: number;
+    locationLabel: string;
+    updatedAt: string;
+    timestamp: number;
+  }
+>();
+
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     sendJson(res, 200, { ok: true });
@@ -2621,6 +2637,42 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 9. FIELD OPS (ABSEN, GPS + FOTO, LOG PANGGILAN) -> REAL POSTGRESQL sales_os
+    // Endpoint ringan in-memory untuk Live Location SE (ala WA Live Location, tanpa mengotori counter canvassing)
+    if (pathname === '/api/se/live-location' && req.method === 'GET') {
+      const locations = Array.from(liveSeLocationsMap.values());
+      sendJson(res, 200, { ok: true, locations });
+      return;
+    }
+
+    if (pathname === '/api/se/live-location' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const lat = Number(body.lat);
+      const lng = Number(body.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        sendJson(res, 400, { ok: false, error: 'Koordinat lat/lng tidak valid.' });
+        return;
+      }
+      const entry = {
+        seEmail: user.email.toLowerCase(),
+        seName: user.name,
+        role: user.role,
+        lat,
+        lng,
+        accuracy: body.accuracy !== undefined ? Number(body.accuracy) : undefined,
+        locationLabel: String(body.locationLabel || ''),
+        updatedAt: new Date().toLocaleTimeString('id-ID', {
+          timeZone: 'Asia/Jakarta',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }),
+        timestamp: Date.now(),
+      };
+      liveSeLocationsMap.set(entry.seEmail, entry);
+      sendJson(res, 200, { ok: true, location: entry });
+      return;
+    }
+
     if (pathname === '/api/se/field-logs' && req.method === 'GET') {
       const isManagerRole = user.role !== 'SE';
       const filterEmail = String(parsedUrl.searchParams.get('seEmail') || '').trim().toLowerCase();

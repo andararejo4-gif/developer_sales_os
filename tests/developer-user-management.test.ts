@@ -5,6 +5,7 @@ import {
   toggleDeveloperUserStatus,
   IT_MANAGEABLE_ROLES,
 } from '../src/lib/auth/developer-user-management';
+import { authenticateDummyUser } from '../src/lib/auth/dummy-accounts';
 
 describe('Developer User Management (Otoritas IT Per Developer)', () => {
   it('mendukung seluruh hierarki role dari SE sampai Direksi', () => {
@@ -49,6 +50,16 @@ describe('Developer User Management (Otoritas IT Per Developer)', () => {
 
     const updated = loadDeveloperUsers('PT Andara Rejo Makmur');
     expect(updated.some((u) => u.email === 'suryo.direksi@andararejomakmur.co.id')).toBe(true);
+
+    const loginRes = authenticateDummyUser(
+      'suryo.direksi@andararejomakmur.co.id',
+      'DireksiAndara#2026'
+    );
+    expect(loginRes.ok).toBe(true);
+    if (loginRes.ok) {
+      expect(loginRes.session.role).toBe('DIREKSI');
+      expect(loginRes.session.name).toBe('Bpk. Suryo Pratomo');
+    }
   });
 
   it('IT developer berhasil menambahkan akun SE baru', () => {

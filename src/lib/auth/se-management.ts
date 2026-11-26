@@ -5,6 +5,7 @@
 
 import { loadPersistedState, savePersistedState } from '../navigation/router';
 import { type SePerformance, SE_TEAM_DATA } from '../../data';
+import { registerDeveloperAccount } from './dummy-accounts';
 
 export interface DeveloperOnboardingProfile {
   companyName: string;
@@ -96,6 +97,15 @@ export function addNewSeInhouse(params: AddSeParams): { ok: boolean; se: SePerfo
 
   const updatedList = [newSe, ...existingSe];
   saveSeTeamList(updatedList, params.projectId);
+
+  registerDeveloperAccount({
+    companyName: 'PT Developer Inhouse',
+    name: params.nama.trim(),
+    email: normEmail,
+    password: params.password || 'AndaraSE#2026',
+    phone: params.noWa.trim(),
+    role: 'SE',
+  });
 
   return { ok: true, se: newSe };
 }

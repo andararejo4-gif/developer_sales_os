@@ -3,6 +3,26 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-096 | 2026-11-26 | Sinkronisasi Live Radar GPS SE ke Dashboard SM (Online DB + Offline Shared Store)
+- Status: selesai
+- Ubah: `server/index.ts` (endpoint ringan in-memory `GET`/`POST /api/se/live-location` tanpa mengotori counter `canvassing_contacts`), `src/components/FieldOpsModal.tsx` (sync live SE setiap 5 detik / 10m + polling SM setiap 4 detik + perbaiki pencocokan email SE + fallback `devos_live_radar_se_<projectId>` & `devos_offline_field_logs_<projectId>`), `src/components/field/GpsLiveRadarMap.tsx` (isolasi z-index tombol `Pusatkan ke Saya` di bawah navbar).
+- Alasan/keputusan: Sebelumnya: (1) SM tidak punya polling real-time (hanya fetch sekali saat halaman dibuka), (2) SE hanya sync per 45 detik dan menembak `POST /api/se/field-logs` yang menambah counter canvassing, (3) `Cek Titik Sekarang` tidak mem-publish posisi ke server/store bersama, (4) pencocokan email membentuk `raka.pratama@...` alih-alih `raka@...`.
+- Verifikasi: `bun run build` (`tsc --noEmit && vite build`) dan `bun build server/index.ts` lulus 100%.
+
+## P-095 | 2026-11-26 | Hilangkan Duplikat Menu "Dokumen Vault KPR" di Sidebar SM & Admin
+- Status: selesai
+- Ubah: `src/App.tsx` (sembunyikan item `Dokumen Vault KPR` di bagian Manajemen Perusahaan untuk role `SM` & `ADMIN` karena sudah ada `Approve Dokumen Vault KPR` / `Verifikasi Dokumen Vault KPR` di bagian atas).
+- Alasan/keputusan: Menghilangkan duplikasi menu vault di sidebar SM & Admin.
+- Verifikasi: `bun run build` (`tsc --noEmit && vite build`) lulus.
+
+## P-094 | 2026-11-26 | Merge main ke IT-kantor & Aktifkan Fallback Login Offline Lokal
+- Status: selesai di lokal (belum di-commit ke branch `IT-kantor`)
+- Ubah: `src/lib/auth/dummy-accounts.ts` (pulihkan 11 akun `DUMMY_ACCOUNTS` + akun lokal `SUPERADMIN_IT` `kazukirentarou92@gmail.com`, `ROLE_DEFAULT_PASSWORDS`, `authenticateDummyUser`, `registerDeveloperAccount`, dan fallback otomatis di `loginWithServer`/`registerWithServer`), `src/lib/auth/se-management.ts`, `src/lib/auth/developer-user-management.ts`, `tests/developer-user-management.test.ts`
+- Alasan/keputusan: Mengaktifkan pengujian lokal tanpa server backend/DB aktif selama pengembangan di branch `IT-kantor`.
+- Verifikasi: `bun run build` (`tsc --noEmit && vite build`) lulus; `bun test tests/developer-user-management.test.ts` (7 pass, 0 fail).
+- Berikutnya: Matikan/hapus kembali fallback offline sebelum merge ke `main` agar lolos guardrail `totp-2fa-guardrails.test.ts` & `auth-dummy.test.ts`.
+- Catatan: Karena mode offline aktif, `tests/totp-2fa-guardrails.test.ts` dan `tests/auth-dummy.test.ts` akan gagal selama mode lokal ini aktif.
+
 ## P-093 | 2026-11-25 | Restrukturisasi Menu Admin Panel IT & Flow 2-Langkah Permission Fitur (6 Role Utama)
 - Status: selesai & live di `https://developerproperti.giivepro.com` (`hades`, commit `fb18193` di `origin/feat/totp-2fa`)
 - Ubah: `src/components/superadmin/PermissionMatrixPanel.tsx` (alur 2 langkah: default tabel daftar user dengan tab filter 6 role utama mengecualikan `SUPERADMIN` & `SUPERADMIN_IT` -> klik user masuk halaman detail atur permission CRUD + tombol kembali & opsi Global Per-Role), `src/components/superadmin/ItCommandCenterDashboard.tsx` (pisah 4 halaman: `dashboard`, `permissions`, `knowledge`, `hierarchy` + metrik real & pintasan cepat di dashboard), `src/App.tsx` (menu sidebar khusus `SUPERADMIN_IT`: Permission Fitur, Knowledge AI Terpusat, Hierarki Tenant & Support)
