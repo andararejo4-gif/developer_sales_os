@@ -3,6 +3,14 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-098 | 2026-11-26 | Porting Selektif Multi-Cluster GPS & Override Paket (Gold/Platinum/Diamond) Berbasis PostgreSQL
+- Status: selesai di lokal
+- Ubah: `db/migrations/0025_developer_plan_overrides.sql` (baru), `server/index.ts` (bootstrap tabel `developer_plan_overrides` & endpoint `GET/PUT/DELETE /api/it/plan-overrides`), `src/lib/plans/plan-override.ts` (tambah `fetchPlanOverridesFromDb`, `savePlanOverrideToDb`, `deletePlanOverrideFromDb`), `src/components/projects/ManageClusterCoordsModal.tsx` (baru), `src/lib/projects/projects-data.ts`, `src/components/JalurProyek.tsx`, `src/components/SuperadminPanel.tsx`, `src/components/superadmin/ItCommandCenterDashboard.tsx` (modal & badge Override Paket tersimpan ke PostgreSQL), `src/App.tsx` (input multi-cluster GPS & sinkronisasi `effectivePlanCode` dari DB), plus `tests/plan-override.test.ts` & `tests/projects-data.test.ts`
+- Alasan/keputusan: Mengambil secara selektif hanya Multi-Cluster GPS & Plan Override dari `origin/IT-kantor` (`2813e52`), sekaligus memigrasikan Plan Override dari `localStorage` ke PostgreSQL asli agar berlaku lintas perangkat/role.
+- Verifikasi: `bun test tests/plan-override.test.ts tests/projects-data.test.ts`, `npm run build`, & `bun build server/index.ts`
+- Berikutnya: Push ke `origin/main` & deploy ke `hades` (jalankan migrasi `0025` / auto-ensure saat startup API).
+- Catatan: Login offline dummy (`P-087` IT-kantor), Vault lokal (`P-088` IT-kantor), dan user management lokal (`P-089`/`P-091` IT-kantor) sengaja tidak diambil.
+
 ## P-097 | 2026-11-26 | Soft-Selling 4 Pilar pada AI Follow-Up Berkala (/pipeline?tab=FOLLOWUP)
 - Status: selesai di lokal
 - Ubah: `server/wa-nurture.ts` (fix baca `full_name`/`owner_se_name`/`owner_se_email`, memory antar-step anti-pengulangan, konteks persona `lead_ai_analyses` + `getCentralAiKnowledge` + deteksi `unitMentionedInChat` + adaptasi stage `VISITED`, 4 gaya soft-selling `NurtureTone`, `regenerateAllNurtureDraftsForLead`, `getRecentLeadTurnsForNurture`), `server/index.ts` (`/api/nurture/jobs` kembalikan `recentTurns`, `/api/nurture/jobs/generate` dukung `tone`, tambah `/api/nurture/jobs/regenerate-all`), `src/components/pipeline/FollowupScheduleTab.tsx` (tampilkan 1–2 bubble chat terakhir di preview WA, selector Gaya Pesan, & tombol `Regenerate Semua (H0–H14)`)

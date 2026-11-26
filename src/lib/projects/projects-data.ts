@@ -1,4 +1,4 @@
-import { INITIAL_UNITS, type UnitProperty } from '../../data';
+import { INITIAL_UNITS, type UnitProperty } from "../../data";
 
 // Master Data Proyek Perusahaan PT Andara Rejo Makmur
 // Multi-Project Architecture untuk Seluruh Roles (SE, TL, SM, DM, ADMIN, DIREKSI, IT)
@@ -12,20 +12,29 @@ export interface ProjectGeneratedOutputs {
   ruteHarian: boolean;
 }
 
+export interface ProjectGpsLocation {
+  id: string;
+  namaCluster: string;
+  koordinat: string;
+  keterangan?: string;
+  isPrimary?: boolean;
+}
+
 export interface CompanyProject {
   id: string;
   nama: string;
   kode: string;
-  tipe: 'Mewah' | 'Menengah' | 'Subsidi';
+  tipe: "Mewah" | "Menengah" | "Subsidi";
   lokasi: string;
   totalUnit: number;
   unitTersedia: number;
   unitBooking: number;
   unitTerjual: number;
   kisaranHarga: string;
-  status: 'aktif' | 'pra_peluncuran' | 'sold_out';
+  status: "aktif" | "pra_peluncuran" | "sold_out";
   deskripsi: string;
   koordinatGps?: string;
+  titikKoordinatList?: ProjectGpsLocation[];
   radiusKm?: number;
   katalogFile?: string;
   pricelistFile?: string;
@@ -34,22 +43,46 @@ export interface CompanyProject {
 
 export const COMPANY_PROJECTS: CompanyProject[] = [
   {
-    id: 'the-park-sukoharjo',
-    nama: 'The Park Townhouse Sukoharjo',
-    kode: 'TPT',
-    tipe: 'Mewah',
-    lokasi: 'Mandan, Sukoharjo (Koridor Solo Baru)',
+    id: "the-park-sukoharjo",
+    nama: "The Park Townhouse Sukoharjo",
+    kode: "TPT",
+    tipe: "Mewah",
+    lokasi: "Mandan, Sukoharjo (Koridor Solo Baru)",
     totalUnit: 30,
     unitTersedia: 18,
     unitBooking: 7,
     unitTerjual: 5,
-    kisaranHarga: 'Rp 830 Jt - Rp 1,4 M',
-    status: 'aktif',
-    deskripsi: 'Hunian butik 2 lantai eksklusif 30 unit dengan SHM pecah, bata merah, dan akses 7 menit ke Solo Baru.',
-    koordinatGps: '-7.673872, 110.843978',
+    kisaranHarga: "Rp 830 Jt - Rp 1,4 M",
+    status: "aktif",
+    deskripsi:
+      "Hunian butik 2 lantai eksklusif 30 unit dengan SHM pecah, bata merah, dan akses 7 menit ke Solo Baru.",
+    koordinatGps: "-7.673872, 110.843978",
+    titikKoordinatList: [
+      {
+        id: "tp-loc-1",
+        namaCluster: "Gerbang Utama & Marketing Gallery",
+        koordinat: "-7.673872, 110.843978",
+        keterangan: "Akses jalan utama Mandan, kantor pemasaran & pos sekuriti",
+        isPrimary: true,
+      },
+      {
+        id: "tp-loc-2",
+        namaCluster: "Cluster Nagoya (Blok A & B)",
+        koordinat: "-7.674150, 110.844320",
+        keterangan: "Zona hunian tipe Diamond 75/90 (2 lantai mewah)",
+        isPrimary: false,
+      },
+      {
+        id: "tp-loc-3",
+        namaCluster: "Cluster Osaka (Blok C)",
+        koordinat: "-7.673510, 110.843650",
+        keterangan: "Zona hunian tipe Gold 60/72 (2 lantai compact)",
+        isPrimary: false,
+      },
+    ],
     radiusKm: 25,
-    katalogFile: 'e-katalog_the_park_townhouse.pdf',
-    pricelistFile: 'pricelist_the_park_30_unit.xlsx',
+    katalogFile: "e-katalog_the_park_townhouse.pdf",
+    pricelistFile: "pricelist_the_park_30_unit.xlsx",
     generatedOutputs: {
       suratCinta: true,
       risetPasar: true,
@@ -60,22 +93,39 @@ export const COMPANY_PROJECTS: CompanyProject[] = [
     },
   },
   {
-    id: 'andara-village',
-    nama: 'Andara Village Sukoharjo',
-    kode: 'AVS',
-    tipe: 'Menengah',
-    lokasi: 'Gentan, Baki, Sukoharjo',
+    id: "andara-village",
+    nama: "Andara Village Sukoharjo",
+    kode: "AVS",
+    tipe: "Menengah",
+    lokasi: "Gentan, Baki, Sukoharjo",
     totalUnit: 45,
     unitTersedia: 24,
     unitBooking: 9,
     unitTerjual: 12,
-    kisaranHarga: 'Rp 450 Jt - Rp 750 Jt',
-    status: 'aktif',
-    deskripsi: 'Kompleks perumahan modern minimalis 45 unit keluarga muda dengan fasilitas taman dan one gate system.',
-    koordinatGps: '-7.595430, 110.784220',
+    kisaranHarga: "Rp 450 Jt - Rp 750 Jt",
+    status: "aktif",
+    deskripsi:
+      "Kompleks perumahan modern minimalis 45 unit keluarga muda dengan fasilitas taman dan one gate system.",
+    koordinatGps: "-7.595430, 110.784220",
+    titikKoordinatList: [
+      {
+        id: "av-loc-1",
+        namaCluster: "Cluster Bougenville & Jasmine (Tahap 1)",
+        koordinat: "-7.595430, 110.784220",
+        keterangan: "Gerbang timur Gentan & Marketing Gallery",
+        isPrimary: true,
+      },
+      {
+        id: "av-loc-2",
+        namaCluster: "Cluster Cempaka (Tahap 2)",
+        koordinat: "-7.595950, 110.784850",
+        keterangan: "Tahap ekspansi taman bermain dan 15 unit baru",
+        isPrimary: false,
+      },
+    ],
     radiusKm: 25,
-    katalogFile: 'e-katalog_andara_village.pdf',
-    pricelistFile: 'pricelist_andara_village_45_unit.xlsx',
+    katalogFile: "e-katalog_andara_village.pdf",
+    pricelistFile: "pricelist_andara_village_45_unit.xlsx",
     generatedOutputs: {
       suratCinta: false,
       risetPasar: false,
@@ -86,22 +136,32 @@ export const COMPANY_PROJECTS: CompanyProject[] = [
     },
   },
   {
-    id: 'griya-andara-asri',
-    nama: 'Griya Andara Asri',
-    kode: 'GAA',
-    tipe: 'Subsidi',
-    lokasi: 'Sukoharjo Kota',
+    id: "griya-andara-asri",
+    nama: "Griya Andara Asri",
+    kode: "GAA",
+    tipe: "Subsidi",
+    lokasi: "Sukoharjo Kota",
     totalUnit: 60,
     unitTersedia: 60,
     unitBooking: 0,
     unitTerjual: 0,
-    kisaranHarga: 'Rp 185 Jt (Skema FLPP/KPR Bersubsidi)',
-    status: 'pra_peluncuran',
-    deskripsi: 'Perumahan bersubsidi 60 unit tahap pra-peluncuran untuk masyarakat berpenghasilan rendah dengan legalitas terjamin.',
-    koordinatGps: '-7.684120, 110.832910',
+    kisaranHarga: "Rp 185 Jt (Skema FLPP/KPR Bersubsidi)",
+    status: "pra_peluncuran",
+    deskripsi:
+      "Perumahan bersubsidi 60 unit tahap pra-peluncuran untuk masyarakat berpenghasilan rendah dengan legalitas terjamin.",
+    koordinatGps: "-7.684120, 110.832910",
+    titikKoordinatList: [
+      {
+        id: "gaa-loc-1",
+        namaCluster: "Gerbang Utama & Blok A",
+        koordinat: "-7.684120, 110.832910",
+        keterangan: "Jalan poros Sukoharjo Kota",
+        isPrimary: true,
+      },
+    ],
     radiusKm: 25,
-    katalogFile: 'brosur_griya_andara_subsidi.pdf',
-    pricelistFile: 'pricelist_skema_flpp_60_unit.xlsx',
+    katalogFile: "brosur_griya_andara_subsidi.pdf",
+    pricelistFile: "pricelist_skema_flpp_60_unit.xlsx",
     generatedOutputs: {
       suratCinta: false,
       risetPasar: false,
@@ -113,16 +173,16 @@ export const COMPANY_PROJECTS: CompanyProject[] = [
   },
 ];
 
-export const DEFAULT_PROJECT_ID = 'the-park-sukoharjo';
+export const DEFAULT_PROJECT_ID = "the-park-sukoharjo";
 
-export const PROJECT_STORAGE_KEY = 'devos_active_project_id_v1';
-export const ALL_PROJECTS_STORAGE_KEY = 'devos_all_projects_v1';
+export const PROJECT_STORAGE_KEY = "devos_active_project_id_v1";
+export const ALL_PROJECTS_STORAGE_KEY = "devos_all_projects_v1";
 
 let inMemoryProjects: CompanyProject[] = [...COMPANY_PROJECTS];
 
 export function loadAllProjects(): CompanyProject[] {
   try {
-    if (typeof localStorage !== 'undefined') {
+    if (typeof localStorage !== "undefined") {
       const raw = localStorage.getItem(ALL_PROJECTS_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -138,43 +198,138 @@ export function loadAllProjects(): CompanyProject[] {
   return inMemoryProjects;
 }
 
+export function getProjectCoordinates(
+  project?: CompanyProject | null,
+): ProjectGpsLocation[] {
+  if (!project) return [];
+  if (
+    project.titikKoordinatList &&
+    Array.isArray(project.titikKoordinatList) &&
+    project.titikKoordinatList.length > 0
+  ) {
+    return project.titikKoordinatList;
+  }
+  if (project.koordinatGps) {
+    return [
+      {
+        id: `loc-${project.id}-default`,
+        namaCluster: "Gerbang Utama & Marketing Gallery",
+        koordinat: project.koordinatGps,
+        isPrimary: true,
+      },
+    ];
+  }
+  return [
+    {
+      id: "loc-default",
+      namaCluster: "Gerbang Utama",
+      koordinat: "-7.673872, 110.843978",
+      isPrimary: true,
+    },
+  ];
+}
+
+export function saveProjectCoordinates(
+  projectId: string,
+  locations: ProjectGpsLocation[],
+): ProjectGpsLocation[] {
+  const all = loadAllProjects();
+  const primaryLoc = locations.find((l) => l.isPrimary) || locations[0];
+  const primaryCoord = primaryLoc
+    ? primaryLoc.koordinat
+    : "-7.673872, 110.843978";
+
+  const updated = all.map((p) => {
+    if (p.id === projectId) {
+      return {
+        ...p,
+        titikKoordinatList: locations,
+        koordinatGps: primaryCoord,
+      };
+    }
+    return p;
+  });
+
+  inMemoryProjects = updated;
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(ALL_PROJECTS_STORAGE_KEY, JSON.stringify(updated));
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return locations;
+}
+
 export function saveNewProject(data: {
   nama: string;
   kode?: string;
-  tipe?: 'Mewah' | 'Menengah' | 'Subsidi';
+  tipe?: "Mewah" | "Menengah" | "Subsidi";
   lokasi?: string;
   totalUnit?: number;
   kisaranHarga?: string;
   deskripsi?: string;
   koordinatGps?: string;
+  titikKoordinatList?: ProjectGpsLocation[];
   radiusKm?: number;
   katalogFile?: string;
   pricelistFile?: string;
   generatedOutputs?: Partial<ProjectGeneratedOutputs>;
 }): CompanyProject {
   const current = loadAllProjects();
-  const slug = (data.nama || 'proyek-baru')
+  const slug = (data.nama || "proyek-baru")
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
   const id = `${slug}-${Date.now().toString().slice(-4)}`;
 
   const totalUnit = data.totalUnit && data.totalUnit > 0 ? data.totalUnit : 30;
+
+  // Koordinat primer default
+  const primaryCoord =
+    data.titikKoordinatList && data.titikKoordinatList.length > 0
+      ? data.titikKoordinatList.find((l) => l.isPrimary)?.koordinat ||
+        data.titikKoordinatList[0].koordinat
+      : data.koordinatGps?.trim() || "-7.673872, 110.843978";
+
+  const initialCoordinatesList: ProjectGpsLocation[] =
+    data.titikKoordinatList && data.titikKoordinatList.length > 0
+      ? data.titikKoordinatList
+      : [
+          {
+            id: `loc-${id}-1`,
+            namaCluster: "Gerbang Utama & Marketing Gallery",
+            koordinat: primaryCoord,
+            isPrimary: true,
+          },
+        ];
+
   const newProject: CompanyProject = {
     id,
     nama: data.nama,
-    kode: data.kode?.trim() || data.nama.split(' ').map((w) => w[0]).join('').slice(0, 4).toUpperCase(),
-    tipe: data.tipe || 'Menengah',
-    lokasi: data.lokasi?.trim() || 'Sukoharjo',
+    kode:
+      data.kode?.trim() ||
+      data.nama
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .slice(0, 4)
+        .toUpperCase(),
+    tipe: data.tipe || "Menengah",
+    lokasi: data.lokasi?.trim() || "Sukoharjo",
     totalUnit,
     unitTersedia: totalUnit,
     unitBooking: 0,
     unitTerjual: 0,
-    kisaranHarga: data.kisaranHarga?.trim() || 'Rp 500 Jt - Rp 800 Jt',
-    status: 'aktif',
-    deskripsi: data.deskripsi?.trim() || `Proyek hunian ${data.nama} oleh PT Andara Rejo Makmur.`,
-    koordinatGps: data.koordinatGps?.trim() || '-7.673872, 110.843978',
+    kisaranHarga: data.kisaranHarga?.trim() || "Rp 500 Jt - Rp 800 Jt",
+    status: "aktif",
+    deskripsi:
+      data.deskripsi?.trim() ||
+      `Proyek hunian ${data.nama} oleh PT Andara Rejo Makmur.`,
+    koordinatGps: primaryCoord,
+    titikKoordinatList: initialCoordinatesList,
     radiusKm: data.radiusKm ?? 25,
     katalogFile: data.katalogFile || `katalog_${slug}.pdf`,
     pricelistFile: data.pricelistFile || `pricelist_${slug}.xlsx`,
@@ -192,7 +347,7 @@ export function saveNewProject(data: {
   const updated = [...current, newProject];
   inMemoryProjects = updated;
   try {
-    if (typeof localStorage !== 'undefined') {
+    if (typeof localStorage !== "undefined") {
       localStorage.setItem(ALL_PROJECTS_STORAGE_KEY, JSON.stringify(updated));
     }
   } catch {
@@ -205,9 +360,9 @@ export function saveNewProject(data: {
     const pad = i < 10 ? `0${i}` : `${i}`;
     units.push({
       id: `${newProject.id}-${i}`,
-      cluster: 'Cluster Utama',
+      cluster: "Cluster Utama",
       namaUnit: `A.${pad}`,
-      tipeUnit: 'Tipe 45/72',
+      tipeUnit: "Tipe 45/72",
       luasTanah: 72,
       luasBangunan: 45,
       hargaCashKeras: 500000000,
@@ -215,7 +370,7 @@ export function saveNewProject(data: {
       hargaCash12: 535000000,
       hargaCash24: 565000000,
       keterangan: `Unit A.${pad} di ${newProject.nama}`,
-      status: 'tersedia',
+      status: "tersedia",
     });
   }
   saveUnitsForProject(newProject.id, units);
@@ -233,8 +388,9 @@ let inMemoryProjectId = DEFAULT_PROJECT_ID;
 
 export function loadSavedProjectId(): string {
   try {
-    if (typeof localStorage === 'undefined') return inMemoryProjectId;
-    const saved = localStorage.getItem(PROJECT_STORAGE_KEY) || inMemoryProjectId;
+    if (typeof localStorage === "undefined") return inMemoryProjectId;
+    const saved =
+      localStorage.getItem(PROJECT_STORAGE_KEY) || inMemoryProjectId;
     const all = loadAllProjects();
     if (saved && all.some((p) => p.id === saved)) {
       return saved;
@@ -248,7 +404,7 @@ export function loadSavedProjectId(): string {
 export function saveSelectedProjectId(projectId: string): void {
   inMemoryProjectId = projectId;
   try {
-    if (typeof localStorage === 'undefined') return;
+    if (typeof localStorage === "undefined") return;
     localStorage.setItem(PROJECT_STORAGE_KEY, projectId);
   } catch {
     /* ignore */
@@ -259,9 +415,33 @@ export function saveSelectedProjectId(projectId: string): void {
 function generateAndaraVillageUnits(): UnitProperty[] {
   const units: UnitProperty[] = [];
   const clusters = [
-    { name: 'Bougenville', code: 'A', tipe: 'Tipe 60/90', lt: 90, lb: 60, basePrice: 650000000, count: 15 },
-    { name: 'Cempaka', code: 'B', tipe: 'Tipe 45/72', lt: 72, lb: 45, basePrice: 520000000, count: 15 },
-    { name: 'Jasmine', code: 'C', tipe: 'Tipe 36/60', lt: 60, lb: 36, basePrice: 450000000, count: 15 },
+    {
+      name: "Bougenville",
+      code: "A",
+      tipe: "Tipe 60/90",
+      lt: 90,
+      lb: 60,
+      basePrice: 650000000,
+      count: 15,
+    },
+    {
+      name: "Cempaka",
+      code: "B",
+      tipe: "Tipe 45/72",
+      lt: 72,
+      lb: 45,
+      basePrice: 520000000,
+      count: 15,
+    },
+    {
+      name: "Jasmine",
+      code: "C",
+      tipe: "Tipe 36/60",
+      lt: 60,
+      lb: 36,
+      basePrice: 450000000,
+      count: 15,
+    },
   ];
 
   let idCounter = 1;
@@ -271,16 +451,16 @@ function generateAndaraVillageUnits(): UnitProperty[] {
   for (const c of clusters) {
     for (let i = 1; i <= c.count; i++) {
       const padNum = i < 10 ? `0${i}` : `${i}`;
-      let status: 'tersedia' | 'hold' | 'booking' | 'terjual' = 'tersedia';
+      let status: "tersedia" | "hold" | "booking" | "terjual" = "tersedia";
       if (terjualCount < 12 && i % 3 === 0) {
-        status = 'terjual';
+        status = "terjual";
         terjualCount++;
       } else if (bookingCount < 9 && i % 4 === 0) {
-        status = 'booking';
+        status = "booking";
         bookingCount++;
       }
 
-      const pCash = c.basePrice + (i * 5000000);
+      const pCash = c.basePrice + i * 5000000;
       units.push({
         id: `av-${idCounter++}`,
         cluster: c.name,
@@ -303,9 +483,9 @@ function generateAndaraVillageUnits(): UnitProperty[] {
 function generateGriyaAndaraUnits(): UnitProperty[] {
   const units: UnitProperty[] = [];
   const blocks = [
-    { name: 'Blok A', code: 'A', count: 20 },
-    { name: 'Blok B', code: 'B', count: 20 },
-    { name: 'Blok C', code: 'C', count: 20 },
+    { name: "Blok A", code: "A", count: 20 },
+    { name: "Blok B", code: "B", count: 20 },
+    { name: "Blok C", code: "C", count: 20 },
   ];
 
   let idCounter = 1;
@@ -318,7 +498,7 @@ function generateGriyaAndaraUnits(): UnitProperty[] {
         id: `gaa-${idCounter++}`,
         cluster: b.name,
         namaUnit: `${b.code}.${padNum}`,
-        tipeUnit: 'Subsidi 36/60',
+        tipeUnit: "Subsidi 36/60",
         luasTanah: 60,
         luasBangunan: 36,
         hargaCashKeras: flppPrice,
@@ -326,21 +506,22 @@ function generateGriyaAndaraUnits(): UnitProperty[] {
         hargaCash12: flppPrice,
         hargaCash24: flppPrice,
         keterangan: `Rumah Bersubsidi FLPP Cicilan Rp 1 Jt-an Flat, SHM Pecah, Siap Huni`,
-        status: 'tersedia',
+        status: "tersedia",
       });
     }
   }
   return units;
 }
 
-const ANDARA_VILLAGE_INITIAL_UNITS: UnitProperty[] = generateAndaraVillageUnits();
+const ANDARA_VILLAGE_INITIAL_UNITS: UnitProperty[] =
+  generateAndaraVillageUnits();
 const GRIYA_ANDARA_INITIAL_UNITS: UnitProperty[] = generateGriyaAndaraUnits();
 
 export function getUnitsForProject(projectId: string): UnitProperty[] {
-  if (projectId === 'andara-village') {
+  if (projectId === "andara-village") {
     return structuredClone(ANDARA_VILLAGE_INITIAL_UNITS);
   }
-  if (projectId === 'griya-andara-asri') {
+  if (projectId === "griya-andara-asri") {
     return structuredClone(GRIYA_ANDARA_INITIAL_UNITS);
   }
   return structuredClone(INITIAL_UNITS);
@@ -351,7 +532,7 @@ const inMemoryUnitsStore: Record<string, UnitProperty[]> = {};
 export function loadUnitsForProject(projectId: string): UnitProperty[] {
   const storageKey = `devos_units_${projectId}`;
   try {
-    if (typeof localStorage !== 'undefined') {
+    if (typeof localStorage !== "undefined") {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -373,11 +554,14 @@ export function loadUnitsForProject(projectId: string): UnitProperty[] {
   return initial;
 }
 
-export function saveUnitsForProject(projectId: string, units: UnitProperty[]): void {
+export function saveUnitsForProject(
+  projectId: string,
+  units: UnitProperty[],
+): void {
   inMemoryUnitsStore[projectId] = units;
   const storageKey = `devos_units_${projectId}`;
   try {
-    if (typeof localStorage !== 'undefined') {
+    if (typeof localStorage !== "undefined") {
       localStorage.setItem(storageKey, JSON.stringify(units));
     }
   } catch {

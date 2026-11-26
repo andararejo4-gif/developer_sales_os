@@ -121,6 +121,7 @@ import { CustomerComplaintsPage } from './components/CustomerComplaintsPage';
 import { BankSubmissionWorkflowPage } from './components/BankSubmissionWorkflowPage';
 import { OrgUserManagementModal } from './components/OrgUserManagementModal';
 import { OrgUserManagementPage } from './components/OrgUserManagementPage';
+import { fetchPlanOverridesFromDb, getDeveloperPlan } from './lib/plans/plan-override';
 import { ItKnowledgeAiPanel } from './components/it/ItKnowledgeAiPanel';
 import { ExecutiveControlTowerPage } from './components/ExecutiveControlTowerPage';
 import {
@@ -189,6 +190,21 @@ export default function App() {
   );
   const [role, setRole] = useState<RoleKey>(() => loadAuthSession()?.role ?? 'SE');
   const user = USERS_BY_ROLE[role];
+  const [effectivePlanCode, setEffectivePlanCode] = useState<'gold' | 'platinum' | 'diamond'>(
+    () => getDeveloperPlan('dev-001', 'Platinum').toLowerCase() as 'gold' | 'platinum' | 'diamond'
+  );
+
+  useEffect(() => {
+    if (!authSession) return;
+    fetchPlanOverridesFromDb().then((map) => {
+      const nextPlan = (map['dev-001']?.overriddenPlan || 'Platinum').toLowerCase() as
+        | 'gold'
+        | 'platinum'
+        | 'diamond';
+      setEffectivePlanCode(nextPlan);
+    });
+  }, [authSession, role]);
+
   const isPlatformSuperadmin = role === 'SUPERADMIN' || role === 'SUPERADMIN_IT';
 
   // Multi-Project State (Universal untuk seluruh role: SE, TL, SM, DM, ADMIN, DIREKSI, IT)
@@ -255,6 +271,34 @@ export default function App() {
     const tipe = (fd.get('tipeProyek') as 'Mewah' | 'Menengah' | 'Subsidi') || 'Menengah';
     const lokasi = (fd.get('lokasiProyek') as string)?.trim() || 'Sukoharjo';
     const koordinatGps = (fd.get('koordinatGps') as string)?.trim() || '-7.673872, 110.843978';
+    const cluster1Nama = (fd.get('cluster1Nama') as string)?.trim() || 'Gerbang Utama & Cluster 1';
+    const cluster2Nama = (fd.get('cluster2Nama') as string)?.trim();
+    const cluster2Gps = (fd.get('cluster2Gps') as string)?.trim();
+    const cluster3Nama = (fd.get('cluster3Nama') as string)?.trim();
+    const cluster3Gps = (fd.get('cluster3Gps') as string)?.trim();
+
+    const titikKoordinatList: import('./lib/projects/projects-data').ProjectGpsLocation[] = [
+      {
+        id: 'coord-1',
+        namaCluster: cluster1Nama,
+        koordinat: koordinatGps,
+        isPrimary: true,
+      },
+    ];
+    if (cluster2Nama && cluster2Gps) {
+      titikKoordinatList.push({
+        id: 'coord-2',
+        namaCluster: cluster2Nama,
+        koordinat: cluster2Gps,
+      });
+    }
+    if (cluster3Nama && cluster3Gps) {
+      titikKoordinatList.push({
+        id: 'coord-3',
+        namaCluster: cluster3Nama,
+        koordinat: cluster3Gps,
+      });
+    }
     const radiusKm = Number(fd.get('radiusKm')) || 25;
     const totalUnit = Number(fd.get('totalUnit')) || 30;
     const kisaranHarga = (fd.get('kisaranHarga') as string)?.trim() || 'Rp 500 Jt - Rp 800 Jt';
@@ -268,6 +312,7 @@ export default function App() {
       tipe,
       lokasi,
       koordinatGps,
+      titikKoordinatList,
       radiusKm,
       totalUnit,
       kisaranHarga,
@@ -2223,7 +2268,7 @@ export default function App() {
               userRole={role}
               userProfile={user}
               hideAiGuide={role === 'SE'}
-              planCode="platinum"
+              planCode={effectivePlanCode}
               onDataChanged={fetchSeRealDashboard}
               onUpgradeRequest={() => {
                 setViewMode('homepage');
@@ -4569,32 +4614,89 @@ export default function App() {
                 <p className="font-extrabold text-espresso uppercase tracking-wider text-[10px] text-terracotta">
                   2. Parameter Acuan (Koordinat GPS, Radius 25km, Katalog, Pricelist)
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                  <div className="sm:col-span-8">
-                    <label className="font-bold text-espresso block mb-1">
-                      Titik Koordinat GPS Gerbang Proyek (Lat, Lng) *
-                    </label>
-                    <div className="relative">
+                <div className="space-y-2.5 p-3 rounded-xl border border-warmborder bg-sandstone/40">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-espresso text-xs flex items-center gap-1.5">
+                      <MapPin className="size-3.5 text-terracotta" />
+                      <span>Titik Koordinat GPS Multi-Cluster (Bisa &gt; 1 Titik)</span>
+                    </span>
+                    <span className="text-[10px] text-terracotta font-semibold">Mendukung Multi-Cluster</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <div className="sm:col-span-5">
+                      <label className="text-[10px] font-bold text-espresso block mb-0.5">Nama Titik / Cluster 1 (Utama) *</label>
+                      <input
+                        name="cluster1Nama"
+                        defaultValue="Gerbang Utama & Cluster 1"
+                        placeholder="Contoh: Gerbang & Cluster A"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder bg-white text-espresso text-xs"
+                      />
+                    </div>
+                    <div className="sm:col-span-7">
+                      <label className="text-[10px] font-bold text-espresso block mb-0.5">Koordinat GPS Titik 1 (Lat, Lng) *</label>
                       <input
                         required
                         name="koordinatGps"
                         defaultValue="-7.673872, 110.843978"
                         placeholder="-7.673872, 110.843978"
-                        className="w-full pl-8 pr-3 py-2 rounded-xl border border-warmborder text-espresso focus:outline-none focus:border-terracotta font-mono text-[11px]"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder bg-white text-espresso font-mono text-[11px]"
                       />
-                      <MapPin className="size-4 text-terracotta absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
                   </div>
-                  <div className="sm:col-span-4">
-                    <label className="font-bold text-espresso block mb-1">Radius Riset Pasar</label>
-                    <input
-                      name="radiusKm"
-                      type="number"
-                      defaultValue={25}
-                      readOnly
-                      className="w-full px-3 py-2 rounded-xl border border-warmborder bg-sandstone/70 text-espresso font-semibold"
-                    />
-                    <span className="text-[10px] text-warmmuted">Standar cincin radius 25km</span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <div className="sm:col-span-5">
+                      <label className="text-[10px] font-medium text-warmmuted block mb-0.5">Nama Cluster 2 (Opsional)</label>
+                      <input
+                        name="cluster2Nama"
+                        placeholder="Contoh: Cluster Osaka (Tahap 2)"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder bg-white text-espresso text-xs"
+                      />
+                    </div>
+                    <div className="sm:col-span-7">
+                      <label className="text-[10px] font-medium text-warmmuted block mb-0.5">Koordinat GPS Cluster 2 (Opsional)</label>
+                      <input
+                        name="cluster2Gps"
+                        placeholder="-7.674510, 110.844230"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder bg-white text-espresso font-mono text-[11px]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <div className="sm:col-span-5">
+                      <label className="text-[10px] font-medium text-warmmuted block mb-0.5">Nama Cluster 3 (Opsional)</label>
+                      <input
+                        name="cluster3Nama"
+                        placeholder="Contoh: Cluster Tokyo (Tahap 3)"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder bg-white text-espresso text-xs"
+                      />
+                    </div>
+                    <div className="sm:col-span-7">
+                      <label className="text-[10px] font-medium text-warmmuted block mb-0.5">Koordinat GPS Cluster 3 (Opsional)</label>
+                      <input
+                        name="cluster3Gps"
+                        placeholder="-7.675200, 110.845100"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder bg-white text-espresso font-mono text-[11px]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 pt-1">
+                    <div className="sm:col-span-5">
+                      <label className="text-[10px] font-bold text-espresso block mb-0.5">Radius Riset Pasar (km)</label>
+                      <input
+                        name="radiusKm"
+                        type="number"
+                        defaultValue={25}
+                        readOnly
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder bg-sandstone/70 text-espresso font-semibold text-xs"
+                      />
+                    </div>
+                    <div className="sm:col-span-7 flex items-end pb-1.5">
+                      <span className="text-[10px] text-warmmuted">Standar cincin radius 25km dari koordinat titik acuan proyek</span>
+                    </div>
                   </div>
                 </div>
 

@@ -17,7 +17,9 @@ import {
   CheckCircle2,
   Phone,
   MessageCircle,
+  Zap,
 } from 'lucide-react';
+import { setDeveloperPlanOverride } from '../lib/plans/plan-override';
 import osmPoisData from '../data/osm_poi.json';
 import { POI } from './InteractiveMap';
 import { saveNewProject, type CompanyProject, saveSelectedProjectId } from '../lib/projects/projects-data';
@@ -234,6 +236,30 @@ Semua data telah disesuaikan dengan profil ${projectName}. Anda tinggal memilih 
       })
     );
     setToastMessage('Status tenant berhasil diperbarui.');
+  };
+
+  const handleCyclePlan = (tenantId: string) => {
+    setTenants((prev) =>
+      prev.map((t) => {
+        if (t.id === tenantId) {
+          const nextPlan: 'Gold' | 'Platinum' | 'Diamond' =
+            t.plan === 'Gold' ? 'Platinum' : t.plan === 'Platinum' ? 'Diamond' : 'Gold';
+          setDeveloperPlanOverride({
+            developerId: t.id,
+            companyName: t.name,
+            originalPlan: t.plan,
+            overriddenPlan: nextPlan,
+            overriddenAt: new Date().toISOString(),
+            overriddenBy: 'Superadmin Panel',
+            reason: 'Penyesuaian paket via Superadmin Panel',
+            validUntil: 'Permanen',
+          });
+          return { ...t, plan: nextPlan };
+        }
+        return t;
+      })
+    );
+    setToastMessage('Paket developer berhasil di-override.');
   };
 
   // Toggle Unggulan per POI with Audit Log recording
@@ -655,9 +681,15 @@ Semua data telah disesuaikan dengan profil ${projectName}. Anda tinggal memilih 
                             <span className="block text-[10px] text-warmmuted font-normal">{t.projectsCount} Proyek Aktif</span>
                           </td>
                           <td className="py-3.5 px-3">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-50 text-terracotta border border-amber-200">
-                              {t.plan}
-                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCyclePlan(t.id)}
+                              className="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-50 hover:bg-amber-100 text-terracotta border border-amber-300 flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                              title="Klik untuk ubah paket override (Gold -> Platinum -> Diamond)"
+                            >
+                              <Zap className="size-2.5 text-terracotta" />
+                              <span>{t.plan}</span>
+                            </button>
                           </td>
                           <td className="py-3.5 px-3">
                             <span

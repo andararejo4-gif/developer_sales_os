@@ -4962,6 +4962,77 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // IT PLAN OVERRIDE (GOLD / PLATINUM / DIAMOND) - DB ASLI
+    if (pathname === '/api/it/plan-overrides' && req.method === 'GET') {
+      const rows =
+        user.role === 'SUPERADMIN_IT' || user.role === 'SUPERADMIN'
+          ? await sql`SELECT * FROM sales_os.developer_plan_overrides ORDER BY updated_at DESC`
+          : await sql`
+              SELECT * FROM sales_os.developer_plan_overrides
+              WHERE tenant_id = ${user.tenantId}
+              ORDER BY updated_at DESC
+            `;
+      sendJson(res, 200, { ok: true, overrides: rows });
+      return;
+    }
+
+    if (pathname === '/api/it/plan-overrides' && req.method === 'PUT') {
+      if (!['SUPERADMIN_IT', 'SUPERADMIN'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Tim IT Internal (SUPERADMIN_IT) / Superadmin yang dapat mengubah override paket.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const developerId = String(body.developerId || '').trim();
+      const overriddenPlan = String(body.overriddenPlan || '').trim();
+      if (!developerId || !['Gold', 'Platinum', 'Diamond'].includes(overriddenPlan)) {
+        sendJson(res, 400, { ok: false, error: 'developerId dan overriddenPlan (Gold/Platinum/Diamond) wajib valid.' });
+        return;
+      }
+      const companyName = String(body.companyName || '').trim();
+      const originalPlan = String(body.originalPlan || 'Platinum').trim();
+      const reason = String(body.reason || 'Override paket oleh IT').trim();
+      const validUntil = String(body.validUntil || '30 Hari').trim();
+      const tenantId = String(body.tenantId || user.tenantId || 'andara_rejo_makmur').trim();
+      const overriddenBy = String(body.overriddenBy || `${user.name} (${user.role})`).trim();
+
+      const saved = await sql`
+        INSERT INTO sales_os.developer_plan_overrides (
+          developer_id, tenant_id, company_name, original_plan, overridden_plan,
+          overridden_by, reason, valid_until, overridden_at, updated_at
+        ) VALUES (
+          ${developerId}, ${tenantId}, ${companyName}, ${originalPlan}, ${overriddenPlan},
+          ${overriddenBy}, ${reason}, ${validUntil}, NOW(), NOW()
+        )
+        ON CONFLICT (developer_id) DO UPDATE SET
+          company_name = EXCLUDED.company_name,
+          original_plan = EXCLUDED.original_plan,
+          overridden_plan = EXCLUDED.overridden_plan,
+          overridden_by = EXCLUDED.overridden_by,
+          reason = EXCLUDED.reason,
+          valid_until = EXCLUDED.valid_until,
+          overridden_at = NOW(),
+          updated_at = NOW()
+        RETURNING *
+      `;
+      sendJson(res, 200, { ok: true, override: saved[0] });
+      return;
+    }
+
+    if (pathname === '/api/it/plan-overrides' && req.method === 'DELETE') {
+      if (!['SUPERADMIN_IT', 'SUPERADMIN'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Tim IT Internal (SUPERADMIN_IT) / Superadmin yang dapat mereset override paket.' });
+        return;
+      }
+      const developerId = String(parsedUrl.searchParams.get('developerId') || '').trim();
+      if (!developerId) {
+        sendJson(res, 400, { ok: false, error: 'developerId wajib diisi.' });
+        return;
+      }
+      await sql`DELETE FROM sales_os.developer_plan_overrides WHERE developer_id = ${developerId}`;
+      sendJson(res, 200, { ok: true, developerId });
+      return;
+    }
+
     // IT KNOWLEDGE AI TERPUSAT (1 SUMBER DATA + OCR LOKAL)
     if (pathname === '/api/it/knowledge-ai' && req.method === 'GET') {
       if (!['IT', 'SUPERADMIN_IT', 'SUPERADMIN', 'ADMIN', 'SM', 'DIREKSI'].includes(user.role)) {
@@ -5302,6 +5373,20 @@ async function ensureSeOpsTables(): Promise<void> {
       ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ DEFAULT NOW()
   `;
   await ensurePermissionTables();
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.developer_plan_overrides (
+      developer_id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL DEFAULT 'andara_rejo_makmur',
+      company_name TEXT NOT NULL DEFAULT '',
+      original_plan TEXT NOT NULL DEFAULT 'Platinum',
+      overridden_plan TEXT NOT NULL CHECK (overridden_plan IN ('Gold', 'Platinum', 'Diamond')),
+      overridden_by TEXT NOT NULL DEFAULT 'Tim IT Internal (SUPERADMIN_IT)',
+      reason TEXT NOT NULL DEFAULT '',
+      valid_until TEXT NOT NULL DEFAULT '30 Hari',
+      overridden_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
   await sql`
     CREATE TABLE IF NOT EXISTS sales_os.vault_documents (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
