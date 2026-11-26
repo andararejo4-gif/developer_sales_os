@@ -212,7 +212,7 @@ export function ProfilePage({
                 className="mt-1 w-full rounded-xl border border-warmborder bg-sandstone/40 px-3 py-2 font-semibold text-espresso"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className={profile?.role === 'SUPERADMIN' || profile?.role === 'SUPERADMIN_IT' ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'}>
               <div>
                 <label className="block font-bold text-warmmuted">Role Akses</label>
                 <input
@@ -222,15 +222,17 @@ export function ProfilePage({
                   className="mt-1 w-full rounded-xl border border-warmborder bg-sandstone/40 px-3 py-2 font-semibold text-espresso"
                 />
               </div>
-              <div>
-                <label className="block font-bold text-warmmuted">Tenant</label>
-                <input
-                  type="text"
-                  disabled
-                  value={profile?.tenantId || ''}
-                  className="mt-1 w-full rounded-xl border border-warmborder bg-sandstone/40 px-3 py-2 font-semibold text-espresso"
-                />
-              </div>
+              {profile?.role !== 'SUPERADMIN' && profile?.role !== 'SUPERADMIN_IT' && (
+                <div>
+                  <label className="block font-bold text-warmmuted">Tenant</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={profile?.tenantId || ''}
+                    className="mt-1 w-full rounded-xl border border-warmborder bg-sandstone/40 px-3 py-2 font-semibold text-espresso"
+                  />
+                </div>
+              )}
             </div>
             <div>
               <label className="block font-bold text-espresso">Nama Lengkap</label>

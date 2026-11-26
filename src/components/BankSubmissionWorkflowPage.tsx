@@ -231,7 +231,7 @@ export const BankSubmissionWorkflowPage: React.FC<BankSubmissionWorkflowPageProp
       const json = await res.json();
       if (res.ok && json.ok) {
         setApplications((prev) => prev.map((a) => (a.id === app.id ? mapApiApp(json.application) : a)));
-        showToastMsg(`Status ${app.applicantName} naik ke ${STATUS_LABELS[nextStatus].label}`);
+        showToastMsg(`Status ${app.applicantName} naik ke ${STATUS_LABELS[nextStatus]?.label ?? nextStatus}`);
       }
     } catch {
       showToastMsg('Gagal memperbarui status KPR.');
@@ -332,15 +332,15 @@ export const BankSubmissionWorkflowPage: React.FC<BankSubmissionWorkflowPageProp
       )}
 
       {/* Header */}
-      <div className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
+      <div className="bg-white border border-warmborder rounded-2xl p-4 sm:p-6 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5 min-w-0">
             <div className="size-12 rounded-2xl bg-terracotta/10 border border-terracotta/20 flex items-center justify-center shrink-0">
               <Building2 className="size-6 text-terracotta" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl font-extrabold text-espresso">Alur Pengajuan KPR Bank</h1>
+                <h1 className="text-lg sm:text-xl font-extrabold text-espresso">Alur Pengajuan KPR Bank</h1>
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-olive/10 text-olive text-[11px] font-bold border border-olive/20">
                   Auto-Sync Lead KPR · DB Asli
                 </span>
@@ -351,12 +351,24 @@ export const BankSubmissionWorkflowPage: React.FC<BankSubmissionWorkflowPageProp
             </div>
           </div>
 
-          <button
-            onClick={() => setShowAddForm((v) => !v)}
-            className="px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shrink-0 shadow-sm"
-          >
-            <Plus className="size-4" /> {showAddForm ? 'Tutup Form' : 'Tambah Pengajuan KPR'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowAddForm((v) => !v)}
+              className="h-9 px-3.5 rounded-lg bg-terracotta hover:bg-terracotta/90 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="size-3.5 shrink-0" />
+              <span>{showAddForm ? 'Tutup Form' : 'Tambah Pengajuan KPR'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Quiet Info Bar */}
+        <div className="pt-3 border-t border-warmborder/60 text-xs text-warmmuted flex items-start gap-2">
+          <BadgeCheck className="size-4 text-olive shrink-0 mt-0.5" />
+          <p className="leading-relaxed">
+            <strong className="text-espresso">Kesiapan Integrasi API Bank:</strong> Modul ini terhubung dengan Secure Document Vault dan siap disambungkan ke API Host-to-Host Bank BSI, BTN, dan Mandiri saat endpoint produksi aktif.
+          </p>
         </div>
       </div>
 

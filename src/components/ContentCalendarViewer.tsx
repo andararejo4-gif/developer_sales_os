@@ -95,7 +95,7 @@ export function ContentCalendarViewer({
       `devos_cal_plan_${userScope}`,
       null
     );
-    if (saved && saved.slots.length >= totalDaysInMonth * 3) return saved;
+    if (saved && Array.isArray(saved.slots) && saved.slots.length >= totalDaysInMonth * 3) return saved;
     const base = getContentCalendar(projectId, 1, isDemoMode);
     if (!base) return null;
     const slots = generateContentCalendarSlots(
@@ -116,7 +116,7 @@ export function ContentCalendarViewer({
       `devos_cal_plan_${projectId}`,
       null
     );
-    if (saved && saved.slots.length >= totalDaysInMonth * 3) {
+    if (saved && Array.isArray(saved.slots) && saved.slots.length >= totalDaysInMonth * 3) {
       setCalendar(saved);
       return;
     }

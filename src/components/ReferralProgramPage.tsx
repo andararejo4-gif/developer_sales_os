@@ -16,7 +16,9 @@ import {
   Briefcase,
   Edit3,
   Trash2,
+  Video,
 } from 'lucide-react';
+import { CreatorDeskTab } from './creator/CreatorDeskTab';
 import { loadAuthSession } from '../lib/auth/dummy-accounts';
 import {
   DEFAULT_PARTNER_CONFIG,
@@ -118,7 +120,7 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
     loadReferralData();
   }, [loadReferralData]);
 
-  const [activePartnerTab, setActivePartnerTab] = useState<'ALL' | 'REFERRAL_PARTNER' | 'SALES_PARTNER'>(() => {
+  const [activePartnerTab, setActivePartnerTab] = useState<'ALL' | 'REFERRAL_PARTNER' | 'SALES_PARTNER' | 'CREATOR_DESK'>(() => {
     if (userRole === 'REFERRAL_PARTNER') return 'REFERRAL_PARTNER';
     if (userRole === 'SALES_PARTNER') return 'SALES_PARTNER';
     return 'ALL';
@@ -355,7 +357,14 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setShowAddForm(!showAddForm)}
+              onClick={() => {
+                if (activePartnerTab === 'CREATOR_DESK') {
+                  setActivePartnerTab('ALL');
+                  setShowAddForm(true);
+                } else {
+                  setShowAddForm(!showAddForm);
+                }
+              }}
               className="h-9 px-3.5 rounded-lg bg-terracotta hover:bg-terracotta/90 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <Plus className="size-3.5 shrink-0" />
@@ -408,6 +417,18 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
                 {referrals.filter((r) => r.partnerRole === 'SALES_PARTNER').length}
               </span>
             </button>
+            <button
+              type="button"
+              onClick={() => setActivePartnerTab('CREATOR_DESK')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                activePartnerTab === 'CREATOR_DESK'
+                  ? 'bg-white text-espresso shadow-xs'
+                  : 'text-warmmuted hover:text-espresso'
+              }`}
+            >
+              <Video className="size-3 text-terracotta" />
+              <span>Creator Desk (Clipper/Live/KOL)</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2 text-xs text-warmmuted">
@@ -434,6 +455,11 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
         </div>
       </div>
 
+      {/* Konten Tab: Creator Desk atau Referral/Sales Partner */}
+      {activePartnerTab === 'CREATOR_DESK' ? (
+        <CreatorDeskTab projectId={projectId} projectName={projectName} userRole={userRole} />
+      ) : (
+        <>
       {/* 4 Quiet Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-white border border-warmborder rounded-xl p-4">
@@ -863,6 +889,8 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
           </table>
         </div>
       </div>
+        </>
+      )}
 
       {/* Modal Kustomisasi Skema Mitra */}
       {showConfigModal && (

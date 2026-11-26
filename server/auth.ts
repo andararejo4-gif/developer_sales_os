@@ -645,6 +645,8 @@ export async function listTenantUsers(tenantId: string) {
     SELECT id, email, name, role, tenant_id, project_id, phone, is_active, totp_enabled, created_at
     FROM sales_os.app_users
     WHERE tenant_id = ${tenantId}
+      AND role NOT IN ('SUPERADMIN', 'SUPERADMIN_IT')
+      AND LOWER(email) NOT LIKE '%@developersalesos.com'
     ORDER BY created_at DESC
   `;
   return rows.map((r: any) => ({

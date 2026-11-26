@@ -1887,7 +1887,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                     Template Persona: {formPersonaCode} ·{' '}
                     {formPersonaCode === 'LAINNYA'
                       ? formPersonaProfile.customLabel || 'Lainnya (Kustom)'
-                      : PLAYBOOK_BUYER_PERSONAS[formPersonaCode].archetype}
+                      : PLAYBOOK_BUYER_PERSONAS[formPersonaCode]?.archetype || 'Umum'}
                   </span>
                 </div>
                 <button
@@ -2055,7 +2055,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar snap-x pb-1">
           {[
             { id: 'ALL', label: `Semua (${leads.filter((l) => l.lead_quality !== 'JUNK').length})`, isUrgentTab: false, count: 0 },
-            { id: 'TASK_INBOX', label: 'Task Inbox & Aksi (F47)', isUrgentTab: false, count: 0 },
+            { id: 'TASK_INBOX', label: 'Task Inbox & Aksi', isUrgentTab: false, count: 0 },
             { id: 'FOLLOWUP', label: 'Jadwal Follow-Up AI', isUrgentTab: false, count: 0 },
             {
               id: 'PERLU_DITANGANI',

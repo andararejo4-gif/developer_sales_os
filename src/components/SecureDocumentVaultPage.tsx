@@ -428,15 +428,15 @@ export const SecureDocumentVaultPage: React.FC<SecureDocumentVaultPageProps> = (
       )}
 
       {/* Header */}
-      <div className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
+      <div className="bg-white border border-warmborder rounded-2xl p-4 sm:p-6 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5 min-w-0">
             <div className="size-12 rounded-2xl bg-olive/10 border border-olive/20 flex items-center justify-center shrink-0">
               <Lock className="size-6 text-olive" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl font-extrabold text-espresso">Dokumen Vault KPR</h1>
+                <h1 className="text-lg sm:text-xl font-extrabold text-espresso">Dokumen Vault KPR</h1>
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-olive/10 text-olive text-[11px] font-bold border border-olive/20">
                   <ShieldCheck className="size-3" /> Data Nyata PostgreSQL
                 </span>
@@ -449,7 +449,7 @@ export const SecureDocumentVaultPage: React.FC<SecureDocumentVaultPageProps> = (
 
           <button
             onClick={() => setShowAddForm((v) => !v)}
-            className="px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 shadow-sm"
+            className="px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shrink-0 self-start lg:self-center shadow-sm whitespace-nowrap"
           >
             <Plus className="size-4" /> {showAddForm ? 'Tutup Form' : 'Unggah Dokumen Debitur'}
           </button>

@@ -238,21 +238,14 @@ export function FieldOpsModal({
         };
         setLiveGpsInfo(nextGps);
 
-        // Auto-sync heartbeat posisi SE ke backend (per 45 detik atau jika berpindah > 40 meter)
+        // Auto-sync live location ala WA Live Location (per 5 detik atau jika berpindah >= 10 meter)
         const now = Date.now();
         const movedDist = lastSyncLat ? calculateDistanceKm(lastSyncLat, lastSyncLng, latitude, longitude) : 999;
-        if (userRole === 'SE' && (now - lastSyncTime > 45000 || movedDist >= 0.04)) {
+        if (!isManager && (now - lastSyncTime >= 5000 || movedDist >= 0.01)) {
           lastSyncTime = now;
           lastSyncLat = latitude;
           lastSyncLng = longitude;
-          persistFieldLogToDb({
-            logType: 'GPS',
-            title: `Live Radar GPS (${activeUserName})`,
-            locationLabel: nextGps.streetAddress || `Area ${effectiveProjectName}`,
-            lat: latitude,
-            lng: longitude,
-            notes: `Auto-sync radar live SE (${Math.round(accuracy)}m akurasi)`,
-          });
+          publishSeLiveRadar(nextGps);
         }
       },
       (err) => {
@@ -267,6 +260,91 @@ export function FieldOpsModal({
   }, [isRadarTracking, userRole, activeUserName, effectiveCoords.lat, effectiveCoords.lng, effectiveProjectName]);
 
   const [dbFieldLogs, setDbFieldLogs] = useState<any[]>([]);
+  const liveRadarStorageKey = `devos_live_radar_se_${activeProjectId}`;
+  const offlineLogsStorageKey = `devos_offline_field_logs_${activeProjectId}`;
+
+  interface SharedLiveRadarEntry {
+    seName: string;
+    seEmail: string;
+    lat: number;
+    lng: number;
+    locationLabel: string;
+    accuracy?: number;
+    updatedAt: string;
+    timestamp: number;
+  }
+
+  const [sharedLiveRadar, setSharedLiveRadar] = useState<Record<string, SharedLiveRadarEntry>>(() =>
+    loadPersistedState<Record<string, SharedLiveRadarEntry>>(liveRadarStorageKey, {})
+  );
+  const [offlineFieldLogs, setOfflineFieldLogs] = useState<any[]>(() =>
+    loadPersistedState<any[]>(offlineLogsStorageKey, [])
+  );
+
+  const publishSeLiveRadar = (info: LiveGpsState) => {
+    const emailKey = userEmail.trim().toLowerCase();
+    const entry: SharedLiveRadarEntry = {
+      seName: activeUserName,
+      seEmail: emailKey,
+      lat: info.lat,
+      lng: info.lng,
+      locationLabel: info.streetAddress || `Area ${effectiveProjectName}`,
+      accuracy: info.accuracy,
+      updatedAt: info.updatedAt,
+      timestamp: Date.now(),
+    };
+    setSharedLiveRadar((prev) => {
+      const next = { ...prev, [emailKey]: entry };
+      savePersistedState(liveRadarStorageKey, next);
+      return next;
+    });
+    // Kirim juga ke endpoint ringan server (fire-and-forget; tidak mengotori counter canvassing)
+    fetch('/api/se/live-location', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Email': userEmail,
+        'X-User-Role': userRole,
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        lat: info.lat,
+        lng: info.lng,
+        accuracy: info.accuracy,
+        locationLabel: entry.locationLabel,
+      }),
+    }).catch(() => {
+      /* mode offline lokal */
+    });
+  };
+
+  const fetchServerLiveLocations = async () => {
+    try {
+      const res = await fetch('/api/se/live-location', {
+        headers: { 'X-User-Email': userEmail, 'X-User-Role': userRole },
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.ok && Array.isArray(json.locations) && json.locations.length > 0) {
+          setSharedLiveRadar((prev) => {
+            const next = { ...prev };
+            for (const loc of json.locations as SharedLiveRadarEntry[]) {
+              const key = String(loc.seEmail || '').toLowerCase();
+              if (!key) continue;
+              if (!next[key] || Number(loc.timestamp || 0) >= Number(next[key].timestamp || 0)) {
+                next[key] = loc;
+              }
+            }
+            savePersistedState(liveRadarStorageKey, next);
+            return next;
+          });
+        }
+      }
+    } catch {
+      /* mode offline lokal */
+    }
+  };
 
   const fetchDbFieldLogs = async () => {
     try {
@@ -286,42 +364,104 @@ export function FieldOpsModal({
 
   useEffect(() => {
     fetchDbFieldLogs();
-  }, [userEmail, userRole]);
+    setSharedLiveRadar(loadPersistedState<Record<string, SharedLiveRadarEntry>>(liveRadarStorageKey, {}));
+    setOfflineFieldLogs(loadPersistedState<any[]>(offlineLogsStorageKey, []));
+
+    if (!isManager) return;
+    fetchServerLiveLocations();
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === liveRadarStorageKey) {
+        setSharedLiveRadar(loadPersistedState<Record<string, SharedLiveRadarEntry>>(liveRadarStorageKey, {}));
+      } else if (e.key === offlineLogsStorageKey) {
+        setOfflineFieldLogs(loadPersistedState<any[]>(offlineLogsStorageKey, []));
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    // Polling cepat 4 detik untuk Live Location SE (ala WA Live Location) + sync DB log tiap 30 detik
+    let tick = 0;
+    const timer = window.setInterval(() => {
+      tick += 1;
+      fetchServerLiveLocations();
+      setSharedLiveRadar(loadPersistedState<Record<string, SharedLiveRadarEntry>>(liveRadarStorageKey, {}));
+      setOfflineFieldLogs(loadPersistedState<any[]>(offlineLogsStorageKey, []));
+      if (tick % 7 === 0) {
+        fetchDbFieldLogs();
+      }
+    }, 4000);
+
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.clearInterval(timer);
+    };
+  }, [userEmail, userRole, isManager, liveRadarStorageKey, offlineLogsStorageKey]);
 
   // Daftar Live Marker SE untuk role Manager (SM / Admin)
   const teamLiveMarkers: TeamMemberLiveMarker[] = useMemo(() => {
     if (!isManager) return [];
     const todayWib = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+    const combinedLogs = [...dbFieldLogs, ...offlineFieldLogs];
 
     return SE_TEAM_DATA.map((se) => {
-      const firstToken = se.nama.toLowerCase().replace(/[^a-z0-9]+/g, '.');
-      const seEmail = `${firstToken}@andararejomakmur.co.id`;
+      const firstName = se.nama.split(' ')[0].toLowerCase();
+      const dottedName = se.nama.toLowerCase().replace(/[^a-z0-9]+/g, '.');
+      const seEmail = `${firstName}@andararejomakmur.co.id`;
 
-      const seDbLogs = dbFieldLogs.filter(
-        (l) => l.se_email?.toLowerCase() === seEmail || l.se_name?.includes(se.nama)
-      );
+      const matchesSe = (email?: string, name?: string) => {
+        const e = (email || '').toLowerCase();
+        const n = (name || '').toLowerCase();
+        return (
+          e === seEmail ||
+          e === `${dottedName}@andararejomakmur.co.id` ||
+          e.startsWith(`${firstName}@`) ||
+          n.includes(se.nama.toLowerCase()) ||
+          n.includes(firstName)
+        );
+      };
+
+      const seDbLogs = combinedLogs.filter((l) => matchesSe(l.se_email, l.se_name));
       const latestDb = seDbLogs[0];
+
+      const liveRadarEntry = Object.values(sharedLiveRadar).find((entry) =>
+        matchesSe(entry.seEmail, entry.seName)
+      );
+
       const fallbackPoint = gpsLogs.find((p) => p.seName.includes(se.nama) || p.seName.includes(se.seId));
 
-      const lat = latestDb?.lat ?? fallbackPoint?.lat ?? (effectiveCoords.lat + (Math.random() * 0.01 - 0.005));
-      const lng = latestDb?.lng ?? fallbackPoint?.lng ?? (effectiveCoords.lng + (Math.random() * 0.01 - 0.005));
+      const useLiveRadar =
+        liveRadarEntry &&
+        (!latestDb?.created_at || liveRadarEntry.timestamp >= new Date(latestDb.created_at).getTime());
+
+      const lat = useLiveRadar
+        ? liveRadarEntry.lat
+        : latestDb?.lat ?? fallbackPoint?.lat ?? effectiveCoords.lat;
+      const lng = useLiveRadar
+        ? liveRadarEntry.lng
+        : latestDb?.lng ?? fallbackPoint?.lng ?? effectiveCoords.lng;
       const distKm = calculateDistanceKm(effectiveCoords.lat, effectiveCoords.lng, Number(lat), Number(lng));
 
       const hasLogToday = seDbLogs.some((l) => l.created_at && l.created_at.startsWith(todayWib));
-      const isOnline = hasLogToday || Boolean(latestDb);
+      const isOnline = Boolean(liveRadarEntry) || hasLogToday || Boolean(latestDb);
 
       return {
         id: se.seId,
         name: se.nama,
-        email: seEmail,
+        email: liveRadarEntry?.seEmail || seEmail,
         seId: se.seId,
         role: 'SE',
         zone: se.zonaHariIni,
         lat: Number(lat),
         lng: Number(lng),
         distanceFromProjectKm: distKm,
-        locationLabel: latestDb?.location_label || fallbackPoint?.locationLabel || `Wilayah ${se.zonaHariIni}`,
-        lastUpdated: latestDb
+        locationLabel:
+          (useLiveRadar ? liveRadarEntry.locationLabel : undefined) ||
+          latestDb?.location_label ||
+          fallbackPoint?.locationLabel ||
+          `Wilayah ${se.zonaHariIni}`,
+        lastUpdated: useLiveRadar
+          ? `${liveRadarEntry.updatedAt} WIB`
+          : latestDb
           ? new Date(latestDb.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'
           : fallbackPoint?.recordedAt || 'Hari Ini',
         isOnline,
@@ -334,7 +474,7 @@ export function FieldOpsModal({
           .toUpperCase(),
       };
     });
-  }, [isManager, dbFieldLogs, gpsLogs, effectiveCoords.lat, effectiveCoords.lng]);
+  }, [isManager, dbFieldLogs, offlineFieldLogs, sharedLiveRadar, gpsLogs, effectiveCoords.lat, effectiveCoords.lng]);
 
   // Status presensi mandiri hari ini untuk user aktif (SE, SM, Admin)
   const myTodayAttendance = useMemo(() => {
@@ -419,8 +559,33 @@ export function FieldOpsModal({
   };
 
   const persistFieldLogToDb = async (payload: Record<string, any>) => {
+    if (!isManager && payload.lat && payload.lng) {
+      const nowStr = new Date().toLocaleTimeString('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      const emailKey = userEmail.trim().toLowerCase();
+      setSharedLiveRadar((prev) => {
+        const next = {
+          ...prev,
+          [emailKey]: {
+            seName: activeUserName,
+            seEmail: emailKey,
+            lat: Number(payload.lat),
+            lng: Number(payload.lng),
+            locationLabel: payload.locationLabel || `Area ${effectiveProjectName}`,
+            updatedAt: nowStr,
+            timestamp: Date.now(),
+          },
+        };
+        savePersistedState(liveRadarStorageKey, next);
+        return next;
+      });
+    }
+
     try {
-      await fetch('/api/se/field-logs', {
+      const res = await fetch('/api/se/field-logs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -429,10 +594,25 @@ export function FieldOpsModal({
         },
         body: JSON.stringify(payload),
       });
-      await fetchDbFieldLogs();
+      if (res.ok) {
+        await fetchDbFieldLogs();
+      } else {
+        throw new Error('offline');
+      }
       if (onDataChanged) onDataChanged();
     } catch {
-      /* ignore */
+      const localEntry = {
+        ...payload,
+        se_email: userEmail.toLowerCase(),
+        se_name: activeUserName,
+        location_label: payload.locationLabel,
+        created_at: new Date().toISOString(),
+      };
+      setOfflineFieldLogs((prev) => {
+        const next = [localEntry, ...prev].slice(0, 100);
+        savePersistedState(offlineLogsStorageKey, next);
+        return next;
+      });
     }
   };
 
@@ -1107,13 +1287,17 @@ export function FieldOpsModal({
                 liveGpsState={liveGpsInfo}
                 currentUserRole={userRole}
                 currentUserName={activeUserName}
-                onLocationResolved={(info) => setLiveGpsInfo(info)}
+                onLocationResolved={(info) => {
+                  setLiveGpsInfo(info);
+                  publishSeLiveRadar(info);
+                }}
                 onUseLocationForCheckin={(info, matchedWp) => {
                   const label = matchedWp
                     ? `${matchedWp.name} — ${info.streetAddress}`
                     : `${info.streetAddress} (${info.nearestPoiLabel})`;
                   setGpsLocationLabel(label);
                   setLiveGpsInfo(info);
+                  publishSeLiveRadar(info);
                   setMatchedWaypoint(matchedWp || null);
                   showToast('Lokasi live diterapkan ke form Check-in GPS!');
                 }}

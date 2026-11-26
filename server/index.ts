@@ -10,6 +10,41 @@ import path from 'node:path';
 import { URL } from 'node:url';
 import { sql } from './db';
 import {
+  appendAuditLog,
+  getAicLedgerForTenant,
+  getAuditLogsForTenant,
+  grantTopupLotAtomic,
+  refundAicAtomic,
+  reserveAicAtomic,
+  settleAicAtomic,
+} from './aic-ledger';
+import {
+  answerFaqGrounded,
+  approveServerRequest,
+  createApprovalRequest,
+  enqueueDurableOutbox,
+  propagateStaleAssets,
+} from './security-ops';
+import {
+  calculatePlanProrationAndInvoice,
+  createAppointmentAtomic,
+  dispatchRegisteredAgent,
+  processOfflineSyncBatch,
+} from './runtime-governance';
+import {
+  buildComparisonExportPack,
+  createClaimLedgerEntry,
+  createCobrokeDeal,
+  deleteWithLegalHoldGuard,
+  searchScopedKnowledgeIndex,
+  upsertProjectPoiRisk,
+} from './r2-domain-services';
+import {
+  calculateKantongAAmount,
+  calculatePph21Estimate,
+  type ContentSubmissionType,
+} from '../src/lib/creator/creator-desk-store';
+import {
   authenticateRequest,
   BASIC_ORG_ROLES,
   buildClearSessionCookieHeader,
@@ -1086,6 +1121,22 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
     },
   };
 }
+
+// In-memory store ringan untuk Live Location SE (ala WA Live Location)
+const liveSeLocationsMap = new Map<
+  string,
+  {
+    seEmail: string;
+    seName: string;
+    role: string;
+    lat: number;
+    lng: number;
+    accuracy?: number;
+    locationLabel: string;
+    updatedAt: string;
+    timestamp: number;
+  }
+>();
 
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
@@ -2601,6 +2652,42 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 9. FIELD OPS (ABSEN, GPS + FOTO, LOG PANGGILAN) -> REAL POSTGRESQL sales_os
+    // Endpoint ringan in-memory untuk Live Location SE (ala WA Live Location, tanpa mengotori counter canvassing)
+    if (pathname === '/api/se/live-location' && req.method === 'GET') {
+      const locations = Array.from(liveSeLocationsMap.values());
+      sendJson(res, 200, { ok: true, locations });
+      return;
+    }
+
+    if (pathname === '/api/se/live-location' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const lat = Number(body.lat);
+      const lng = Number(body.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        sendJson(res, 400, { ok: false, error: 'Koordinat lat/lng tidak valid.' });
+        return;
+      }
+      const entry = {
+        seEmail: user.email.toLowerCase(),
+        seName: user.name,
+        role: user.role,
+        lat,
+        lng,
+        accuracy: body.accuracy !== undefined ? Number(body.accuracy) : undefined,
+        locationLabel: String(body.locationLabel || ''),
+        updatedAt: new Date().toLocaleTimeString('id-ID', {
+          timeZone: 'Asia/Jakarta',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }),
+        timestamp: Date.now(),
+      };
+      liveSeLocationsMap.set(entry.seEmail, entry);
+      sendJson(res, 200, { ok: true, location: entry });
+      return;
+    }
+
     if (pathname === '/api/se/field-logs' && req.method === 'GET') {
       const isManagerRole = user.role !== 'SE';
       const filterEmail = String(parsedUrl.searchParams.get('seEmail') || '').trim().toLowerCase();
@@ -3602,7 +3689,12 @@ const server = http.createServer(async (req, res) => {
 
       const seRef = String(body.seRef || '').trim().toLowerCase();
       const assignedSe = SE_EMAILS.includes(seRef) ? seRef : SE_EMAILS[0] || 'raka@andararejomakmur.co.id';
-      const utmSource = String(body.utmSource || 'Website Publik').trim().slice(0, 120);
+      const creatorCode = String(body.creatorCode || '').trim().toUpperCase().slice(0, 32);
+      const contentCode = String(body.contentCode || '').trim().slice(0, 64);
+      const personaCode = String(body.personaCode || '').trim().slice(0, 40);
+      const utmSource = creatorCode
+        ? `Kreator ${creatorCode}`
+        : String(body.utmSource || 'Website Publik').trim().slice(0, 120);
       const unitInterest = String(body.unitCode || 'Unit The Park').trim().slice(0, 80);
 
       // Deduplikasi nomor WA di tenant aktif
@@ -3625,10 +3717,12 @@ const server = http.createServer(async (req, res) => {
       const inserted = await sql`
         INSERT INTO sales_os.pipeline_leads (
           tenant_id, se_email, buyer_name, phone_wa, lead_source, stage,
-          unit_interest, notes, wa_consent, wa_consent_updated_at, lead_quality, last_activity_at
+          unit_interest, notes, wa_consent, wa_consent_updated_at, lead_quality, last_activity_at,
+          creator_code, content_code, persona_code
         ) VALUES (
           'andara_rejo_makmur', ${assignedSe}, ${name}, ${phoneWa}, ${utmSource}, 'LEAD_MASUK',
-          ${unitInterest}, ${'Form Website Publik (Consent v1.0)'}, 'OPT_IN', NOW(), 'WARM', NOW()
+          ${unitInterest}, ${'Form Website Publik (Consent v1.0)'}, 'OPT_IN', NOW(), 'WARM', NOW(),
+          ${creatorCode || null}, ${contentCode || null}, ${personaCode || null}
         )
         RETURNING id
       `;
@@ -4764,6 +4858,536 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (pathname === '/api/billing/aic/ledger' && req.method === 'GET') {
+      const limit = Number(parsedUrl.searchParams.get('limit') || 50);
+      const data = await getAicLedgerForTenant(user.tenantId, limit);
+      sendJson(res, 200, { ok: true, ...data });
+      return;
+    }
+
+    if (pathname === '/api/billing/aic/reserve' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await reserveAicAtomic({
+        tenantId: user.tenantId,
+        billableEventId: String(body.billableEventId || ''),
+        featureId: String(body.featureId || 'GENERAL'),
+        amountAic: Number(body.amountAic || 0),
+        actorEmail: user.email,
+        actorRole: user.role,
+        reason: typeof body.reason === 'string' ? body.reason : undefined,
+      });
+      sendJson(res, 200, result);
+      return;
+    }
+
+    if (pathname === '/api/billing/aic/settle' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await settleAicAtomic({
+        tenantId: user.tenantId,
+        billableEventId: String(body.billableEventId || ''),
+        actorEmail: user.email,
+      });
+      sendJson(res, 200, result);
+      return;
+    }
+
+    if (pathname === '/api/billing/aic/refund' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await refundAicAtomic({
+        tenantId: user.tenantId,
+        billableEventId: String(body.billableEventId || ''),
+        actorEmail: user.email,
+        reason: typeof body.reason === 'string' ? body.reason : undefined,
+      });
+      sendJson(res, 200, result);
+      return;
+    }
+
+    if (pathname === '/api/billing/aic/topup' && req.method === 'POST') {
+      if (user.role !== 'SUPERADMIN' && user.role !== 'SUPERADMIN_IT' && user.role !== 'DIREKSI') {
+        sendJson(res, 403, { ok: false, error: 'Hanya Direksi/Superadmin yang berhak top-up AIC.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const expiresAt = body.expiresAt
+        ? String(body.expiresAt)
+        : new Date(Date.now() + 90 * 86400000).toISOString();
+      const result = await grantTopupLotAtomic({
+        tenantId: user.tenantId,
+        billableEventId: String(body.billableEventId || `topup_${Date.now()}`),
+        lotCode: String(body.lotCode || 'TOPUP_90D'),
+        amountAic: Number(body.amountAic || 0),
+        expiresAt,
+        actorEmail: user.email,
+        actorRole: user.role,
+      });
+      sendJson(res, 200, result);
+      return;
+    }
+
+    if (pathname === '/api/audit/events' && req.method === 'GET') {
+      if (user.role !== 'SUPERADMIN' && user.role !== 'SUPERADMIN_IT' && user.role !== 'DIREKSI' && user.role !== 'ADMIN') {
+        sendJson(res, 403, { ok: false, error: 'Akses audit log dibatasi untuk Admin/Direksi/Superadmin.' });
+        return;
+      }
+      const limit = Number(parsedUrl.searchParams.get('limit') || 50);
+      const events = await getAuditLogsForTenant(user.tenantId, limit);
+      sendJson(res, 200, { ok: true, events });
+      return;
+    }
+
+    if (pathname === '/api/approvals' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const approval = await createApprovalRequest({
+        tenantId: user.tenantId,
+        approvalType: String(body.approvalType || 'GENERAL'),
+        resourceType: String(body.resourceType || 'RESOURCE'),
+        resourceId: String(body.resourceId || ''),
+        payload: (body.payload && typeof body.payload === 'object' ? body.payload : {}) as Record<string, unknown>,
+        requestedBy: user.email,
+        requiresDual: Boolean(body.requiresDual),
+        ttlHours: body.ttlHours !== undefined ? Number(body.ttlHours) : undefined,
+      });
+      sendJson(res, 201, { ok: true, approval });
+      return;
+    }
+
+    if (pathname === '/api/approvals/approve' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await approveServerRequest({
+        tenantId: user.tenantId,
+        approvalId: String(body.approvalId || ''),
+        approverEmail: user.email,
+        approverRole: String(user.role || 'USER'),
+      });
+      sendJson(res, result.ok ? 200 : 400, result);
+      return;
+    }
+
+    if (pathname === '/api/outbox/enqueue' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await enqueueDurableOutbox({
+        tenantId: user.tenantId,
+        idempotencyKey: String(body.idempotencyKey || ''),
+        jobType: String(body.jobType || 'GENERIC'),
+        payload: (body.payload && typeof body.payload === 'object' ? body.payload : {}) as Record<string, unknown>,
+        maxAttempts: body.maxAttempts !== undefined ? Number(body.maxAttempts) : undefined,
+      });
+      sendJson(res, 200, result);
+      return;
+    }
+
+    if (pathname === '/api/truth/propagate-stale' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await propagateStaleAssets({
+        tenantId: user.tenantId,
+        projectId: String(body.projectId || ''),
+        triggerSource: String(body.triggerSource || 'MANUAL'),
+        reason: String(body.reason || 'Pembaruan data proyek'),
+        actorEmail: user.email,
+        assetTypes: Array.isArray(body.assetTypes) ? body.assetTypes.map(String) : undefined,
+      });
+      sendJson(res, 200, { ok: true, ...result });
+      return;
+    }
+
+    if (pathname === '/api/faq/grounded' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await answerFaqGrounded({
+        question: String(body.question || ''),
+        projectId: body.projectId ? String(body.projectId) : undefined,
+      });
+      sendJson(res, 200, result);
+      return;
+    }
+
+    if (pathname === '/api/appointments' && req.method === 'GET') {
+      const seEmail = parsedUrl.searchParams.get('seEmail');
+      const rows = seEmail
+        ? await sql`
+            SELECT * FROM sales_os.appointments
+            WHERE tenant_id = ${user.tenantId} AND LOWER(se_email) = LOWER(${seEmail})
+            ORDER BY scheduled_start ASC
+            LIMIT 100
+          `
+        : await sql`
+            SELECT * FROM sales_os.appointments
+            WHERE tenant_id = ${user.tenantId}
+            ORDER BY scheduled_start ASC
+            LIMIT 100
+          `;
+      sendJson(res, 200, { ok: true, appointments: rows });
+      return;
+    }
+
+    if (pathname === '/api/appointments' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await createAppointmentAtomic({
+        tenantId: user.tenantId,
+        projectId: String(body.projectId || 'the-park-sukoharjo'),
+        seEmail: String(body.seEmail || user.email),
+        leadId: body.leadId ? String(body.leadId) : undefined,
+        customerName: String(body.customerName || ''),
+        customerPhone: body.customerPhone ? String(body.customerPhone) : undefined,
+        scheduledStartIso: String(body.scheduledStartIso || ''),
+        scheduledEndIso: String(body.scheduledEndIso || ''),
+        notes: body.notes ? String(body.notes) : undefined,
+        createdBy: user.email,
+      });
+      sendJson(res, result.ok ? 201 : 409, result);
+      return;
+    }
+
+    if (pathname === '/api/offline-sync/push' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const items = Array.isArray(body.items) ? body.items : [];
+      const result = await processOfflineSyncBatch({
+        tenantId: user.tenantId,
+        deviceId: String(body.deviceId || 'web-client'),
+        actorEmail: user.email,
+        items,
+      });
+      sendJson(res, 200, { ok: true, ...result });
+      return;
+    }
+
+    if (pathname === '/api/agents/dispatch' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await dispatchRegisteredAgent({
+        tenantId: user.tenantId,
+        agentId: String(body.agentId || ''),
+        actorEmail: user.email,
+        inputText: String(body.inputText || ''),
+        externalUrl: body.externalUrl ? String(body.externalUrl) : undefined,
+        outputJson: body.outputJson,
+        requiredJsonKeys: Array.isArray(body.requiredJsonKeys) ? body.requiredJsonKeys.map(String) : undefined,
+        allowedJsonKeys: Array.isArray(body.allowedJsonKeys) ? body.allowedJsonKeys.map(String) : undefined,
+      });
+      sendJson(res, result.ok ? 200 : 400, result);
+      return;
+    }
+
+    if (pathname === '/api/billing/prorate-preview' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = calculatePlanProrationAndInvoice({
+        currentMonthlyIdr: Number(body.currentMonthlyIdr || 0),
+        targetMonthlyIdr: Number(body.targetMonthlyIdr || 0),
+        daysRemaining: Number(body.daysRemaining || 0),
+        totalCycleDays: Number(body.totalCycleDays || 30),
+        remainingAic: Number(body.remainingAic || 0),
+        monthlyAicQuota: Number(body.monthlyAicQuota || 0),
+      });
+      sendJson(res, 200, { ok: true, ...result });
+      return;
+    }
+
+    if (pathname === '/api/projects/poi-risk' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const row = await upsertProjectPoiRisk({
+        tenantId: user.tenantId,
+        projectId: String(body.projectId || 'the-park-sukoharjo'),
+        category: String(body.category || 'AKSES'),
+        title: String(body.title || ''),
+        distanceMeters: Number(body.distanceMeters || 0),
+        riskLevel: body.riskLevel as 'LOW' | 'MEDIUM' | 'HIGH' | undefined,
+        sourceCitation: body.sourceCitation ? String(body.sourceCitation) : undefined,
+      });
+      sendJson(res, 201, { ok: true, poiRisk: row });
+      return;
+    }
+
+    if (pathname === '/api/claims/ledger' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const row = await createClaimLedgerEntry({
+        tenantId: user.tenantId,
+        projectId: String(body.projectId || 'the-park-sukoharjo'),
+        claimText: String(body.claimText || ''),
+        proofGrade: (body.proofGrade || 'B') as 'A' | 'B' | 'C' | 'D',
+        sourceCitation: String(body.sourceCitation || 'Dokumen Proyek'),
+        verifiedBy: user.email,
+      });
+      sendJson(res, 201, { ok: true, claim: row });
+      return;
+    }
+
+    if (pathname === '/api/exports/comparison-pack' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const pack = buildComparisonExportPack({
+        projectId: String(body.projectId || 'the-park-sukoharjo'),
+        projectName: String(body.projectName || 'The Park Townhouse Sukoharjo'),
+        buyerName: String(body.buyerName || 'Calon Pembeli'),
+        unitOptions: Array.isArray(body.unitOptions) ? body.unitOptions : [],
+      });
+      sendJson(res, 200, { ok: true, ...pack });
+      return;
+    }
+
+    if (pathname === '/api/cobroke/deals' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const deal = await createCobrokeDeal({
+        tenantId: user.tenantId,
+        projectId: String(body.projectId || 'the-park-sukoharjo'),
+        unitCode: String(body.unitCode || ''),
+        brokerName: String(body.brokerName || ''),
+        brokerPhone: body.brokerPhone ? String(body.brokerPhone) : undefined,
+        dealValueIdr: Number(body.dealValueIdr || 0),
+        commissionPercent: body.commissionPercent !== undefined ? Number(body.commissionPercent) : undefined,
+        cobrokeSplitPercent: body.cobrokeSplitPercent !== undefined ? Number(body.cobrokeSplitPercent) : undefined,
+        createdBy: user.email,
+      });
+      sendJson(res, 201, { ok: true, deal });
+      return;
+    }
+
+    if (pathname === '/api/legal-holds/delete' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await deleteWithLegalHoldGuard({
+        tenantId: user.tenantId,
+        resourceType: String(body.resourceType || ''),
+        resourceId: String(body.resourceId || ''),
+        actorEmail: user.email,
+      });
+      sendJson(res, result.deleted ? 200 : 409, result);
+      return;
+    }
+
+    if (pathname === '/api/knowledge/scoped-search' && req.method === 'GET') {
+      const projectId = String(parsedUrl.searchParams.get('projectId') || 'the-park-sukoharjo');
+      const query = String(parsedUrl.searchParams.get('q') || '');
+      const result = searchScopedKnowledgeIndex({ tenantId: user.tenantId, projectId, query });
+      sendJson(res, 200, { ok: true, ...result });
+      return;
+    }
+
+    if (pathname === '/api/sm/daily-report' && req.method === 'GET') {
+      if (!['SM', 'TL', 'ADMIN', 'DIREKSI', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya role manajemen yang dapat mengakses Laporan Harian SM & Tim SE.' });
+        return;
+      }
+      const todayWib = toWibDateStr(new Date());
+      const rawStart = String(parsedUrl.searchParams.get('startDate') || parsedUrl.searchParams.get('date') || todayWib).slice(0, 10);
+      const rawEnd = String(parsedUrl.searchParams.get('endDate') || rawStart).slice(0, 10);
+      const [startDate, endDate] = rawStart <= rawEnd ? [rawStart, rawEnd] : [rawEnd, rawStart];
+
+      const [seUsers, dailyNotes, fieldLogs, leadsInRange, smAuditLogs] = await Promise.all([
+        sql`
+          SELECT email, name, project_id, phone
+          FROM sales_os.app_users
+          WHERE tenant_id = ${user.tenantId}
+            AND role = 'SE'
+            AND is_active = TRUE
+          ORDER BY name ASC
+        `,
+        sql`
+          SELECT * FROM sales_os.se_daily_notes
+          WHERE report_date >= ${startDate}::date
+            AND report_date <= ${endDate}::date
+        `,
+        sql`
+          SELECT se_email, se_name, log_type, title, location_label, lat, lng, created_at
+          FROM sales_os.se_field_logs
+          WHERE (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
+            AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
+          ORDER BY created_at ASC
+        `,
+        sql`
+          SELECT owner_se_email, stage, bant_total, booking_fee_paid, last_activity_at, created_at
+          FROM sales_os.pipeline_leads
+          WHERE tenant_id = ${user.tenantId}
+            AND COALESCE(validity_status, 'VALID') = 'VALID'
+            AND (
+              ((created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
+              OR ((last_activity_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (last_activity_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
+            )
+        `,
+        sql`
+          SELECT action, target_entity AS entity, target_id AS entity_id, summary, details, created_at
+          FROM sales_os.activity_audit_logs
+          WHERE tenant_id = ${user.tenantId}
+            AND LOWER(actor_email) = LOWER(${user.email})
+            AND (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
+            AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
+          ORDER BY created_at DESC
+          LIMIT 100
+        `,
+      ]);
+
+      const notesByEmail = new Map<string, any>();
+      for (const n of dailyNotes) {
+        const email = String(n.se_email || '').toLowerCase();
+        const prev = notesByEmail.get(email) || {
+          dial_count: 0,
+          connected_call_count: 0,
+          canvassing_contacts: 0,
+          canvassing_brochures: 0,
+          canvassing_leads: 0,
+          posted_reels: 0,
+          posted_wa_status: 0,
+          posted_stories: 0,
+          hambatan_list: [] as string[],
+        };
+        prev.dial_count += Number(n.dial_count || 0);
+        prev.connected_call_count += Number(n.connected_call_count || 0);
+        prev.canvassing_contacts += Number(n.canvassing_contacts || 0);
+        prev.canvassing_brochures += Number(n.canvassing_brochures || 0);
+        prev.canvassing_leads += Number(n.canvassing_leads || 0);
+        prev.posted_reels += Number(n.posted_reels || 0);
+        prev.posted_wa_status += Number(n.posted_wa_status || 0);
+        prev.posted_stories += Number(n.posted_stories || 0);
+        if (n.hambatan_bantuan && String(n.hambatan_bantuan).trim()) {
+          prev.hambatan_list.push(String(n.hambatan_bantuan).trim());
+        }
+        notesByEmail.set(email, prev);
+      }
+
+      const seReports = seUsers.map((se: any) => {
+        const email = String(se.email || '').toLowerCase();
+        const note = notesByEmail.get(email) || { hambatan_list: [] };
+        const myLogs = fieldLogs.filter((l: any) => String(l.se_email || '').toLowerCase() === email);
+        const checkIn = myLogs.find((l: any) => l.log_type === 'CHECK_IN');
+        const checkOut = [...myLogs].reverse().find((l: any) => l.log_type === 'CHECK_OUT');
+        const gpsLogs = myLogs.filter((l: any) => l.log_type === 'GPS' || l.log_type === 'CHECK_IN');
+        const callLogs = myLogs.filter((l: any) => l.log_type === 'CALL');
+        const latestGps = gpsLogs[gpsLogs.length - 1];
+
+        const myLeads = leadsInRange.filter((l: any) => String(l.owner_se_email || '').toLowerCase() === email);
+        const newLeadsCount = myLeads.filter((l: any) => {
+          if (!l.created_at) return false;
+          const d = toWibDateStr(new Date(l.created_at));
+          return d >= startDate && d <= endDate;
+        }).length;
+        const qualifiedCount = myLeads.filter((l: any) => Number(l.bant_total || 0) >= 7).length;
+        const visitsCount = myLeads.filter((l: any) => String(l.stage || '').toUpperCase() === 'VISITED').length;
+        const bookingsCount = myLeads.filter(
+          (l: any) =>
+            Boolean(l.booking_fee_paid) ||
+            ['BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'].includes(String(l.stage || '').toUpperCase())
+        ).length;
+
+        const dialCount = Number(note.dial_count || 0) + callLogs.length;
+        const connectedCallCount = Number(note.connected_call_count || 0);
+        const canvassingContacts = Number(note.canvassing_contacts || 0);
+        const contentPosted =
+          Number(note.posted_reels || 0) +
+          Number(note.posted_wa_status || 0) +
+          Number(note.posted_stories || 0);
+
+        return {
+          seName: String(se.name || se.email),
+          seEmail: email,
+          projectId: String(se.project_id || ''),
+          checkInAt: checkIn ? String(checkIn.created_at) : null,
+          checkOutAt: checkOut ? String(checkOut.created_at) : null,
+          gpsCount: gpsLogs.length,
+          latestLocation: latestGps ? String(latestGps.location_label || '') : '',
+          callCount: dialCount,
+          connectedCallCount,
+          canvassingContacts,
+          canvassingBrochures: Number(note.canvassing_brochures || 0),
+          canvassingLeads: Number(note.canvassing_leads || 0),
+          contentPosted,
+          leadsToday: newLeadsCount,
+          qualifiedCount,
+          visitsCount,
+          bookingsCount,
+          hambatanBantuan: Array.isArray(note.hambatan_list) ? note.hambatan_list.join(' | ') : '',
+        };
+      });
+
+      const smOwnLogs = fieldLogs.filter((l: any) => String(l.se_email || '').toLowerCase() === user.email.toLowerCase());
+      const teamTotals = {
+        totalSe: seReports.length,
+        checkedInCount: seReports.filter((r: any) => Boolean(r.checkInAt)).length,
+        totalGpsLogs: seReports.reduce((acc: number, r: any) => acc + r.gpsCount, 0),
+        totalCalls: seReports.reduce((acc: number, r: any) => acc + r.callCount, 0),
+        totalCanvassing: seReports.reduce((acc: number, r: any) => acc + r.canvassingContacts, 0),
+        totalContentPosted: seReports.reduce((acc: number, r: any) => acc + r.contentPosted, 0),
+        totalLeadsToday: seReports.reduce((acc: number, r: any) => acc + r.leadsToday, 0),
+        totalBookingsToday: seReports.reduce((acc: number, r: any) => acc + r.bookingsCount, 0),
+      };
+
+      sendJson(res, 200, {
+        ok: true,
+        startDate,
+        endDate,
+        date: startDate === endDate ? startDate : `${startDate} s.d. ${endDate}`,
+        smSummary: {
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          ownActivities: smAuditLogs,
+          ownFieldLogs: smOwnLogs,
+        },
+        teamTotals,
+        seReports,
+      });
+      return;
+    }
+
+    if (pathname === '/api/state' && req.method === 'GET') {
+      const requestedTenant = String(parsedUrl.searchParams.get('tenantId') || '').trim();
+      const tenantId =
+        (user.role === 'SUPERADMIN' || user.role === 'SUPERADMIN_IT') && requestedTenant
+          ? requestedTenant
+          : user.tenantId;
+      const projectId = String(parsedUrl.searchParams.get('projectId') || '__global__').trim() || '__global__';
+      const stateKey = String(parsedUrl.searchParams.get('key') || '').trim();
+      if (stateKey) {
+        const rows = await sql`
+          SELECT state_key, payload, updated_at
+          FROM sales_os.app_state_kv
+          WHERE tenant_id = ${tenantId} AND project_id = ${projectId} AND state_key = ${stateKey}
+          LIMIT 1
+        `;
+        sendJson(res, 200, {
+          ok: true,
+          key: stateKey,
+          projectId,
+          payload: rows[0]?.payload ?? null,
+          updatedAt: rows[0]?.updated_at ?? null,
+        });
+        return;
+      }
+      const rows = await sql`
+        SELECT state_key, payload, updated_at
+        FROM sales_os.app_state_kv
+        WHERE tenant_id = ${tenantId} AND project_id = ${projectId}
+        ORDER BY state_key ASC
+      `;
+      const items: Record<string, unknown> = {};
+      for (const row of rows) {
+        items[String(row.state_key)] = row.payload;
+      }
+      sendJson(res, 200, { ok: true, projectId, items });
+      return;
+    }
+
+    if (pathname === '/api/state' && req.method === 'PUT') {
+      const body = await readJsonBody(req);
+      const requestedTenant = String(body.tenantId || '').trim();
+      const tenantId =
+        (user.role === 'SUPERADMIN' || user.role === 'SUPERADMIN_IT') && requestedTenant
+          ? requestedTenant
+          : user.tenantId;
+      const projectId = String(body.projectId || '__global__').trim() || '__global__';
+      const stateKey = String(body.key || '').trim();
+      if (!stateKey) {
+        sendJson(res, 400, { ok: false, error: 'key wajib diisi.' });
+        return;
+      }
+      const payloadJson = JSON.stringify(body.payload ?? null);
+      await sql`
+        INSERT INTO sales_os.app_state_kv (tenant_id, project_id, state_key, payload, updated_by, updated_at)
+        VALUES (${tenantId}, ${projectId}, ${stateKey}, ${payloadJson}::jsonb, ${user.email}, NOW())
+        ON CONFLICT (tenant_id, project_id, state_key) DO UPDATE SET
+          payload = EXCLUDED.payload,
+          updated_by = EXCLUDED.updated_by,
+          updated_at = NOW()
+      `;
+      sendJson(res, 200, { ok: true, key: stateKey, projectId });
+      return;
+    }
+
     if (pathname === '/api/partner-config' && req.method === 'GET') {
       const projectId = String(parsedUrl.searchParams.get('projectId') || user.projectId || 'the-park-sukoharjo');
       const rows = await sql`
@@ -4787,6 +5411,197 @@ const server = http.createServer(async (req, res) => {
           updated_at = NOW()
       `;
       sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // CREATOR DESK (AFILIATOR CLIPPER, LIVE, KOL + F104 + LEDGER KANTONG A/B)
+    if (pathname === '/api/creators' && req.method === 'GET') {
+      const projectId = String(parsedUrl.searchParams.get('projectId') || user.projectId || 'the-park-sukoharjo');
+      const rows = await sql`
+        SELECT * FROM sales_os.creator_profiles
+        WHERE tenant_id = ${user.tenantId} AND project_id = ${projectId}
+        ORDER BY created_at DESC
+      `;
+      sendJson(res, 200, { ok: true, creators: rows });
+      return;
+    }
+
+    if (pathname === '/api/creators' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || user.projectId || 'the-park-sukoharjo');
+      const fullName = String(body.fullName || '').trim();
+      const roleType = String(body.roleType || 'AFILIATOR_CLIPPER').toUpperCase();
+      const prefix = roleType === 'AFILIATOR_LIVE' ? 'AL' : roleType === 'AFILIATOR_KOL' ? 'AK' : 'AC';
+      const creatorCode = String(body.creatorCode || `${prefix}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`)
+        .trim()
+        .toUpperCase();
+      if (!fullName) {
+        sendJson(res, 400, { ok: false, error: 'Nama kreator wajib diisi.' });
+        return;
+      }
+      const inserted = await sql`
+        INSERT INTO sales_os.creator_profiles (
+          tenant_id, project_id, creator_code, full_name, role_type,
+          platform, social_handle, phone_wa, monthly_cap_idr
+        ) VALUES (
+          ${user.tenantId}, ${projectId}, ${creatorCode}, ${fullName}, ${roleType},
+          ${String(body.platform || 'TikTok')}, ${String(body.socialHandle || '')},
+          ${String(body.phoneWa || '')}, ${Number(body.monthlyCapIdr || 3000000)}
+        )
+        RETURNING *
+      `;
+      sendJson(res, 201, { ok: true, creator: inserted[0] });
+      return;
+    }
+
+    if (pathname === '/api/creator-submissions' && req.method === 'GET') {
+      const projectId = String(parsedUrl.searchParams.get('projectId') || user.projectId || 'the-park-sukoharjo');
+      const rows = await sql`
+        SELECT * FROM sales_os.creator_content_metrics
+        WHERE tenant_id = ${user.tenantId} AND project_id = ${projectId}
+        ORDER BY created_at DESC
+        LIMIT 200
+      `;
+      sendJson(res, 200, { ok: true, submissions: rows });
+      return;
+    }
+
+    if (pathname === '/api/creator-submissions' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || user.projectId || 'the-park-sukoharjo');
+      const creatorCode = String(body.creatorCode || '').trim().toUpperCase();
+      const contentCode = String(body.contentCode || `tpth-${Date.now().toString(36)}`).trim();
+      const contentType = String(body.contentType || 'KLIP').toUpperCase() as ContentSubmissionType;
+      const contentUrl = String(body.contentUrl || '').trim();
+      if (!creatorCode || !contentUrl) {
+        sendJson(res, 400, { ok: false, error: 'Kode kreator dan URL karya wajib diisi.' });
+        return;
+      }
+      const inserted = await sql`
+        INSERT INTO sales_os.creator_content_metrics (
+          tenant_id, project_id, creator_code, content_code, content_type,
+          platform, content_url, raw_views, verified_views, session_minutes, flat_fee_idr, audit_status
+        ) VALUES (
+          ${user.tenantId}, ${projectId}, ${creatorCode}, ${contentCode}, ${contentType},
+          ${String(body.platform || 'TikTok')}, ${contentUrl},
+          ${Number(body.rawViews || 0)}, ${Number(body.verifiedViews || 0)},
+          ${Number(body.sessionMinutes || 0)}, ${Number(body.flatFeeIdr || 0)}, 'UNDER_REVIEW'
+        )
+        RETURNING *
+      `;
+      sendJson(res, 201, { ok: true, submission: inserted[0] });
+      return;
+    }
+
+    if (pathname === '/api/creator-submissions' && req.method === 'PATCH') {
+      if (!['SM', 'ADMIN', 'DIREKSI', 'IT', 'DIGITAL_MARKETING', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya SM/Admin/Marketing/Direksi yang dapat memverifikasi karya.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const id = String(body.id || '').trim();
+      const action = String(body.action || 'VERIFY').toUpperCase();
+      const existingRows = await sql`
+        SELECT * FROM sales_os.creator_content_metrics
+        WHERE id = ${id} AND tenant_id = ${user.tenantId}
+        LIMIT 1
+      `;
+      if (existingRows.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Pengajuan karya tidak ditemukan.' });
+        return;
+      }
+      const row = existingRows[0];
+      if (action === 'REJECT') {
+        const updated = await sql`
+          UPDATE sales_os.creator_content_metrics
+          SET audit_status = 'REJECTED',
+              audit_notes = ${String(body.auditNotes || 'Ditolak saat audit')},
+              verified_by = ${user.email},
+              verified_at = NOW(),
+              updated_at = NOW()
+          WHERE id = ${id}
+          RETURNING *
+        `;
+        sendJson(res, 200, { ok: true, submission: updated[0] });
+        return;
+      }
+
+      const verifiedViews = body.verifiedViews !== undefined ? Number(body.verifiedViews) : Number(row.verified_views || row.raw_views || 0);
+      const sessionMinutes = body.sessionMinutes !== undefined ? Number(body.sessionMinutes) : Number(row.session_minutes || 0);
+      const flatFeeIdr = body.flatFeeIdr !== undefined ? Number(body.flatFeeIdr) : Number(row.flat_fee_idr || 0);
+      const calc = calculateKantongAAmount({
+        contentType: row.content_type as ContentSubmissionType,
+        verifiedViews,
+        sessionMinutes,
+        flatFeeIdr,
+      });
+      const updated = await sql`
+        UPDATE sales_os.creator_content_metrics
+        SET verified_views = ${verifiedViews},
+            session_minutes = ${sessionMinutes},
+            flat_fee_idr = ${flatFeeIdr},
+            audit_status = 'VERIFIED',
+            audit_notes = ${String(body.auditNotes || calc.note)},
+            gross_amount_idr = ${calc.grossIdr},
+            capped_amount_idr = ${calc.cappedIdr},
+            verified_by = ${user.email},
+            verified_at = NOW(),
+            updated_at = NOW()
+        WHERE id = ${id}
+        RETURNING *
+      `;
+      if (calc.cappedIdr > 0) {
+        const { taxIdr, netIdr } = calculatePph21Estimate(calc.cappedIdr);
+        await sql`
+          INSERT INTO sales_os.creator_ledger_entries (
+            tenant_id, project_id, creator_code, pocket, entry_type,
+            reference_id, description, gross_amount_idr, tax_pph_idr, net_amount_idr, status
+          ) VALUES (
+            ${user.tenantId}, ${row.project_id}, ${row.creator_code}, 'A', ${calc.entryType},
+            ${row.content_code}, ${`Verifikasi ${row.content_type} (${row.content_code})`},
+            ${calc.cappedIdr}, ${taxIdr}, ${netIdr}, 'ACCRUED'
+          )
+        `;
+      }
+      sendJson(res, 200, { ok: true, submission: updated[0] });
+      return;
+    }
+
+    if (pathname === '/api/creator-ledger' && req.method === 'GET') {
+      const projectId = String(parsedUrl.searchParams.get('projectId') || user.projectId || 'the-park-sukoharjo');
+      const rows = await sql`
+        SELECT * FROM sales_os.creator_ledger_entries
+        WHERE tenant_id = ${user.tenantId} AND project_id = ${projectId}
+        ORDER BY created_at DESC
+        LIMIT 300
+      `;
+      sendJson(res, 200, { ok: true, entries: rows });
+      return;
+    }
+
+    if (pathname === '/api/creator-ledger' && req.method === 'PATCH') {
+      if (!['SM', 'ADMIN', 'DIREKSI', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Admin/SM/Direksi yang dapat mengubah status ledger.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const id = String(body.id || '').trim();
+      const status = String(body.status || '').toUpperCase();
+      const allowed = ['ESTIMATE', 'PENDING', 'ACCRUED', 'ON_HOLD', 'APPROVED', 'PAID', 'REVERSED'];
+      if (!allowed.includes(status)) {
+        sendJson(res, 400, { ok: false, error: 'Status ledger tidak valid.' });
+        return;
+      }
+      const updated = await sql`
+        UPDATE sales_os.creator_ledger_entries
+        SET status = ${status},
+            approved_by = ${['APPROVED', 'PAID'].includes(status) ? user.email : null},
+            paid_at = ${status === 'PAID' ? sql`NOW()` : sql`paid_at`},
+            updated_at = NOW()
+        WHERE id = ${id} AND tenant_id = ${user.tenantId}
+        RETURNING *
+      `;
+      sendJson(res, 200, { ok: true, entry: updated[0] || null });
       return;
     }
 

@@ -534,13 +534,13 @@ export const GpsLiveRadarMap: React.FC<GpsLiveRadarMapProps> = ({
       )}
 
       {/* Peta Leaflet */}
-      <div className="relative">
+      <div className="relative isolate z-0 overflow-hidden">
         <div ref={mapContainerRef} className="w-full h-[260px] sm:h-[320px] z-0" />
         {liveGps && (
           <button
             type="button"
             onClick={handleCenterToMe}
-            className="absolute bottom-3 right-3 z-[400] min-h-[38px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-warmborder shadow-md text-xs font-bold text-espresso hover:bg-sandstone cursor-pointer"
+            className="absolute bottom-3 right-3 z-[450] min-h-[38px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-warmborder shadow-md text-xs font-bold text-espresso hover:bg-sandstone cursor-pointer"
           >
             <Crosshair className="w-3.5 h-3.5 text-blue-600" />
             Pusatkan ke Saya

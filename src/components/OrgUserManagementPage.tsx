@@ -101,7 +101,15 @@ export const OrgUserManagementPage: React.FC<OrgUserManagementPageProps> = ({
         setError(json.error || 'Gagal memuat daftar user.');
         return;
       }
-      setUsers(Array.isArray(json.users) ? json.users : []);
+      setUsers(
+        Array.isArray(json.users)
+          ? json.users.filter(
+              (u: OrgUserRow) =>
+                !['SUPERADMIN', 'SUPERADMIN_IT'].includes(String(u.role || '').toUpperCase()) &&
+                !String(u.email || '').toLowerCase().endsWith('@developersalesos.com')
+            )
+          : []
+      );
       if (Array.isArray(json.allowedRoles) && json.allowedRoles.length > 0) {
         setAllowedRoles(json.allowedRoles);
       }
@@ -287,15 +295,15 @@ export const OrgUserManagementPage: React.FC<OrgUserManagementPageProps> = ({
   return (
     <div className="space-y-6 pb-20 md:pb-8">
       {/* Header */}
-      <div className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
+      <div className="bg-white border border-warmborder rounded-2xl p-4 sm:p-6 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5 min-w-0">
             <div className="size-12 rounded-2xl bg-terracotta/10 border border-terracotta/20 flex items-center justify-center shrink-0">
               <Users className="size-6 text-terracotta" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl font-extrabold text-espresso">
+                <h1 className="text-lg sm:text-xl font-extrabold text-espresso">
                   Manajemen User Organisasi (6 Role Utama)
                 </h1>
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-olive/10 text-olive text-[11px] font-bold border border-olive/20">
@@ -308,18 +316,18 @@ export const OrgUserManagementPage: React.FC<OrgUserManagementPageProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={loadUsers}
-              className="h-10 px-3 rounded-xl border border-warmborder bg-sandstone hover:bg-warmborder text-espresso text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              className="h-9 sm:h-10 px-3 rounded-xl border border-warmborder bg-sandstone hover:bg-warmborder text-espresso text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
               <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} /> Segarkan
             </button>
             <button
               type="button"
               onClick={() => setShowAddForm((v) => !v)}
-              className="h-10 px-4 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shrink-0 shadow-sm"
+              className="h-9 sm:h-10 px-4 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shrink-0 shadow-sm whitespace-nowrap"
             >
               <UserPlus className="size-4" /> {showAddForm ? 'Tutup Form' : 'Tambah User Baru'}
             </button>

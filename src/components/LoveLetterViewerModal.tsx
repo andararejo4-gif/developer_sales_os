@@ -316,7 +316,7 @@ export const LoveLetterViewerModal: React.FC<ViewerProps> = ({
                   }`}
                 >
                   <ShieldCheck className="size-3.5 text-terracotta" />
-                  <span>Buku Besar Klaim / Claim Ledger (F14)</span>
+                  <span>Buku Besar Klaim / Claim Ledger</span>
                 </button>
               </div>
 
