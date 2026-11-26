@@ -5164,9 +5164,12 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 403, { ok: false, error: 'Hanya role manajemen yang dapat mengakses Laporan Harian SM & Tim SE.' });
         return;
       }
-      const dateStr = String(parsedUrl.searchParams.get('date') || toWibDateStr(new Date())).slice(0, 10);
+      const todayWib = toWibDateStr(new Date());
+      const rawStart = String(parsedUrl.searchParams.get('startDate') || parsedUrl.searchParams.get('date') || todayWib).slice(0, 10);
+      const rawEnd = String(parsedUrl.searchParams.get('endDate') || rawStart).slice(0, 10);
+      const [startDate, endDate] = rawStart <= rawEnd ? [rawStart, rawEnd] : [rawEnd, rawStart];
 
-      const [seUsers, dailyNotes, fieldLogs, leadsToday, smAuditLogs] = await Promise.all([
+      const [seUsers, dailyNotes, fieldLogs, leadsInRange, smAuditLogs] = await Promise.all([
         sql`
           SELECT email, name, project_id, phone
           FROM sales_os.app_users
@@ -5177,43 +5180,69 @@ const server = http.createServer(async (req, res) => {
         `,
         sql`
           SELECT * FROM sales_os.se_daily_notes
-          WHERE report_date = ${dateStr}::date
+          WHERE report_date >= ${startDate}::date
+            AND report_date <= ${endDate}::date
         `,
         sql`
           SELECT se_email, se_name, log_type, title, location_label, lat, lng, created_at
           FROM sales_os.se_field_logs
-          WHERE (created_at AT TIME ZONE 'Asia/Jakarta')::date = ${dateStr}::date
+          WHERE (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
+            AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
           ORDER BY created_at ASC
         `,
         sql`
-          SELECT owner_se_email, stage, bant_score, last_contact_at, created_at
+          SELECT owner_se_email, stage, bant_total, booking_fee_paid, last_activity_at, created_at
           FROM sales_os.pipeline_leads
           WHERE tenant_id = ${user.tenantId}
-            AND COALESCE(lead_quality, 'VALID') = 'VALID'
+            AND COALESCE(validity_status, 'VALID') = 'VALID'
             AND (
-              (created_at AT TIME ZONE 'Asia/Jakarta')::date = ${dateStr}::date
-              OR (last_contact_at AT TIME ZONE 'Asia/Jakarta')::date = ${dateStr}::date
+              ((created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
+              OR ((last_activity_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (last_activity_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
             )
         `,
         sql`
-          SELECT action, entity, entity_id, details, created_at
+          SELECT action, target_entity AS entity, target_id AS entity_id, summary, details, created_at
           FROM sales_os.activity_audit_logs
           WHERE tenant_id = ${user.tenantId}
             AND LOWER(actor_email) = LOWER(${user.email})
-            AND (created_at AT TIME ZONE 'Asia/Jakarta')::date = ${dateStr}::date
+            AND (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
+            AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
           ORDER BY created_at DESC
-          LIMIT 50
+          LIMIT 100
         `,
       ]);
 
       const notesByEmail = new Map<string, any>();
       for (const n of dailyNotes) {
-        notesByEmail.set(String(n.se_email || '').toLowerCase(), n);
+        const email = String(n.se_email || '').toLowerCase();
+        const prev = notesByEmail.get(email) || {
+          dial_count: 0,
+          connected_call_count: 0,
+          canvassing_contacts: 0,
+          canvassing_brochures: 0,
+          canvassing_leads: 0,
+          posted_reels: 0,
+          posted_wa_status: 0,
+          posted_stories: 0,
+          hambatan_list: [] as string[],
+        };
+        prev.dial_count += Number(n.dial_count || 0);
+        prev.connected_call_count += Number(n.connected_call_count || 0);
+        prev.canvassing_contacts += Number(n.canvassing_contacts || 0);
+        prev.canvassing_brochures += Number(n.canvassing_brochures || 0);
+        prev.canvassing_leads += Number(n.canvassing_leads || 0);
+        prev.posted_reels += Number(n.posted_reels || 0);
+        prev.posted_wa_status += Number(n.posted_wa_status || 0);
+        prev.posted_stories += Number(n.posted_stories || 0);
+        if (n.hambatan_bantuan && String(n.hambatan_bantuan).trim()) {
+          prev.hambatan_list.push(String(n.hambatan_bantuan).trim());
+        }
+        notesByEmail.set(email, prev);
       }
 
       const seReports = seUsers.map((se: any) => {
         const email = String(se.email || '').toLowerCase();
-        const note = notesByEmail.get(email) || {};
+        const note = notesByEmail.get(email) || { hambatan_list: [] };
         const myLogs = fieldLogs.filter((l: any) => String(l.se_email || '').toLowerCase() === email);
         const checkIn = myLogs.find((l: any) => l.log_type === 'CHECK_IN');
         const checkOut = [...myLogs].reverse().find((l: any) => l.log_type === 'CHECK_OUT');
@@ -5221,11 +5250,19 @@ const server = http.createServer(async (req, res) => {
         const callLogs = myLogs.filter((l: any) => l.log_type === 'CALL');
         const latestGps = gpsLogs[gpsLogs.length - 1];
 
-        const myLeads = leadsToday.filter((l: any) => String(l.owner_se_email || '').toLowerCase() === email);
-        const newLeadsCount = myLeads.filter((l: any) => l.created_at && toWibDateStr(new Date(l.created_at)) === dateStr).length;
-        const qualifiedCount = myLeads.filter((l: any) => Number(l.bant_score || 0) >= 7).length;
+        const myLeads = leadsInRange.filter((l: any) => String(l.owner_se_email || '').toLowerCase() === email);
+        const newLeadsCount = myLeads.filter((l: any) => {
+          if (!l.created_at) return false;
+          const d = toWibDateStr(new Date(l.created_at));
+          return d >= startDate && d <= endDate;
+        }).length;
+        const qualifiedCount = myLeads.filter((l: any) => Number(l.bant_total || 0) >= 7).length;
         const visitsCount = myLeads.filter((l: any) => String(l.stage || '').toUpperCase() === 'VISITED').length;
-        const bookingsCount = myLeads.filter((l: any) => ['BOOKING', 'BOOKED', 'AKAD_CLOSING'].includes(String(l.stage || '').toUpperCase())).length;
+        const bookingsCount = myLeads.filter(
+          (l: any) =>
+            Boolean(l.booking_fee_paid) ||
+            ['BOOKING', 'DP_KPR_PROCESS', 'PPJB_AKAD'].includes(String(l.stage || '').toUpperCase())
+        ).length;
 
         const dialCount = Number(note.dial_count || 0) + callLogs.length;
         const connectedCallCount = Number(note.connected_call_count || 0);
@@ -5253,7 +5290,7 @@ const server = http.createServer(async (req, res) => {
           qualifiedCount,
           visitsCount,
           bookingsCount,
-          hambatanBantuan: String(note.hambatan_bantuan || ''),
+          hambatanBantuan: Array.isArray(note.hambatan_list) ? note.hambatan_list.join(' | ') : '',
         };
       });
 
@@ -5271,7 +5308,9 @@ const server = http.createServer(async (req, res) => {
 
       sendJson(res, 200, {
         ok: true,
-        date: dateStr,
+        startDate,
+        endDate,
+        date: startDate === endDate ? startDate : `${startDate} s.d. ${endDate}`,
         smSummary: {
           name: user.name,
           email: user.email,
