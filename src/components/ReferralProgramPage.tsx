@@ -14,6 +14,8 @@ import {
   ShieldCheck,
   Clock,
   Briefcase,
+  Edit3,
+  Trash2,
 } from 'lucide-react';
 import { loadAuthSession } from '../lib/auth/dummy-accounts';
 import {
@@ -137,6 +139,17 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
   const [friendPhone, setFriendPhone] = useState('');
   const [unitInterest, setUnitInterest] = useState('');
 
+  // Edit inline state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editAdvocateName, setEditAdvocateName] = useState('');
+  const [editAdvocatePhone, setEditAdvocatePhone] = useState('');
+  const [editFriendName, setEditFriendName] = useState('');
+  const [editFriendPhone, setEditFriendPhone] = useState('');
+  const [editUnitInterest, setEditUnitInterest] = useState('');
+  const [editStatus, setEditStatus] = useState<ReferralLeadRecord['status']>('TERDAFTAR');
+  const [editRewardAmount, setEditRewardAmount] = useState(5000000);
+  const [editRewardStatus, setEditRewardStatus] = useState<ReferralLeadRecord['rewardStatus']>('PENDING_AKAD');
+
   const partnerSlug =
     userRole === 'REFERRAL_PARTNER'
       ? 'anita_wijaya'
@@ -205,6 +218,75 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
         showToastMsg(`Data ${partnerRoleInput === 'SALES_PARTNER' ? 'Sales Partner' : 'Referral'} tersimpan & masuk antrean lead.`);
       } else {
         showToastMsg(json.error || 'Gagal menyimpan data referral.');
+      }
+    } catch {
+      showToastMsg('Gagal menghubungi server.');
+    }
+  };
+
+  const startEditReferral = (item: ReferralLeadRecord) => {
+    setEditingId(item.id);
+    setEditAdvocateName(item.advocateName);
+    setEditAdvocatePhone(item.advocatePhone);
+    setEditFriendName(item.referredFriendName);
+    setEditFriendPhone(item.referredFriendPhone);
+    setEditUnitInterest(item.unitInterest);
+    setEditStatus(item.status);
+    setEditRewardAmount(item.rewardAmount);
+    setEditRewardStatus(item.rewardStatus);
+  };
+
+  const handleSaveEditReferral = async (id: string) => {
+    if (!editAdvocateName.trim() || !editFriendName.trim()) {
+      showToastMsg('Nama pengirim dan nama calon pembeli wajib diisi.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/referrals', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          id,
+          advocateName: editAdvocateName.trim(),
+          advocatePhone: editAdvocatePhone.trim(),
+          referredFriendName: editFriendName.trim(),
+          referredFriendPhone: editFriendPhone.trim(),
+          unitInterest: editUnitInterest.trim(),
+          status: editStatus,
+          rewardAmount: editRewardAmount,
+          rewardStatus: editRewardStatus,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        await loadReferralData();
+        setEditingId(null);
+        showToastMsg('Data referral berhasil diperbarui.');
+      } else {
+        showToastMsg(json.error || 'Gagal memperbarui referral.');
+      }
+    } catch {
+      showToastMsg('Gagal menghubungi server.');
+    }
+  };
+
+  const handleDeleteReferral = async (item: ReferralLeadRecord) => {
+    if (!window.confirm(`Hapus data referral "${item.referredFriendName}" dari ${item.advocateName}?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/referrals?id=${encodeURIComponent(item.id)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok) {
+        setReferrals((prev) => prev.filter((r) => r.id !== item.id));
+        showToastMsg(`Referral ${item.referredFriendName} dihapus.`);
+      } else {
+        showToastMsg(json.error || 'Gagal menghapus referral.');
       }
     } catch {
       showToastMsg('Gagal menghubungi server.');
@@ -546,7 +628,8 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
                 </tr>
               ) : (
                 filteredReferrals.map((item) => (
-                  <tr key={item.id} className="hover:bg-sandstone/20 transition-colors">
+                  <React.Fragment key={item.id}>
+                  <tr className="hover:bg-sandstone/20 transition-colors">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-espresso">{item.advocateName}</span>
@@ -621,40 +704,159 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right">
-                      {item.rewardStatus === 'SIAP_CAIR' ? (
+                      <div className="inline-flex items-center justify-end gap-1.5">
+                        {item.rewardStatus === 'SIAP_CAIR' && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const res = await fetch('/api/referrals', {
+                                method: 'PATCH',
+                                credentials: 'include',
+                                headers: getAuthHeaders(),
+                                body: JSON.stringify({ id: item.id, rewardStatus: 'SUDAH_DITRANSFER' }),
+                              });
+                              if (res.ok) {
+                                setReferrals((prev) =>
+                                  prev.map((r) =>
+                                    r.id === item.id ? { ...r, rewardStatus: 'SUDAH_DITRANSFER' as const } : r
+                                  )
+                                );
+                                showToastMsg(`Reward untuk ${item.advocateName} dicatat cair`);
+                              }
+                            }}
+                            className="h-7 px-2.5 rounded bg-olive hover:bg-olive/90 text-white font-medium text-xs cursor-pointer"
+                          >
+                            Tandai Cair
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={async () => {
-                            const res = await fetch('/api/referrals', {
-                              method: 'PATCH',
-                              credentials: 'include',
-                              headers: getAuthHeaders(),
-                              body: JSON.stringify({ id: item.id, rewardStatus: 'SUDAH_DITRANSFER' }),
-                            });
-                            if (res.ok) {
-                              setReferrals((prev) =>
-                                prev.map((r) =>
-                                  r.id === item.id ? { ...r, rewardStatus: 'SUDAH_DITRANSFER' as const } : r
-                                )
-                              );
-                              showToastMsg(`Reward untuk ${item.advocateName} dicatat cair`);
-                            }
-                          }}
-                          className="h-7 px-2.5 rounded bg-olive hover:bg-olive/90 text-white font-medium text-xs cursor-pointer"
+                          onClick={() =>
+                            editingId === item.id ? setEditingId(null) : startEditReferral(item)
+                          }
+                          className="h-7 px-2 rounded bg-sandstone hover:bg-warmborder text-espresso font-medium text-xs flex items-center gap-1 cursor-pointer"
+                          title="Edit Referral"
                         >
-                          Tandai Cair
+                          <Edit3 className="size-3.5" />
                         </button>
-                      ) : (
                         <button
                           type="button"
-                          onClick={() => showToastMsg(`Membuka WhatsApp ${item.advocateName}...`)}
-                          className="h-7 px-2.5 rounded bg-sandstone hover:bg-warmborder text-espresso font-medium text-xs cursor-pointer transition-colors"
+                          onClick={() => handleDeleteReferral(item)}
+                          className="h-7 px-2 rounded bg-sandstone hover:bg-rose-100 text-warmmuted hover:text-rose-700 cursor-pointer"
+                          title="Hapus Referral"
                         >
-                          Hubungi
+                          <Trash2 className="size-3.5" />
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
+                  {editingId === item.id && (
+                    <tr className="bg-sandstone/40">
+                      <td colSpan={5} className="p-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                          <div>
+                            <label className="font-semibold text-espresso block mb-1">Nama Pengirim</label>
+                            <input
+                              type="text"
+                              value={editAdvocateName}
+                              onChange={(e) => setEditAdvocateName(e.target.value)}
+                              className="w-full h-8 px-2.5 rounded-lg border border-warmborder bg-white text-espresso"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-semibold text-espresso block mb-1">WA Pengirim</label>
+                            <input
+                              type="text"
+                              value={editAdvocatePhone}
+                              onChange={(e) => setEditAdvocatePhone(e.target.value)}
+                              className="w-full h-8 px-2.5 rounded-lg border border-warmborder bg-white text-espresso"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-semibold text-espresso block mb-1">Calon Pembeli</label>
+                            <input
+                              type="text"
+                              value={editFriendName}
+                              onChange={(e) => setEditFriendName(e.target.value)}
+                              className="w-full h-8 px-2.5 rounded-lg border border-warmborder bg-white text-espresso"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-semibold text-espresso block mb-1">WA Pembeli</label>
+                            <input
+                              type="text"
+                              value={editFriendPhone}
+                              onChange={(e) => setEditFriendPhone(e.target.value)}
+                              className="w-full h-8 px-2.5 rounded-lg border border-warmborder bg-white text-espresso"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-semibold text-espresso block mb-1">Unit Minat</label>
+                            <input
+                              type="text"
+                              value={editUnitInterest}
+                              onChange={(e) => setEditUnitInterest(e.target.value)}
+                              className="w-full h-8 px-2.5 rounded-lg border border-warmborder bg-white text-espresso"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-semibold text-espresso block mb-1">Status Prospek</label>
+                            <select
+                              value={editStatus}
+                              onChange={(e) => setEditStatus(e.target.value as ReferralLeadRecord['status'])}
+                              className="w-full h-8 px-2.5 rounded-lg border border-warmborder bg-white text-espresso font-semibold"
+                            >
+                              <option value="TERDAFTAR">Terdaftar</option>
+                              <option value="SURVEI_LOKASI">Survei Lokasi</option>
+                              <option value="BOOKING">Booking</option>
+                              <option value="AKAD_SELESAI">Akad Selesai</option>
+                              <option value="BATAL">Batal</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="font-semibold text-espresso block mb-1">Nominal Reward (Rp)</label>
+                            <input
+                              type="number"
+                              value={editRewardAmount}
+                              onChange={(e) => setEditRewardAmount(Number(e.target.value))}
+                              className="w-full h-8 px-2.5 rounded-lg border border-warmborder bg-white text-espresso font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-semibold text-espresso block mb-1">Status Reward</label>
+                            <select
+                              value={editRewardStatus}
+                              onChange={(e) =>
+                                setEditRewardStatus(e.target.value as ReferralLeadRecord['rewardStatus'])
+                              }
+                              className="w-full h-8 px-2.5 rounded-lg border border-warmborder bg-white text-espresso font-semibold"
+                            >
+                              <option value="PENDING_AKAD">Menunggu Akad</option>
+                              <option value="SIAP_CAIR">Siap Dicairkan</option>
+                              <option value="SUDAH_DITRANSFER">Sudah Ditransfer</option>
+                            </select>
+                          </div>
+                          <div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setEditingId(null)}
+                              className="h-8 px-3 rounded-lg border border-warmborder bg-white text-espresso font-medium cursor-pointer"
+                            >
+                              Batal
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveEditReferral(item.id)}
+                              className="h-8 px-4 rounded-lg bg-olive text-white font-semibold cursor-pointer"
+                            >
+                              Simpan Perubahan
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 ))
               )}
             </tbody>

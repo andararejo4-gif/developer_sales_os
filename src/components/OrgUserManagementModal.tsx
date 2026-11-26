@@ -23,12 +23,12 @@ interface OrgUserManagementModalProps {
 }
 
 const BASIC_ROLE_LABELS: Record<string, string> = {
-  SE: 'Sales Executive (SE)',
-  TL: 'Team Leader (TL)',
+  IT: 'IT & Sistem (IT)',
   SM: 'Sales Manager (SM)',
-  DIREKSI: 'Direksi / Owner',
+  SE: 'Sales Executive (SE)',
+  DIREKSI: 'Owner / Direksi',
   ADMIN: 'Admin Sales & Transaksi',
-  DIGITAL_MARKETING: 'Digital Marketer',
+  TL: 'Team Leader (TL)',
 };
 
 function getAuthHeaders(): HeadersInit {
@@ -47,12 +47,12 @@ export const OrgUserManagementModal: React.FC<OrgUserManagementModalProps> = ({
 }) => {
   const [users, setUsers] = useState<OrgUserRow[]>([]);
   const [allowedRoles, setAllowedRoles] = useState<string[]>([
-    'SE',
-    'TL',
+    'IT',
     'SM',
+    'SE',
     'DIREKSI',
     'ADMIN',
-    'DIGITAL_MARKETING',
+    'TL',
   ]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);

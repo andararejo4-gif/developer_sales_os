@@ -3,15 +3,18 @@
 // Melihat siapa saja di perusahaan yang melakukan aksi CRUD sesuatu secara realtime
 // ============================================================================
 
-import React, { useEffect, useState } from 'react';
-import { History, Search, RefreshCw, X, User, Clock, Trash2, Edit3, Plus, ArrowRightLeft, UserCheck } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { History, Search, RefreshCw, X, User, Clock, Trash2, Edit3, Plus, ArrowRightLeft, UserCheck, Users } from 'lucide-react';
 import type { RoleKey, UserProfile } from '../../data';
+import { loadAuthSession } from '../../lib/auth/dummy-accounts';
 
 export interface ActivityAuditRecord {
   id: string;
   actor_email: string;
   actor_name: string;
   actor_role: string;
+  resolved_actor_name?: string;
+  resolved_actor_role?: string;
   action: 'CREATE' | 'UPDATE' | 'DELETE' | 'CLAIM' | 'REASSIGN';
   target_entity: 'LEAD' | 'BANK_ACCOUNT' | 'UNIT' | 'ATTENDANCE' | 'SYSTEM';
   target_id: string;
@@ -19,6 +22,24 @@ export interface ActivityAuditRecord {
   details: Record<string, any>;
   created_at: string;
 }
+
+interface TeamMemberOption {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  project_id?: string;
+  is_active: boolean;
+}
+
+const ROLE_GROUP_LABELS: Record<string, string> = {
+  SE: 'Tim Sales Executive (SE)',
+  TL: 'Tim Team Leader (TL)',
+  SM: 'Sales Manager (SM)',
+  ADMIN: 'Tim Admin & Transaksi',
+  DIREKSI: 'Owner / Direksi',
+  IT: 'Tim IT & Sistem',
+};
 
 interface CompanyAuditLogsModalProps {
   isOpen: boolean;
@@ -34,9 +55,13 @@ export const CompanyAuditLogsModal: React.FC<CompanyAuditLogsModalProps> = ({
   role,
 }) => {
   const [logs, setLogs] = useState<ActivityAuditRecord[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMemberOption[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [filterAction, setFilterAction] = useState<string>('ALL');
   const [filterEntity, setFilterEntity] = useState<string>('ALL');
+  const [filterRole, setFilterRole] = useState<string>('ALL');
+  const [filterMember, setFilterMember] = useState<string>('ALL');
+  const [viewMode, setViewMode] = useState<'GROUPED' | 'TIMELINE'>('GROUPED');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedLog, setSelectedLog] = useState<ActivityAuditRecord | null>(null);
 
@@ -46,17 +71,23 @@ export const CompanyAuditLogsModal: React.FC<CompanyAuditLogsModalProps> = ({
       const params = new URLSearchParams();
       if (filterAction !== 'ALL') params.set('action', filterAction);
       if (filterEntity !== 'ALL') params.set('entity', filterEntity);
-      params.set('limit', '100');
+      if (filterRole !== 'ALL') params.set('actorRole', filterRole);
+      if (filterMember !== 'ALL') params.set('actorEmail', filterMember);
+      params.set('limit', '150');
 
+      const session = loadAuthSession();
       const res = await fetch(`/api/company/audit-logs?${params.toString()}`, {
+        credentials: 'include',
         headers: {
+          ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
           'X-User-Email': user.email,
           'X-User-Role': role,
         },
       });
       const data = await res.json();
       if (res.ok && data.ok) {
-        setLogs(data.data || []);
+        setLogs(Array.isArray(data.data) ? data.data : []);
+        setTeamMembers(Array.isArray(data.teamMembers) ? data.teamMembers : []);
       }
     } catch {
       /* ignore */
@@ -69,19 +100,50 @@ export const CompanyAuditLogsModal: React.FC<CompanyAuditLogsModalProps> = ({
     if (isOpen) {
       fetchLogs();
     }
-  }, [isOpen, filterAction, filterEntity]);
+  }, [isOpen, filterAction, filterEntity, filterRole, filterMember]);
 
-  const filteredLogs = logs.filter((log) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      log.actor_name.toLowerCase().includes(q) ||
-      log.actor_email.toLowerCase().includes(q) ||
-      log.summary.toLowerCase().includes(q) ||
-      log.target_entity.toLowerCase().includes(q) ||
-      log.target_id.toLowerCase().includes(q)
-    );
-  });
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      const actorName = (log.resolved_actor_name || log.actor_name).toLowerCase();
+      return (
+        actorName.includes(q) ||
+        log.actor_email.toLowerCase().includes(q) ||
+        log.summary.toLowerCase().includes(q) ||
+        log.target_entity.toLowerCase().includes(q) ||
+        log.target_id.toLowerCase().includes(q)
+      );
+    });
+  }, [logs, searchQuery]);
+
+  const groupedByTeamAndUser = useMemo(() => {
+    const roleMap = new Map<
+      string,
+      Map<string, { actorName: string; actorEmail: string; actorRole: string; items: ActivityAuditRecord[] }>
+    >();
+
+    for (const log of filteredLogs) {
+      const actorRole = String(log.resolved_actor_role || log.actor_role || 'LAINNYA').toUpperCase();
+      const actorEmail = String(log.actor_email || '').toLowerCase();
+      const actorName = String(log.resolved_actor_name || log.actor_name || actorEmail);
+
+      if (!roleMap.has(actorRole)) {
+        roleMap.set(actorRole, new Map());
+      }
+      const userMap = roleMap.get(actorRole)!;
+      if (!userMap.has(actorEmail)) {
+        userMap.set(actorEmail, { actorName, actorEmail, actorRole, items: [] });
+      }
+      userMap.get(actorEmail)!.items.push(log);
+    }
+
+    return Array.from(roleMap.entries()).map(([roleKey, userMap]) => ({
+      roleKey,
+      roleLabel: ROLE_GROUP_LABELS[roleKey] || `Divisi ${roleKey}`,
+      members: Array.from(userMap.values()),
+    }));
+  }, [filteredLogs]);
 
   if (!isOpen) return null;
 
@@ -173,7 +235,65 @@ export const CompanyAuditLogsModal: React.FC<CompanyAuditLogsModalProps> = ({
         </div>
 
         {/* Filter Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 shrink-0">
+        <div className="space-y-2.5 shrink-0">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 bg-sandstone p-1 rounded-xl text-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('GROUPED')}
+                className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer ${
+                  viewMode === 'GROUPED' ? 'bg-espresso text-white' : 'text-warmmuted hover:text-espresso'
+                }`}
+              >
+                <Users className="size-3.5" /> Kelompok per Tim &amp; Anggota
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('TIMELINE')}
+                className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer ${
+                  viewMode === 'TIMELINE' ? 'bg-espresso text-white' : 'text-warmmuted hover:text-espresso'
+                }`}
+              >
+                <Clock className="size-3.5" /> Urutan Waktu
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <select
+                value={filterRole}
+                onChange={(e) => {
+                  setFilterRole(e.target.value);
+                  setFilterMember('ALL');
+                }}
+                className="h-9 px-3 rounded-xl border border-warmborder bg-sandstone font-bold text-espresso cursor-pointer"
+              >
+                <option value="ALL">Semua Divisi / Role</option>
+                <option value="SE">Sales Executive (SE)</option>
+                <option value="TL">Team Leader (TL)</option>
+                <option value="SM">Sales Manager (SM)</option>
+                <option value="ADMIN">Admin Sales</option>
+                <option value="DIREKSI">Owner / Direksi</option>
+                <option value="IT">IT &amp; Sistem</option>
+              </select>
+
+              <select
+                value={filterMember}
+                onChange={(e) => setFilterMember(e.target.value)}
+                className="h-9 px-3 rounded-xl border border-warmborder bg-sandstone font-bold text-espresso cursor-pointer"
+              >
+                <option value="ALL">Semua Anggota Tim ({teamMembers.length})</option>
+                {teamMembers
+                  .filter((m) => filterRole === 'ALL' || m.role.toUpperCase() === filterRole)
+                  .map((m) => (
+                    <option key={m.id} value={m.email}>
+                      {m.name} ({m.role})
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
           <div className="relative">
             <Search className="size-4 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -223,16 +343,86 @@ export const CompanyAuditLogsModal: React.FC<CompanyAuditLogsModalProps> = ({
               <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
+          </div>
         </div>
 
         {/* List of Audit Logs */}
-        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+        <div className="flex-1 overflow-y-auto space-y-3 pr-1">
           {loading ? (
             <div className="p-10 text-center text-xs text-warmmuted">Memuat rekaman log audit...</div>
           ) : filteredLogs.length === 0 ? (
             <div className="p-10 text-center text-xs text-warmmuted border border-dashed border-warmborder rounded-xl">
               Tidak ada rekaman log audit yang cocok dengan filter.
             </div>
+          ) : viewMode === 'GROUPED' ? (
+            groupedByTeamAndUser.map((group) => (
+              <div key={group.roleKey} className="border border-warmborder rounded-2xl overflow-hidden bg-sandstone/20">
+                <div className="px-4 py-2.5 bg-espresso text-white flex items-center justify-between text-xs font-bold">
+                  <span className="flex items-center gap-2">
+                    <Users className="size-3.5 text-amber-400" /> {group.roleLabel}
+                  </span>
+                  <span className="text-[11px] text-white/80">{group.members.length} Anggota Aktif</span>
+                </div>
+                <div className="p-3 space-y-3">
+                  {group.members.map((member) => (
+                    <div key={member.actorEmail} className="bg-white border border-warmborder rounded-xl overflow-hidden">
+                      <div className="px-3.5 py-2 bg-sandstone/60 border-b border-warmborder flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <User className="size-3.5 text-terracotta" />
+                          <span className="font-extrabold text-espresso">{member.actorName}</span>
+                          <span className="px-2 py-0.5 rounded bg-white border border-warmborder text-[10px] font-bold text-espresso">
+                            {member.actorRole}
+                          </span>
+                          <span className="text-[11px] text-warmmuted">{member.actorEmail}</span>
+                        </div>
+                        <span className="text-[11px] font-bold text-terracotta">
+                          {member.items.length} Aktivitas
+                        </span>
+                      </div>
+                      <div className="divide-y divide-warmborder/60">
+                        {member.items.map((log) => {
+                          const dateStr = new Date(log.created_at).toLocaleString('id-ID', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          });
+                          return (
+                            <div key={log.id} className="p-3 space-y-1.5 text-xs hover:bg-sandstone/20">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {getActionBadge(log.action)}
+                                  {getEntityBadge(log.target_entity)}
+                                  <span className="text-[11px] font-mono text-warmmuted">#{log.target_id.slice(0, 8)}</span>
+                                </div>
+                                <span className="text-[11px] text-warmmuted flex items-center gap-1">
+                                  <Clock className="size-3" /> {dateStr}
+                                </span>
+                              </div>
+                              <p className="text-espresso font-semibold">{log.summary}</p>
+                              {log.details && Object.keys(log.details).length > 0 && (
+                                <div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedLog(selectedLog?.id === log.id ? null : log)}
+                                    className="text-terracotta hover:underline font-bold text-[10px] cursor-pointer"
+                                  >
+                                    {selectedLog?.id === log.id ? 'Sembunyikan JSON' : 'Lihat Detail JSON'}
+                                  </button>
+                                  {selectedLog?.id === log.id && (
+                                    <pre className="p-2.5 rounded-lg bg-espresso text-amber-200 text-[10px] font-mono overflow-x-auto max-h-40 mt-1.5">
+                                      {JSON.stringify(log.details, null, 2)}
+                                    </pre>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
           ) : (
             filteredLogs.map((log) => {
               const dateStr = new Date(log.created_at).toLocaleString('id-ID', {
@@ -265,7 +455,7 @@ export const CompanyAuditLogsModal: React.FC<CompanyAuditLogsModalProps> = ({
                     <div className="flex items-center gap-1.5 text-warmmuted">
                       <User className="size-3 text-terracotta" />
                       <span>
-                        Oleh: <strong>{log.actor_name}</strong> ({log.actor_role} · {log.actor_email})
+                        Oleh: <strong>{log.resolved_actor_name || log.actor_name}</strong> ({log.resolved_actor_role || log.actor_role} · {log.actor_email})
                       </span>
                     </div>
 

@@ -3,6 +3,22 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-095 | 2026-11-26 | Kelola User 6 Role Utama (IT, SM, SE, Owner, Admin, TL) di Sidebar & Pengelompokan Riwayat Aktivitas Tim
+- Status: selesai di lokal
+- Ubah: `server/auth.ts` (`BASIC_ORG_ROLES` = `IT`, `SM`, `SE`, `DIREKSI`, `ADMIN`, `TL`), `src/components/OrgUserManagementModal.tsx` (label & opsi 6 role utama), `src/App.tsx` (tambah menu `Kelola User (6 Role)` di sidebar `MANAJEMEN PERUSAHAAN`), `server/index.ts` (`/api/company/audit-logs` join `app_users` per `tenant_id` + filter `actorRole`/`actorEmail` + `teamMembers`), `src/components/company/CompanyAuditLogsModal.tsx` (auth Bearer token, filter Role & Anggota Tim, mode pengelompokan per Divisi & Anggota Tim)
+- Alasan/keputusan: Sebelumnya tombol `Kelola User (6 Role)` hanya ada di header Dashboard SM/Admin (tidak tampil di menu lain seperti Knowledge Base), daftar role masih memakai `DIGITAL_MARKETING` bukan `IT`, dan `CompanyAuditLogsModal` menampilkan log datar tanpa otentikasi Bearer maupun pengelompokan anggota tim dari `app_users`.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`) & `bun build server/index.ts`
+- Berikutnya: Deploy ke `hades` (`https://developerproperti.giivepro.com`) jika siap agar perubahan lokal tampil di live.
+- Catatan: Semua perubahan ini masih di lokal; live `developerproperti.giivepro.com` masih menjalankan build P-093.
+
+## P-094 | 2026-11-26 | CRUD Lengkap (Create, Read, Update, Delete) Role SE pada F74, F75, F79 & F86
+- Status: selesai di lokal
+- Ubah: `server/index.ts` (perluas `PATCH` & tambah `DELETE` pada `/api/vault/documents`, `/api/kpr/applications`, `/api/referrals`, `/api/complaints` dengan cek kepemilikan SE), `src/components/SecureDocumentVaultPage.tsx` (edit inline dokumen & error handling hapus), `src/components/BankSubmissionWorkflowPage.tsx` (edit nama/WA/unit/tahap KPR + tombol hapus), `src/components/ReferralProgramPage.tsx` (edit inline & tombol hapus referral), `src/components/CustomerComplaintsPage.tsx` (edit inline & tombol hapus tiket DLP)
+- Alasan/keputusan: Sebelumnya `DELETE` belum ada pada `/api/kpr/applications`, `/api/referrals`, dan `/api/complaints`, serta `PATCH` dan UI di keempat modul belum mendukung edit penuh untuk role SE.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`) & `bun build server/index.ts`
+- Berikutnya: Uji CRUD langsung di browser pada role SE (F74, F75, F79, F86).
+- Catatan: Pengajuan KPR berstatus `LEAD_AUTO` akan tersinkronisasi ulang dari `pipeline_leads` saat `GET` jika lead masih berkategori KPR.
+
 ## P-093 | 2026-11-25 | Restrukturisasi Menu Admin Panel IT & Flow 2-Langkah Permission Fitur (6 Role Utama)
 - Status: selesai & live di `https://developerproperti.giivepro.com` (`hades`, commit `fb18193` di `origin/feat/totp-2fa`)
 - Ubah: `src/components/superadmin/PermissionMatrixPanel.tsx` (alur 2 langkah: default tabel daftar user dengan tab filter 6 role utama mengecualikan `SUPERADMIN` & `SUPERADMIN_IT` -> klik user masuk halaman detail atur permission CRUD + tombol kembali & opsi Global Per-Role), `src/components/superadmin/ItCommandCenterDashboard.tsx` (pisah 4 halaman: `dashboard`, `permissions`, `knowledge`, `hierarchy` + metrik real & pintasan cepat di dashboard), `src/App.tsx` (menu sidebar khusus `SUPERADMIN_IT`: Permission Fitur, Knowledge AI Terpusat, Hierarki Tenant & Support)

@@ -630,12 +630,12 @@ export function buildClearSessionCookieHeader(): string {
 }
 
 export const BASIC_ORG_ROLES = [
-  'SE',
-  'TL',
+  'IT',
   'SM',
+  'SE',
   'DIREKSI',
   'ADMIN',
-  'DIGITAL_MARKETING',
+  'TL',
 ] as const;
 
 export type BasicOrgRole = (typeof BASIC_ORG_ROLES)[number];

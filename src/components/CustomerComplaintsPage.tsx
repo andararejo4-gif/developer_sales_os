@@ -8,6 +8,8 @@ import {
   Filter,
   Plus,
   Shield,
+  Edit3,
+  Trash2,
 } from 'lucide-react';
 import { loadAuthSession } from '../lib/auth/dummy-accounts';
 
@@ -96,6 +98,16 @@ export const CustomerComplaintsPage: React.FC<CustomerComplaintsPageProps> = ({
   const [category, setCategory] = useState<ComplaintTicket['category']>('KEBOCORAN_ATAP');
   const [description, setDescription] = useState('');
 
+  // Edit inline state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editUnitBlock, setEditUnitBlock] = useState('');
+  const [editResidentName, setEditResidentName] = useState('');
+  const [editResidentPhone, setEditResidentPhone] = useState('');
+  const [editCategory, setEditCategory] = useState<ComplaintTicket['category']>('KEBOCORAN_ATAP');
+  const [editDescription, setEditDescription] = useState('');
+  const [editTechnician, setEditTechnician] = useState('');
+  const [editStatus, setEditStatus] = useState<ComplaintTicket['status']>('TIKET_BARU');
+
   const showToastMsg = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
@@ -153,6 +165,71 @@ export const CustomerComplaintsPage: React.FC<CustomerComplaintsPageProps> = ({
       }
     } catch {
       showToastMsg('Gagal memperbarui status tiket.');
+    }
+  };
+
+  const startEditTicket = (t: ComplaintTicket) => {
+    setEditingId(t.id);
+    setEditUnitBlock(t.unitBlock);
+    setEditResidentName(t.residentName);
+    setEditResidentPhone(t.residentPhone);
+    setEditCategory(t.category);
+    setEditDescription(t.description);
+    setEditTechnician(t.technicianAssigned || '');
+    setEditStatus(t.status);
+  };
+
+  const handleSaveEditTicket = async (id: string) => {
+    if (!editUnitBlock.trim() || !editResidentName.trim() || !editDescription.trim()) {
+      showToastMsg('Blok unit, nama penghuni, dan deskripsi wajib diisi.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/complaints', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          id,
+          unitBlock: editUnitBlock.trim(),
+          residentName: editResidentName.trim(),
+          residentPhone: editResidentPhone.trim(),
+          category: editCategory,
+          description: editDescription.trim(),
+          technicianAssigned: editTechnician.trim(),
+          status: editStatus,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        await loadTickets();
+        setEditingId(null);
+        showToastMsg('Tiket keluhan berhasil diperbarui.');
+      } else {
+        showToastMsg(json.error || 'Gagal memperbarui tiket.');
+      }
+    } catch {
+      showToastMsg('Gagal menghubungi server.');
+    }
+  };
+
+  const handleDeleteTicket = async (t: ComplaintTicket) => {
+    if (!window.confirm(`Hapus tiket "${t.ticketNo}" (${t.unitBlock})?`)) return;
+    try {
+      const res = await fetch(`/api/complaints?id=${encodeURIComponent(t.id)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok) {
+        setTickets((prev) => prev.filter((item) => item.id !== t.id));
+        showToastMsg(`Tiket ${t.ticketNo} dihapus.`);
+      } else {
+        showToastMsg(json.error || 'Gagal menghapus tiket.');
+      }
+    } catch {
+      showToastMsg('Gagal menghubungi server.');
     }
   };
 
@@ -404,7 +481,8 @@ export const CustomerComplaintsPage: React.FC<CustomerComplaintsPageProps> = ({
                 </tr>
               ) : (
                 filteredTickets.map((t) => (
-                  <tr key={t.id} className="hover:bg-sandstone/30 transition-colors">
+                  <React.Fragment key={t.id}>
+                  <tr className="hover:bg-sandstone/30 transition-colors">
                     <td className="py-3.5 px-4">
                       <div className="font-mono font-extrabold text-terracotta text-xs">{t.ticketNo}</div>
                       <div className="text-xs font-bold text-espresso flex items-center gap-1 mt-1">
@@ -482,9 +560,124 @@ export const CustomerComplaintsPage: React.FC<CustomerComplaintsPageProps> = ({
                             <CheckCircle2 className="size-3.5" /> BAST Selesai
                           </span>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => (editingId === t.id ? setEditingId(null) : startEditTicket(t))}
+                          className="p-1.5 rounded-lg bg-sandstone hover:bg-warmborder text-espresso cursor-pointer"
+                          title="Edit Tiket"
+                        >
+                          <Edit3 className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTicket(t)}
+                          className="p-1.5 rounded-lg bg-sandstone hover:bg-rose-100 text-warmmuted hover:text-rose-700 cursor-pointer"
+                          title="Hapus Tiket"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
                       </div>
                     </td>
                   </tr>
+                  {editingId === t.id && (
+                    <tr className="bg-sandstone/40">
+                      <td colSpan={5} className="p-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                          <div>
+                            <label className="font-bold text-espresso block mb-1">Blok &amp; Unit</label>
+                            <input
+                              type="text"
+                              value={editUnitBlock}
+                              onChange={(e) => setEditUnitBlock(e.target.value)}
+                              className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-white text-espresso"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-bold text-espresso block mb-1">Nama Penghuni</label>
+                            <input
+                              type="text"
+                              value={editResidentName}
+                              onChange={(e) => setEditResidentName(e.target.value)}
+                              className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-white text-espresso"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-bold text-espresso block mb-1">WA Penghuni</label>
+                            <input
+                              type="text"
+                              value={editResidentPhone}
+                              onChange={(e) => setEditResidentPhone(e.target.value)}
+                              className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-white text-espresso"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-bold text-espresso block mb-1">Teknisi</label>
+                            <input
+                              type="text"
+                              value={editTechnician}
+                              onChange={(e) => setEditTechnician(e.target.value)}
+                              placeholder="Nama teknisi..."
+                              className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-white text-espresso"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-bold text-espresso block mb-1">Kategori</label>
+                            <select
+                              value={editCategory}
+                              onChange={(e) => setEditCategory(e.target.value as ComplaintTicket['category'])}
+                              className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-white text-espresso font-bold"
+                            >
+                              <option value="KEBOCORAN_ATAP">Kebocoran Genteng / Plafon</option>
+                              <option value="RETAK_DINDING">Retak Rambut Dinding</option>
+                              <option value="KELISTRIKAN">Kelistrikan / Saklar / MCB</option>
+                              <option value="PIPA_AIR">Pipa Air / Sanitair / Kran</option>
+                              <option value="PINTU_JENDELA">Pintu / Jendela Aluminium</option>
+                              <option value="KERAMIK">Keramik Kopong / Nat Terkelupas</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="font-bold text-espresso block mb-1">Status</label>
+                            <select
+                              value={editStatus}
+                              onChange={(e) => setEditStatus(e.target.value as ComplaintTicket['status'])}
+                              className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-white text-espresso font-bold"
+                            >
+                              <option value="TIKET_BARU">Tiket Baru</option>
+                              <option value="SURVEI_TEKNISI">Survei Teknisi</option>
+                              <option value="DALAM_PERBAIKAN">Dalam Perbaikan</option>
+                              <option value="SELESAI_BAST">Selesai &amp; BAST</option>
+                            </select>
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="font-bold text-espresso block mb-1">Deskripsi Keluhan</label>
+                            <input
+                              type="text"
+                              value={editDescription}
+                              onChange={(e) => setEditDescription(e.target.value)}
+                              className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-white text-espresso"
+                            />
+                          </div>
+                          <div className="sm:col-span-2 lg:col-span-4 flex justify-end gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setEditingId(null)}
+                              className="h-8 px-3 rounded-lg border border-warmborder bg-white text-espresso font-bold cursor-pointer"
+                            >
+                              Batal
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveEditTicket(t.id)}
+                              className="h-8 px-4 rounded-lg bg-olive text-white font-bold cursor-pointer"
+                            >
+                              Simpan Perubahan
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 ))
               )}
             </tbody>

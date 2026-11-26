@@ -1320,6 +1320,14 @@ export default function App() {
               <History className="size-4 shrink-0 text-espresso" />
               <span>Riwayat Aktivitas Tim</span>
             </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => setIsUserMgmtModalOpen(true))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
+            >
+              <Users className="size-4 shrink-0 text-terracotta" />
+              <span>Kelola User (6 Role)</span>
+            </button>
           </div>
         )}
 

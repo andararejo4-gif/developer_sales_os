@@ -1518,65 +1518,40 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/company/audit-logs' && req.method === 'GET') {
       const entity = parsedUrl.searchParams.get('entity');
       const action = parsedUrl.searchParams.get('action');
-      const limit = Math.min(Number(parsedUrl.searchParams.get('limit') || 50), 200);
+      const actorRole = parsedUrl.searchParams.get('actorRole');
+      const actorEmail = parsedUrl.searchParams.get('actorEmail');
+      const limit = Math.min(Number(parsedUrl.searchParams.get('limit') || 100), 200);
       const isSuperadminAll = user.role === 'SUPERADMIN_IT' && !req.headers['x-tenant-id'];
 
-      const logs = isSuperadminAll
-        ? (entity && action
-            ? await sql`
-                SELECT * FROM sales_os.activity_audit_logs
-                WHERE target_entity = ${entity} AND action = ${action}
-                ORDER BY created_at DESC
-                LIMIT ${limit}
-              `
-            : entity
-            ? await sql`
-                SELECT * FROM sales_os.activity_audit_logs
-                WHERE target_entity = ${entity}
-                ORDER BY created_at DESC
-                LIMIT ${limit}
-              `
-            : action
-            ? await sql`
-                SELECT * FROM sales_os.activity_audit_logs
-                WHERE action = ${action}
-                ORDER BY created_at DESC
-                LIMIT ${limit}
-              `
-            : await sql`
-                SELECT * FROM sales_os.activity_audit_logs
-                ORDER BY created_at DESC
-                LIMIT ${limit}
-              `)
-        : (entity && action
-            ? await sql`
-                SELECT * FROM sales_os.activity_audit_logs
-                WHERE tenant_id = ${user.tenantId} AND target_entity = ${entity} AND action = ${action}
-                ORDER BY created_at DESC
-                LIMIT ${limit}
-              `
-            : entity
-            ? await sql`
-                SELECT * FROM sales_os.activity_audit_logs
-                WHERE tenant_id = ${user.tenantId} AND target_entity = ${entity}
-                ORDER BY created_at DESC
-                LIMIT ${limit}
-              `
-            : action
-            ? await sql`
-                SELECT * FROM sales_os.activity_audit_logs
-                WHERE tenant_id = ${user.tenantId} AND action = ${action}
-                ORDER BY created_at DESC
-                LIMIT ${limit}
-              `
-            : await sql`
-                SELECT * FROM sales_os.activity_audit_logs
-                WHERE tenant_id = ${user.tenantId}
-                ORDER BY created_at DESC
-                LIMIT ${limit}
-              `);
+      const logs = await sql`
+        SELECT
+          a.*,
+          COALESCE(u.name, a.actor_name) AS resolved_actor_name,
+          COALESCE(u.role, a.actor_role) AS resolved_actor_role,
+          u.project_id AS actor_project_id
+        FROM sales_os.activity_audit_logs a
+        LEFT JOIN sales_os.app_users u
+          ON LOWER(u.email) = LOWER(a.actor_email)
+         AND u.tenant_id = a.tenant_id
+        WHERE 1=1
+          ${isSuperadminAll ? sql`` : sql`AND a.tenant_id = ${user.tenantId}`}
+          ${entity ? sql`AND a.target_entity = ${entity}` : sql``}
+          ${action ? sql`AND a.action = ${action}` : sql``}
+          ${actorRole ? sql`AND UPPER(COALESCE(u.role, a.actor_role)) = ${actorRole.toUpperCase()}` : sql``}
+          ${actorEmail ? sql`AND LOWER(a.actor_email) = ${actorEmail.toLowerCase()}` : sql``}
+        ORDER BY a.created_at DESC
+        LIMIT ${limit}
+      `;
 
-      sendJson(res, 200, { ok: true, data: logs });
+      const teamMembers = await sql`
+        SELECT id, name, email, role, project_id, is_active
+        FROM sales_os.app_users
+        WHERE tenant_id = ${user.tenantId}
+          AND role NOT IN ('SUPERADMIN', 'SUPERADMIN_IT')
+        ORDER BY role ASC, name ASC
+      `;
+
+      sendJson(res, 200, { ok: true, data: logs, teamMembers });
       return;
     }
 
@@ -4106,20 +4081,45 @@ const server = http.createServer(async (req, res) => {
       }
       const banks = Array.isArray(body.accessGrantedBanks) ? body.accessGrantedBanks : null;
       const reviewNotes = body.reviewNotes !== undefined ? String(body.reviewNotes) : null;
+      const docType = body.docType ? String(body.docType).trim().toUpperCase() : null;
+      const fileName = body.fileName ? String(body.fileName).trim() : null;
+      const fileSize = body.fileSize ? String(body.fileSize).trim() : null;
+      const unitInterest = body.unitInterest !== undefined ? String(body.unitInterest).trim() : null;
+      const leadName = body.leadName ? String(body.leadName).trim() : null;
+      const isWideRole = ['SM', 'ADMIN', 'TL', 'DIREKSI', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role);
 
-      const updated = await sql`
-        UPDATE sales_os.vault_documents
-        SET
-          status = COALESCE(${nextStatus}, status),
-          reviewed_by = CASE WHEN ${nextStatus} IS NOT NULL THEN ${user.name} ELSE reviewed_by END,
-          review_notes = COALESCE(${reviewNotes}, review_notes),
-          access_granted_banks = COALESCE(${banks ? JSON.stringify(banks) : null}::jsonb, access_granted_banks),
-          updated_at = NOW()
-        WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId}
-        RETURNING *
-      `;
+      const updated = isWideRole
+        ? await sql`
+            UPDATE sales_os.vault_documents
+            SET
+              status = COALESCE(${nextStatus}, status),
+              reviewed_by = CASE WHEN ${nextStatus} IS NOT NULL THEN ${user.name} ELSE reviewed_by END,
+              review_notes = COALESCE(${reviewNotes}, review_notes),
+              access_granted_banks = COALESCE(${banks ? JSON.stringify(banks) : null}::jsonb, access_granted_banks),
+              doc_type = COALESCE(${docType}, doc_type),
+              file_name = COALESCE(${fileName}, file_name),
+              file_size = COALESCE(${fileSize}, file_size),
+              unit_interest = COALESCE(${unitInterest}, unit_interest),
+              lead_name = COALESCE(${leadName}, lead_name),
+              updated_at = NOW()
+            WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId}
+            RETURNING *
+          `
+        : await sql`
+            UPDATE sales_os.vault_documents
+            SET
+              access_granted_banks = COALESCE(${banks ? JSON.stringify(banks) : null}::jsonb, access_granted_banks),
+              doc_type = COALESCE(${docType}, doc_type),
+              file_name = COALESCE(${fileName}, file_name),
+              file_size = COALESCE(${fileSize}, file_size),
+              unit_interest = COALESCE(${unitInterest}, unit_interest),
+              lead_name = COALESCE(${leadName}, lead_name),
+              updated_at = NOW()
+            WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId} AND owner_se_email = ${user.email}
+            RETURNING *
+          `;
       if (updated.length === 0) {
-        sendJson(res, 404, { ok: false, error: 'Dokumen tidak ditemukan.' });
+        sendJson(res, 404, { ok: false, error: 'Dokumen tidak ditemukan atau tidak memiliki akses ubah.' });
         return;
       }
       sendJson(res, 200, { ok: true, document: updated[0] });
@@ -4135,7 +4135,19 @@ const server = http.createServer(async (req, res) => {
       const isWideRole = ['SM', 'ADMIN', 'DIREKSI', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role);
       const deleted = isWideRole
         ? await sql`DELETE FROM sales_os.vault_documents WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId} RETURNING id`
-        : await sql`DELETE FROM sales_os.vault_documents WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId} AND owner_se_email = ${user.email} RETURNING id`;
+        : await sql`
+            DELETE FROM sales_os.vault_documents d
+            WHERE d.id = ${id}::uuid
+              AND d.tenant_id = ${user.tenantId}
+              AND (
+                d.owner_se_email = ${user.email}
+                OR EXISTS (
+                  SELECT 1 FROM sales_os.pipeline_leads l
+                  WHERE l.id = d.lead_id AND l.owner_se_email = ${user.email}
+                )
+              )
+            RETURNING d.id
+          `;
       if (deleted.length === 0) {
         sendJson(res, 404, { ok: false, error: 'Dokumen tidak ditemukan atau tidak memiliki akses hapus.' });
         return;
@@ -4292,25 +4304,70 @@ const server = http.createServer(async (req, res) => {
       const plafondAmount = body.plafondAmount !== undefined ? Number(body.plafondAmount) : null;
       const statusNotes = body.statusNotes !== undefined ? String(body.statusNotes) : null;
       const assignedAnalyst = body.assignedAnalyst !== undefined ? String(body.assignedAnalyst) : null;
+      const applicantName = body.applicantName ? String(body.applicantName).trim() : null;
+      const applicantPhone = body.applicantPhone !== undefined ? String(body.applicantPhone).trim() : null;
+      const unitCode = body.unitCode ? String(body.unitCode).trim() : null;
+      const cluster = body.cluster ? String(body.cluster).trim() : null;
+      const isWideRole = ['TL', 'SM', 'DIREKSI', 'ADMIN', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role);
 
-      const updated = await sql`
-        UPDATE sales_os.bank_applications
-        SET
-          status = COALESCE(${nextStatus}, status),
-          target_bank = COALESCE(${targetBank}, target_bank),
-          plafond_amount = COALESCE(${plafondAmount}, plafond_amount),
-          status_notes = COALESCE(${statusNotes}, status_notes),
-          assigned_analyst = COALESCE(${assignedAnalyst}, assigned_analyst),
-          sp3k_expiry_date = CASE WHEN ${nextStatus} = 'SP3K_TERBIT' AND sp3k_expiry_date IS NULL THEN (CURRENT_DATE + INTERVAL '30 days')::date ELSE sp3k_expiry_date END,
-          updated_at = NOW()
-        WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId}
-        RETURNING *
-      `;
+      const updated = isWideRole
+        ? await sql`
+            UPDATE sales_os.bank_applications
+            SET
+              status = COALESCE(${nextStatus}, status),
+              target_bank = COALESCE(${targetBank}, target_bank),
+              plafond_amount = COALESCE(${plafondAmount}, plafond_amount),
+              status_notes = COALESCE(${statusNotes}, status_notes),
+              assigned_analyst = COALESCE(${assignedAnalyst}, assigned_analyst),
+              applicant_name = COALESCE(${applicantName}, applicant_name),
+              applicant_phone = COALESCE(${applicantPhone}, applicant_phone),
+              unit_code = COALESCE(${unitCode}, unit_code),
+              cluster = COALESCE(${cluster}, cluster),
+              sp3k_expiry_date = CASE WHEN ${nextStatus} = 'SP3K_TERBIT' AND sp3k_expiry_date IS NULL THEN (CURRENT_DATE + INTERVAL '30 days')::date ELSE sp3k_expiry_date END,
+              updated_at = NOW()
+            WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId}
+            RETURNING *
+          `
+        : await sql`
+            UPDATE sales_os.bank_applications
+            SET
+              status = COALESCE(${nextStatus}, status),
+              target_bank = COALESCE(${targetBank}, target_bank),
+              plafond_amount = COALESCE(${plafondAmount}, plafond_amount),
+              status_notes = COALESCE(${statusNotes}, status_notes),
+              assigned_analyst = COALESCE(${assignedAnalyst}, assigned_analyst),
+              applicant_name = COALESCE(${applicantName}, applicant_name),
+              applicant_phone = COALESCE(${applicantPhone}, applicant_phone),
+              unit_code = COALESCE(${unitCode}, unit_code),
+              cluster = COALESCE(${cluster}, cluster),
+              sp3k_expiry_date = CASE WHEN ${nextStatus} = 'SP3K_TERBIT' AND sp3k_expiry_date IS NULL THEN (CURRENT_DATE + INTERVAL '30 days')::date ELSE sp3k_expiry_date END,
+              updated_at = NOW()
+            WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId} AND owner_se_email = ${user.email}
+            RETURNING *
+          `;
       if (updated.length === 0) {
-        sendJson(res, 404, { ok: false, error: 'Pengajuan KPR tidak ditemukan.' });
+        sendJson(res, 404, { ok: false, error: 'Pengajuan KPR tidak ditemukan atau tidak memiliki akses ubah.' });
         return;
       }
       sendJson(res, 200, { ok: true, application: updated[0] });
+      return;
+    }
+
+    if (pathname === '/api/kpr/applications' && req.method === 'DELETE') {
+      const id = String(parsedUrl.searchParams.get('id') || '').trim();
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'ID pengajuan KPR wajib diisi.' });
+        return;
+      }
+      const isWideRole = ['TL', 'SM', 'DIREKSI', 'ADMIN', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role);
+      const deleted = isWideRole
+        ? await sql`DELETE FROM sales_os.bank_applications WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId} RETURNING id`
+        : await sql`DELETE FROM sales_os.bank_applications WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId} AND owner_se_email = ${user.email} RETURNING id`;
+      if (deleted.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Pengajuan KPR tidak ditemukan atau tidak memiliki akses hapus.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, id });
       return;
     }
 
@@ -4608,11 +4665,27 @@ const server = http.createServer(async (req, res) => {
       }
       const nextStatus = body.status ? String(body.status) : null;
       const nextRewardStatus = body.rewardStatus ? String(body.rewardStatus) : null;
+      const advocateName = body.advocateName ? String(body.advocateName).trim() : null;
+      const advocatePhone = body.advocatePhone !== undefined ? String(body.advocatePhone).trim() : null;
+      const advocateType = body.advocateType ? String(body.advocateType).trim() : null;
+      const referredFriendName = body.referredFriendName ? String(body.referredFriendName).trim() : null;
+      const referredFriendPhone = body.referredFriendPhone !== undefined ? String(body.referredFriendPhone).trim() : null;
+      const unitInterest = body.unitInterest !== undefined ? String(body.unitInterest).trim() : null;
+      const rewardAmount = body.rewardAmount !== undefined ? Number(body.rewardAmount) : null;
+      const partnerRole = body.partnerRole ? String(body.partnerRole).trim() : null;
       const updated = await sql`
         UPDATE sales_os.referral_leads
         SET
           status = COALESCE(${nextStatus}, status),
           reward_status = COALESCE(${nextRewardStatus}, reward_status),
+          advocate_name = COALESCE(${advocateName}, advocate_name),
+          advocate_phone = COALESCE(${advocatePhone}, advocate_phone),
+          advocate_type = COALESCE(${advocateType}, advocate_type),
+          referred_friend_name = COALESCE(${referredFriendName}, referred_friend_name),
+          referred_friend_phone = COALESCE(${referredFriendPhone}, referred_friend_phone),
+          unit_interest = COALESCE(${unitInterest}, unit_interest),
+          reward_amount = COALESCE(${rewardAmount}, reward_amount),
+          partner_role = COALESCE(${partnerRole}, partner_role),
           updated_at = NOW()
         WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId}
         RETURNING *
@@ -4622,6 +4695,25 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       sendJson(res, 200, { ok: true, referral: updated[0] });
+      return;
+    }
+
+    if (pathname === '/api/referrals' && req.method === 'DELETE') {
+      const id = String(parsedUrl.searchParams.get('id') || '').trim();
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'ID referral wajib diisi.' });
+        return;
+      }
+      const deleted = await sql`
+        DELETE FROM sales_os.referral_leads
+        WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId}
+        RETURNING id
+      `;
+      if (deleted.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Referral tidak ditemukan.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, id });
       return;
     }
 
@@ -4701,11 +4793,25 @@ const server = http.createServer(async (req, res) => {
       }
       const nextStatus = body.status ? String(body.status) : null;
       const tech = body.technicianAssigned !== undefined ? String(body.technicianAssigned) : null;
+      const unitBlock = body.unitBlock ? String(body.unitBlock).trim() : null;
+      const residentName = body.residentName ? String(body.residentName).trim() : null;
+      const residentPhone = body.residentPhone !== undefined ? String(body.residentPhone).trim() : null;
+      const category = body.category ? String(body.category).trim() : null;
+      const description = body.description ? String(body.description).trim() : null;
+      const dlpExpiryDate = body.dlpExpiryDate ? String(body.dlpExpiryDate).trim() : null;
+      const slaTargetHours = body.slaTargetHours !== undefined ? Number(body.slaTargetHours) : null;
       const updated = await sql`
         UPDATE sales_os.complaint_tickets
         SET
           status = COALESCE(${nextStatus}, status),
           technician_assigned = COALESCE(${tech}, technician_assigned),
+          unit_block = COALESCE(${unitBlock}, unit_block),
+          resident_name = COALESCE(${residentName}, resident_name),
+          resident_phone = COALESCE(${residentPhone}, resident_phone),
+          category = COALESCE(${category}, category),
+          description = COALESCE(${description}, description),
+          dlp_expiry_date = COALESCE(${dlpExpiryDate}, dlp_expiry_date),
+          sla_target_hours = COALESCE(${slaTargetHours}, sla_target_hours),
           updated_at = NOW()
         WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId}
         RETURNING *
@@ -4715,6 +4821,25 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       sendJson(res, 200, { ok: true, ticket: updated[0] });
+      return;
+    }
+
+    if (pathname === '/api/complaints' && req.method === 'DELETE') {
+      const id = String(parsedUrl.searchParams.get('id') || '').trim();
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'ID tiket wajib diisi.' });
+        return;
+      }
+      const deleted = await sql`
+        DELETE FROM sales_os.complaint_tickets
+        WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId}
+        RETURNING id
+      `;
+      if (deleted.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Tiket tidak ditemukan.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, id });
       return;
     }
 
