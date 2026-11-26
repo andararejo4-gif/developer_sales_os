@@ -35,6 +35,8 @@ import {
   type AuthSession,
 } from '../../lib/auth/dummy-accounts';
 import { saveSelectedProjectId } from '../../lib/projects/projects-data';
+import { PermissionMatrixPanel } from './PermissionMatrixPanel';
+import { ItKnowledgeAiPanel } from '../it/ItKnowledgeAiPanel';
 
 interface UserAccountItem {
   id: string;
@@ -252,12 +254,31 @@ const INITIAL_HIERARCHY_DATA: DeveloperHierarchyItem[] = [
   },
 ];
 
+export type ItAdminSection = 'dashboard' | 'permissions' | 'knowledge' | 'hierarchy';
+
 interface ItCommandCenterDashboardProps {
+  activeSection?: ItAdminSection;
+  onChangeSection?: (section: ItAdminSection) => void;
+  realSummary?: {
+    counts?: {
+      totalUnits?: number;
+      availableUnits?: number;
+      bookingUnits?: number;
+      soldUnits?: number;
+      totalLeads?: number;
+      kprApplications?: number;
+      vaultPending?: number;
+    };
+    auditLogs?: Array<{ id?: string; actor_name?: string; summary?: string; created_at?: string }>;
+  } | null;
   onOpenSuperadminModal: () => void;
   onImpersonateUser?: (user: UserAccountItem, projectId?: string) => void;
 }
 
 export function ItCommandCenterDashboard({
+  activeSection = 'dashboard',
+  onChangeSection,
+  realSummary,
   onOpenSuperadminModal,
   onImpersonateUser,
 }: ItCommandCenterDashboardProps) {
@@ -519,86 +540,164 @@ export function ItCommandCenterDashboard({
         </div>
       )}
 
-      {/* IT Command Center Header */}
-      <div className="p-6 sm:p-8 rounded-2xl bg-espresso text-white border border-stone-800 shadow-sm relative overflow-hidden">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium tracking-wide bg-stone-800 text-stone-200 border border-stone-700">
-                Pusat Kendali IT &amp; Bantuan Teknis
-              </span>
-              <span className="text-xs text-stone-300">Akses &amp; Bantuan Teknis Menyeluruh</span>
+      {/* DASHBOARD OVERVIEW (RINGKASAN SISTEM & PINTASAN MODUL IT) */}
+      {activeSection === 'dashboard' && (
+        <>
+          <div className="p-6 sm:p-8 rounded-2xl bg-espresso text-white border border-stone-800 shadow-sm relative overflow-hidden">
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-md text-[11px] font-medium tracking-wide bg-stone-800 text-stone-200 border border-stone-700">
+                    Pusat Kendali IT &amp; Bantuan Teknis
+                  </span>
+                  <span className="text-xs text-stone-300">Ringkasan Infrastruktur &amp; Operasional</span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-bold tracking-tight mt-2.5 text-white">
+                  Dashboard Admin Panel IT
+                </h2>
+                <p className="text-xs sm:text-sm text-stone-300 mt-1.5 max-w-2xl leading-relaxed">
+                  Pantau kesehatan database, layanan AI/WhatsApp, serta kelola izin fitur pengguna, Knowledge AI terpusat, dan hierarki tenant dari menu khusus di sidebar.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={onOpenSuperadminModal}
+                  className="px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white font-semibold text-xs shadow-sm transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <ShieldAlert className="size-4 text-white" />
+                  <span>Buka Superadmin Panel</span>
+                </button>
+              </div>
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight mt-2.5 text-white">
-              Pusat Kendali Sistem IT &amp; Bantuan Teknis Developer
-            </h2>
-            <p className="text-xs sm:text-sm text-stone-300 mt-1.5 max-w-2xl leading-relaxed">
-              Memiliki otoritas penuh untuk menginspeksi, meng-CRUD seluruh hierarki dari developer hingga tim sales (SE), serta login instan (impersonate) untuk membantu developer yang membutuhkan pertolongan teknis.
-            </p>
+
+            {/* System Health Indicators */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mt-6 pt-6 border-t border-white/10">
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
+                  Skema PostgreSQL sales_os
+                </span>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="size-2 rounded-full bg-emerald-400" />
+                  <strong className="text-sm sm:text-base font-semibold text-white">Migrasi Aktif</strong>
+                </div>
+                <span className="text-[11px] text-white/60 mt-1 block">
+                  {realSummary?.counts?.totalUnits ?? 0} Unit &middot; {realSummary?.counts?.totalLeads ?? 0} Lead
+                </span>
+              </div>
+
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
+                  Dispatcher LLM &amp; OCR
+                </span>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="size-2 rounded-full bg-emerald-400" />
+                  <strong className="text-sm sm:text-base font-semibold text-white">AI + RapidOCR Lokal</strong>
+                </div>
+                <span className="text-[11px] text-white/60 mt-1 block">Knowledge Terpusat Siap</span>
+              </div>
+
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
+                  Antrean Vault &amp; KPR
+                </span>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="size-2 rounded-full bg-amber-400" />
+                  <strong className="text-sm sm:text-base font-semibold text-white">
+                    {realSummary?.counts?.vaultPending ?? 0} Pending
+                  </strong>
+                </div>
+                <span className="text-[11px] text-white/60 mt-1 block">
+                  {realSummary?.counts?.kprApplications ?? 0} Pengajuan KPR Aktif
+                </span>
+              </div>
+
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
+                  Jejak Audit Sistem
+                </span>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="size-2 rounded-full bg-emerald-400" />
+                  <strong className="text-sm sm:text-base font-semibold text-white">
+                    {realSummary?.auditLogs?.length ?? 0} Log Terbaru
+                  </strong>
+                </div>
+                <span className="text-[11px] text-white/60 mt-1 block">Monitoring Real-Time</span>
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          {/* Quick Module Navigation Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <button
               type="button"
-              onClick={onOpenSuperadminModal}
-              className="px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white font-semibold text-xs shadow-sm transition-colors flex items-center gap-2 cursor-pointer"
+              onClick={() => onChangeSection?.('permissions')}
+              className="text-left p-5 rounded-2xl bg-white border border-warmborder hover:border-terracotta/50 hover:shadow-md transition-all cursor-pointer group space-y-2"
             >
-              <ShieldAlert className="size-4 text-white" />
-              <span>Buka Superadmin Panel</span>
+              <div className="flex items-center justify-between">
+                <div className="size-10 rounded-xl bg-terracotta/10 text-terracotta grid place-items-center">
+                  <KeyRound className="size-5" />
+                </div>
+                <ChevronRight className="size-4 text-warmmuted group-hover:text-terracotta transition-colors" />
+              </div>
+              <h3 className="text-sm font-extrabold text-espresso">Permission Fitur</h3>
+              <p className="text-xs text-warmmuted leading-relaxed">
+                Filter 6 role utama, pilih pengguna dari tabel, dan atur hak akses CRUD per fitur secara granular.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onChangeSection?.('knowledge')}
+              className="text-left p-5 rounded-2xl bg-white border border-warmborder hover:border-terracotta/50 hover:shadow-md transition-all cursor-pointer group space-y-2"
+            >
+              <div className="flex items-center justify-between">
+                <div className="size-10 rounded-xl bg-amber-50 text-amber-700 grid place-items-center">
+                  <Layers className="size-5" />
+                </div>
+                <ChevronRight className="size-4 text-warmmuted group-hover:text-terracotta transition-colors" />
+              </div>
+              <h3 className="text-sm font-extrabold text-espresso">Knowledge AI Terpusat</h3>
+              <p className="text-xs text-warmmuted leading-relaxed">
+                Unggah brosur PDF/gambar OCR lokal dan kelola 1 sumber kebenaran materi training AI.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onChangeSection?.('hierarchy')}
+              className="text-left p-5 rounded-2xl bg-white border border-warmborder hover:border-terracotta/50 hover:shadow-md transition-all cursor-pointer group space-y-2"
+            >
+              <div className="flex items-center justify-between">
+                <div className="size-10 rounded-xl bg-emerald-50 text-emerald-700 grid place-items-center">
+                  <Database className="size-5" />
+                </div>
+                <ChevronRight className="size-4 text-warmmuted group-hover:text-terracotta transition-colors" />
+              </div>
+              <h3 className="text-sm font-extrabold text-espresso">Hierarki Tenant &amp; Support</h3>
+              <p className="text-xs text-warmmuted leading-relaxed">
+                Inspeksi developer, proyek, tim sales, CRUD akun, dan mode bantuan teknis (impersonate).
+              </p>
             </button>
           </div>
-        </div>
+        </>
+      )}
 
-        {/* System Health Indicators */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mt-6 pt-6 border-t border-white/10">
-          <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-            <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
-              Skema PostgreSQL devos
-            </span>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="size-2 rounded-full bg-emerald-400" />
-              <strong className="text-sm sm:text-base font-semibold text-white">6/6 Migrasi Aktif</strong>
-            </div>
-            <span className="text-[11px] text-white/60 mt-1 block">Latensi 4ms &middot; 0 Permintaan Lambat</span>
-          </div>
+      {/* HALAMAN KHUSUS: PERMISSION FITUR */}
+      {activeSection === 'permissions' && <PermissionMatrixPanel />}
 
-          <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-            <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
-              Dispatcher LLM &amp; Token
-            </span>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="size-2 rounded-full bg-emerald-400" />
-              <strong className="text-sm sm:text-base font-semibold text-white">Gemini 2.5 Flash + GPT-4o</strong>
-            </div>
-            <span className="text-[11px] text-white/60 mt-1 block">Kuota 98.4% Tersedia</span>
-          </div>
+      {/* HALAMAN KHUSUS: KNOWLEDGE AI TERPUSAT */}
+      {activeSection === 'knowledge' && (
+        <ItKnowledgeAiPanel
+          projectId="the-park-sukoharjo"
+          projectName="The Park Townhouse Sukoharjo"
+        />
+      )}
 
-          <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-            <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
-              Antrean WhatsApp Dispatcher
-            </span>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="size-2 rounded-full bg-emerald-400" />
-              <strong className="text-sm sm:text-base font-semibold text-white">Cloud API Siap</strong>
-            </div>
-            <span className="text-[11px] text-white/60 mt-1 block">Worker SLA &lt; 2s</span>
-          </div>
-
-          <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-            <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
-              Master POI Regional
-            </span>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="size-2 rounded-full bg-amber-400" />
-              <strong className="text-sm sm:text-base font-semibold text-white">63 Titik Terkurasi</strong>
-            </div>
-            <span className="text-[11px] text-white/60 mt-1 block">25 Titik Unggulan</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Hierarchical Tenant Inspector & CRUD Center */}
-      <div className="bg-white rounded-3xl border border-warmborder p-6 shadow-sm space-y-5">
+      {/* HALAMAN KHUSUS: HIERARKI TENANT & SUPPORT */}
+      {activeSection === 'hierarchy' && (
+        <div className="bg-white rounded-3xl border border-warmborder p-6 shadow-sm space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-warmborder">
           <div>
             <h3 className="text-base font-black text-espresso flex items-center gap-2">
@@ -887,6 +986,7 @@ export function ItCommandCenterDashboard({
           })}
         </div>
       </div>
+      )}
 
       {/* MODAL OVERRIDE PAKET DEVELOPER (KHUSUS IT INTERNAL) */}
       {overrideModalDev && (

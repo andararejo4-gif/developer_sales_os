@@ -20,11 +20,20 @@ import { PlaybookViewer } from './components/PlaybookViewer';
 import { DailyRouteViewer } from './components/DailyRouteViewer';
 import { ProjectWebsitePreview } from './components/ProjectWebsitePreview';
 import { PublicProjectSitePage } from './components/PublicProjectSitePage';
+import { ProfilePage } from './components/ProfilePage';
+import {
+  RoleNotificationBell,
+  buildRoleGreetingAndNotifications,
+  type RoleNotifAction,
+} from './components/RoleNotificationCenter';
 import { CrmPipelineView } from './components/CrmPipelineView';
 import { CommissionSettingsModal } from './components/CommissionSettingsModal';
 import { SuperadminPanel } from './components/SuperadminPanel';
 import { PlatformExecutiveDashboard } from './components/superadmin/PlatformExecutiveDashboard';
-import { ItCommandCenterDashboard } from './components/superadmin/ItCommandCenterDashboard';
+import {
+  ItCommandCenterDashboard,
+  type ItAdminSection,
+} from './components/superadmin/ItCommandCenterDashboard';
 import { FieldOpsModal } from './components/FieldOpsModal';
 import { PipelinePage } from './components/PipelinePage';
 import { CompanyBankAccountsModal } from './components/company/CompanyBankAccountsModal';
@@ -52,8 +61,8 @@ import {
   exportDailyReportPdf,
 } from './lib/exporters/daily-report-exporter';
 import {
-  clearAuthSession,
   loadAuthSession,
+  logoutFromServer,
   saveAuthSession,
   saveImpersonatorBackup,
   loadImpersonatorBackup,
@@ -91,7 +100,6 @@ import {
   Database,
   Edit3,
   FileCheck,
-  FileText,
   Globe,
   HeartHandshake,
   History,
@@ -123,6 +131,8 @@ import { SecureDocumentVaultPage } from './components/SecureDocumentVaultPage';
 import { ReferralProgramPage } from './components/ReferralProgramPage';
 import { CustomerComplaintsPage } from './components/CustomerComplaintsPage';
 import { BankSubmissionWorkflowPage } from './components/BankSubmissionWorkflowPage';
+import { OrgUserManagementModal } from './components/OrgUserManagementModal';
+import { ItKnowledgeAiPanel } from './components/it/ItKnowledgeAiPanel';
 import { ExecutiveControlTowerPage } from './components/ExecutiveControlTowerPage';
 import {
   AD_CAMPAIGNS,
@@ -397,6 +407,15 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [isMobileMoreOpen, setIsMobileMoreOpen] = useState<boolean>(false);
   const [seRealData, setSeRealData] = useState<any | null>(null);
+  const [userPermissions, setUserPermissions] = useState<
+    Record<string, { create: boolean; read: boolean; update: boolean; delete: boolean }>
+  >({});
+  const [realSummary, setRealSummary] = useState<any | null>(null);
+
+  const canReadFeature = (featureKey: string) => {
+    const p = userPermissions[featureKey];
+    return p ? p.read !== false : true;
+  };
 
   const scrollToSectionElement = (sectionId: string) => {
     const attemptScroll = (triesLeft: number) => {
@@ -459,11 +478,56 @@ export default function App() {
     }
   };
 
+  const fetchRealPermissionsAndSummary = async () => {
+    try {
+      const token = authSession?.token || loadAuthSession()?.token;
+      const headers: HeadersInit = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        'X-User-Email': user.email,
+        'X-User-Role': role,
+      };
+      const [permRes, sumRes] = await Promise.all([
+        fetch('/api/permissions/me', { credentials: 'include', headers }),
+        fetch(`/api/dashboard/summary?projectId=${encodeURIComponent(activeProjectId)}`, {
+          credentials: 'include',
+          headers,
+        }),
+      ]);
+      if (permRes.ok) {
+        const pJson = await permRes.json();
+        if (pJson.ok && pJson.permissions) setUserPermissions(pJson.permissions);
+      }
+      if (sumRes.ok) {
+        const sJson = await sumRes.json();
+        if (sJson.ok) {
+          setRealSummary(sJson);
+          if (Array.isArray(sJson.escalations) && sJson.escalations.length > 0) {
+            setEscalations(
+              sJson.escalations.map((e: any) => ({
+                id: String(e.id),
+                jenis: String(e.jenis),
+                pembeli: String(e.pembeli),
+                unit: String(e.unit),
+                proyek: String(e.proyek),
+                nilai: String(e.nilai),
+                rekomendasiAi: String(e.rekomendasi_ai || ''),
+                status: String(e.status || 'Menunggu Review') as any,
+              }))
+            );
+          }
+        }
+      }
+    } catch {
+      /* abaikan error jaringan sementara */
+    }
+  };
+
   useEffect(() => {
     if (authSession) {
       fetchSeRealDashboard();
+      fetchRealPermissionsAndSummary();
     }
-  }, [authSession, user.email, role, activeView]);
+  }, [authSession, user.email, role, activeView, activeProjectId]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.hash) {
@@ -714,6 +778,7 @@ export default function App() {
 
   const [isExportReportModalOpen, setIsExportReportModalOpen] = useState(false);
   const [isBankAccountsModalOpen, setIsBankAccountsModalOpen] = useState(false);
+  const [isUserMgmtModalOpen, setIsUserMgmtModalOpen] = useState(false);
   const [isAuditLogsModalOpen, setIsAuditLogsModalOpen] = useState(false);
   const [isDireksiGlossaryOpen, setIsDireksiGlossaryOpen] = useState(false);
   const [pipelineTargetFilter, setPipelineTargetFilter] = useState<string | undefined>(undefined);
@@ -737,6 +802,18 @@ export default function App() {
   const handleOpenUrgentPipeline = () => {
     setPipelineTargetFilter('PERLU_DITANGANI');
     openView('pipeline');
+  };
+
+  const handleRoleNotifNavigate = (action: RoleNotifAction) => {
+    if (action.type === 'profile') {
+      openView('profile');
+      return;
+    }
+    if (action.type === 'view') {
+      openView(action.target as Parameters<typeof openView>[0]);
+      return;
+    }
+    openDashboardSection(action.target);
   };
 
   const handleSeNotifNavigate = (target: SeNotifTarget) => {
@@ -853,10 +930,24 @@ export default function App() {
     setEditingUnit(null);
   };
 
-  const handleEscalationDecision = (id: string, decision: 'Disetujui' | 'Ditolak') => {
+  const handleEscalationDecision = async (id: string, decision: 'Disetujui' | 'Ditolak') => {
     setEscalations((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status: decision } : item))
     );
+    try {
+      const token = authSession?.token || loadAuthSession()?.token;
+      await fetch('/api/escalations', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ id, status: decision }),
+      });
+    } catch {
+      /* fallback state lokal */
+    }
     setToast(`Pengajuan ${id} ${decision}`);
   };
 
@@ -942,7 +1033,7 @@ export default function App() {
       handleExitImpersonation();
       return;
     }
-    clearAuthSession();
+    void logoutFromServer();
     clearImpersonatorBackup();
     setAuthSession(null);
     setIsMobileMoreOpen(false);
@@ -1120,6 +1211,30 @@ export default function App() {
               <Users className="size-4 shrink-0" />
               <span>Pantau Kinerja 3 SE</span>
             </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('vault'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'vault'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Lock className="size-4 shrink-0" />
+              <span>Approve Dokumen Vault KPR</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('kpr_bank'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'kpr_bank'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Building2 className="size-4 shrink-0" />
+              <span>Monitoring KPR Bank</span>
+            </button>
           </>
         )}
 
@@ -1177,11 +1292,27 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => handleItemClick(() => openDashboardSection('dokumen-kpr'))}
-              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
+              onClick={() => handleItemClick(() => openView('vault'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'vault'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
             >
-              <FileText className="size-4 shrink-0" />
-              <span>Checklist KPR &amp; Multi-Bank</span>
+              <Lock className="size-4 shrink-0" />
+              <span>Verifikasi Dokumen Vault KPR</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('kpr_bank'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'kpr_bank'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <Building2 className="size-4 shrink-0" />
+              <span>Pengajuan KPR Multi-Bank</span>
             </button>
           </>
         )}
@@ -1211,6 +1342,14 @@ export default function App() {
             >
               <ShieldCheck className="size-4 shrink-0" />
               <span>Audit Trail Log 100%</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('knowledge-ai'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
+            >
+              <Sparkles className="size-4 shrink-0 text-terracotta" />
+              <span>Knowledge AI Terpusat (OCR)</span>
             </button>
           </>
         )}
@@ -1275,126 +1414,146 @@ export default function App() {
             <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-warmmuted mb-1.5">
               Alat Kerja Sales
             </p>
-            <button
-              type="button"
-              onClick={() => handleItemClick(() => openView('kalender'))}
-              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
-                activeView === 'kalender'
-                  ? 'bg-amber-50 text-terracotta font-bold'
-                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
-              }`}
-            >
-              <Calendar className="size-4 shrink-0" />
-              <span>Kalender Konten</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleItemClick(() => openView('playbook'))}
-              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
-                activeView === 'playbook'
-                  ? 'bg-amber-50 text-terracotta font-bold'
-                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
-              }`}
-            >
-              <BookOpen className="size-4 shrink-0" />
-              <span>Playbook</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleItemClick(() => openView('rute'))}
-              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
-                activeView === 'rute'
-                  ? 'bg-amber-50 text-terracotta font-bold'
-                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
-              }`}
-            >
-              <MapPin className="size-4 shrink-0" />
-              <span>Rute Harian Canvassing</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleItemClick(() => openView('lapangan'))}
-              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
-                activeView === 'lapangan'
-                  ? 'bg-amber-50 text-terracotta font-bold'
-                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
-              }`}
-            >
-              <PhoneCall className="size-4 shrink-0" />
-              <span>Absen, GPS, Call</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleItemClick(() => openView('kb'))}
-              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
-                activeView === 'kb'
-                  ? 'bg-amber-50 text-terracotta font-bold'
-                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
-              }`}
-            >
-              <Database className="size-4 shrink-0" />
-              <span>Knowledge Base Produk</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleItemClick(() => openView('surat_cinta'))}
-              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
-                activeView === 'surat_cinta'
-                  ? 'bg-amber-50 text-terracotta font-bold'
-                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
-              }`}
-            >
-              <HeartHandshake className="size-4 shrink-0" />
-              <span>Surat Cinta 99 Keunggulan</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleItemClick(() => openView('vault'))}
-              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
-                activeView === 'vault'
-                  ? 'bg-amber-50 text-terracotta font-bold'
-                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
-              }`}
-            >
-              <Lock className="size-4 shrink-0 text-olive" />
-              <span>Dokumen Vault KPR</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleItemClick(() => openView('referral'))}
-              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
-                activeView === 'referral'
-                  ? 'bg-amber-50 text-terracotta font-bold'
-                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
-              }`}
-            >
-              <Share2 className="size-4 shrink-0 text-terracotta" />
-              <span>Program Referral</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleItemClick(() => openView('garansi'))}
-              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
-                activeView === 'garansi'
-                  ? 'bg-amber-50 text-terracotta font-bold'
-                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
-              }`}
-            >
-              <Wrench className="size-4 shrink-0 text-warmmuted" />
-              <span>Keluhan &amp; Garansi DLP</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleItemClick(() => openView('kpr_bank'))}
-              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
-                activeView === 'kpr_bank'
-                  ? 'bg-amber-50 text-terracotta font-bold'
-                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
-              }`}
-            >
-              <Building2 className="size-4 shrink-0 text-olive" />
-              <span>Alur KPR Bank</span>
-            </button>
+            {canReadFeature('content_calendar') && (
+              <button
+                type="button"
+                onClick={() => handleItemClick(() => openView('kalender'))}
+                className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                  activeView === 'kalender'
+                    ? 'bg-amber-50 text-terracotta font-bold'
+                    : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+                }`}
+              >
+                <Calendar className="size-4 shrink-0" />
+                <span>Kalender Konten</span>
+              </button>
+            )}
+            {canReadFeature('playbook') && (
+              <button
+                type="button"
+                onClick={() => handleItemClick(() => openView('playbook'))}
+                className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                  activeView === 'playbook'
+                    ? 'bg-amber-50 text-terracotta font-bold'
+                    : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+                }`}
+              >
+                <BookOpen className="size-4 shrink-0" />
+                <span>Playbook</span>
+              </button>
+            )}
+            {canReadFeature('daily_route') && (
+              <button
+                type="button"
+                onClick={() => handleItemClick(() => openView('rute'))}
+                className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                  activeView === 'rute'
+                    ? 'bg-amber-50 text-terracotta font-bold'
+                    : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+                }`}
+              >
+                <MapPin className="size-4 shrink-0" />
+                <span>Rute Harian Canvassing</span>
+              </button>
+            )}
+            {canReadFeature('field_ops') && (
+              <button
+                type="button"
+                onClick={() => handleItemClick(() => openView('lapangan'))}
+                className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                  activeView === 'lapangan'
+                    ? 'bg-amber-50 text-terracotta font-bold'
+                    : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+                }`}
+              >
+                <PhoneCall className="size-4 shrink-0" />
+                <span>Absen, GPS, Call</span>
+              </button>
+            )}
+            {canReadFeature('kb') && (
+              <button
+                type="button"
+                onClick={() => handleItemClick(() => openView('kb'))}
+                className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                  activeView === 'kb'
+                    ? 'bg-amber-50 text-terracotta font-bold'
+                    : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+                }`}
+              >
+                <Database className="size-4 shrink-0" />
+                <span>Knowledge Base Produk</span>
+              </button>
+            )}
+            {canReadFeature('surat_cinta') && (
+              <button
+                type="button"
+                onClick={() => handleItemClick(() => openView('surat_cinta'))}
+                className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                  activeView === 'surat_cinta'
+                    ? 'bg-amber-50 text-terracotta font-bold'
+                    : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+                }`}
+              >
+                <HeartHandshake className="size-4 shrink-0" />
+                <span>Surat Cinta 99 Keunggulan</span>
+              </button>
+            )}
+            {canReadFeature('vault') && (
+              <button
+                type="button"
+                onClick={() => handleItemClick(() => openView('vault'))}
+                className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                  activeView === 'vault'
+                    ? 'bg-amber-50 text-terracotta font-bold'
+                    : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+                }`}
+              >
+                <Lock className="size-4 shrink-0 text-olive" />
+                <span>Dokumen Vault KPR</span>
+              </button>
+            )}
+            {canReadFeature('referral') && (
+              <button
+                type="button"
+                onClick={() => handleItemClick(() => openView('referral'))}
+                className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                  activeView === 'referral'
+                    ? 'bg-amber-50 text-terracotta font-bold'
+                    : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+                }`}
+              >
+                <Share2 className="size-4 shrink-0 text-terracotta" />
+                <span>Program Referral</span>
+              </button>
+            )}
+            {canReadFeature('garansi') && (
+              <button
+                type="button"
+                onClick={() => handleItemClick(() => openView('garansi'))}
+                className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                  activeView === 'garansi'
+                    ? 'bg-amber-50 text-terracotta font-bold'
+                    : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+                }`}
+              >
+                <Wrench className="size-4 shrink-0 text-warmmuted" />
+                <span>Keluhan &amp; Garansi DLP</span>
+              </button>
+            )}
+            {canReadFeature('kpr_bank') && (
+              <button
+                type="button"
+                onClick={() => handleItemClick(() => openView('kpr_bank'))}
+                className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                  activeView === 'kpr_bank'
+                    ? 'bg-amber-50 text-terracotta font-bold'
+                    : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+                }`}
+              >
+                <Building2 className="size-4 shrink-0 text-olive" />
+                <span>Alur KPR Bank</span>
+              </button>
+            )}
           </div>
         )}
 
@@ -1595,7 +1754,51 @@ export default function App() {
 
         {isPlatformSuperadmin && (
           <div className="pt-2 border-t border-warmborder space-y-1">
-            <span className="block px-3.5 py-1 text-[10px] font-black uppercase tracking-wider text-terracotta">
+            {role === 'SUPERADMIN_IT' && (
+              <>
+                <span className="block px-3.5 py-1 text-[10px] font-black uppercase tracking-wider text-warmmuted">
+                  Modul Admin Panel IT
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleItemClick(() => openDashboardSection('it-permissions'))}
+                  className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                    activeView === 'dashboard' && activeSection === 'it-permissions'
+                      ? 'bg-amber-50 text-terracotta font-bold'
+                      : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+                  }`}
+                >
+                  <ShieldCheck className="size-4 shrink-0" />
+                  <span>Permission Fitur</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleItemClick(() => openDashboardSection('it-knowledge'))}
+                  className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                    activeView === 'dashboard' &&
+                    (activeSection === 'it-knowledge' || activeSection === 'knowledge-ai')
+                      ? 'bg-amber-50 text-terracotta font-bold'
+                      : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+                  }`}
+                >
+                  <Sparkles className="size-4 shrink-0" />
+                  <span>Knowledge AI Terpusat</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleItemClick(() => openDashboardSection('it-hierarchy'))}
+                  className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                    activeView === 'dashboard' && activeSection === 'it-hierarchy'
+                      ? 'bg-amber-50 text-terracotta font-bold'
+                      : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+                  }`}
+                >
+                  <Database className="size-4 shrink-0" />
+                  <span>Hierarki Tenant &amp; Support</span>
+                </button>
+              </>
+            )}
+            <span className="block px-3.5 pt-2 pb-1 text-[10px] font-black uppercase tracking-wider text-terracotta">
               Platform Internal Developer Sales OS
             </span>
             <button
@@ -1759,15 +1962,20 @@ export default function App() {
         {/* User Badge Footer (Fixed shrink-0) */}
         <div className="shrink-0 p-4 border-t border-warmborder bg-white min-h-0">
           <div className="rounded-2xl bg-sandstone p-3 border border-warmborder">
-            <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => openView('profile')}
+              className="w-full text-left flex items-center gap-2.5 rounded-xl p-1 -m-1 hover:bg-white/70 transition-colors cursor-pointer"
+              title="Buka Pengaturan Profil & 2FA TOTP"
+            >
               <div className="size-8 rounded-lg bg-espresso text-white grid place-items-center text-xs font-bold shrink-0">
                 {user.avatarText}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-espresso truncate">{user.name}</p>
-                <p className="text-[10px] text-warmmuted truncate">{user.roleLabel}</p>
+                <p className="text-[10px] text-warmmuted truncate">{user.roleLabel} · Profil &amp; 2FA</p>
               </div>
-            </div>
+            </button>
             <div className="mt-2 pt-2 border-t border-warmborder flex items-center justify-between text-[10px] text-warmmuted">
               <span className="font-semibold text-terracotta">{user.role}</span>
               <span className="truncate max-w-[120px] font-semibold text-espresso">
@@ -1895,7 +2103,7 @@ export default function App() {
                 <span className="hidden sm:inline">Panel Multi-Tenant Core</span>
               </button>
             )}
-            {role === 'SE' && (
+            {role === 'SE' ? (
               <div className="shrink-0">
                 <SeNotificationBell
                   quickStatus={seRealData?.quickStatus}
@@ -1903,6 +2111,7 @@ export default function App() {
                     leadsTodayValidCount: seRealData?.metrics?.leadsTodayValidCount,
                     needsCompletionLeadsCount: seRealData?.metrics?.needsCompletionLeadsCount,
                     waConnectionStatus: seRealData?.metrics?.waConnectionStatus,
+                    totpEnabled: Boolean(authSession?.totpEnabled),
                   }}
                   externalOpen={isNotifPanelOpen}
                   onExternalOpenChange={setIsNotifPanelOpen}
@@ -1910,6 +2119,16 @@ export default function App() {
                   onH5ReminderTriggered={(item) => setActiveH5Reminder(item)}
                 />
               </div>
+            ) : (
+              <RoleNotificationBell
+                role={role}
+                summary={realSummary}
+                escalations={escalations}
+                totpEnabled={Boolean(authSession?.totpEnabled)}
+                externalOpen={isNotifPanelOpen}
+                onExternalOpenChange={setIsNotifPanelOpen}
+                onNavigateAction={handleRoleNotifNavigate}
+              />
             )}
             <div className="hidden lg:flex items-center gap-2 bg-sandstone px-3 py-1.5 rounded-xl border border-warmborder text-xs shrink-0">
               <span className="size-2 rounded-full bg-olive shrink-0"></span>
@@ -1935,25 +2154,47 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {role === 'SE' && (
+            {role === 'SE' ? (
               <SeNotificationBell
                 quickStatus={seRealData?.quickStatus}
                 extra={{
                   leadsTodayValidCount: seRealData?.metrics?.leadsTodayValidCount,
                   needsCompletionLeadsCount: seRealData?.metrics?.needsCompletionLeadsCount,
                   waConnectionStatus: seRealData?.metrics?.waConnectionStatus,
+                  totpEnabled: Boolean(authSession?.totpEnabled),
                 }}
                 onNavigateTarget={handleSeNotifNavigate}
               />
+            ) : (
+              <RoleNotificationBell
+                role={role}
+                summary={realSummary}
+                escalations={escalations}
+                totpEnabled={Boolean(authSession?.totpEnabled)}
+                externalOpen={isNotifPanelOpen}
+                onExternalOpenChange={setIsNotifPanelOpen}
+                onNavigateAction={handleRoleNotifNavigate}
+              />
             )}
-            <span className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-sandstone text-espresso border border-warmborder shrink-0">
+            <button
+              type="button"
+              onClick={() => openView('profile')}
+              className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-sandstone text-espresso border border-warmborder shrink-0 cursor-pointer"
+            >
               {user.name.split(' ')[0]}
-            </span>
+            </button>
           </div>
         </header>
 
         <div id="dashboard-main" className="max-w-6xl mx-auto px-4 pt-4 md:px-8 md:pt-8 space-y-6">
           {/* HALAMAN PENUH UNTUK SETIAP MODUL (Bukan Modal/Popup) */}
+          {activeView === 'profile' && (
+            <ProfilePage
+              onTotpStatusChanged={(enabled) =>
+                setAuthSession((prev) => (prev ? { ...prev, totpEnabled: enabled } : prev))
+              }
+            />
+          )}
           {activeView === 'pipeline' && (
             <PipelinePage
               user={user}
@@ -2609,7 +2850,15 @@ export default function App() {
                 </div>
 
                 <div className="divide-y divide-warmborder">
-                  {LIVE_SLA_LEADS.map((l) => (
+                  {(realSummary?.liveSlaLeads?.length ? realSummary.liveSlaLeads.map((l: any) => ({
+                    id: l.id,
+                    namaLead: l.namaLead,
+                    sumber: l.tahap,
+                    noWa: '-',
+                    assignedSe: l.seNama,
+                    menitBerjalan: l.durasiMenit,
+                    status: l.statusSla === 'aman' ? 'Aman' : l.statusSla === 'warning_sla' ? 'Peringatan 5 Mnt' : 'Dialihkan Pool',
+                  })) : LIVE_SLA_LEADS).map((l: any) => (
                     <div key={l.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-2">
@@ -2710,6 +2959,12 @@ export default function App() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => setIsUserMgmtModalOpen(true)}
+                    className="px-3.5 py-2.5 rounded-xl bg-terracotta text-white hover:bg-terracotta/90 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shrink-0 shadow-2xs"
+                  >
+                    <Users className="size-4" /> Kelola User (6 Role)
+                  </button>
                   <button
                     onClick={() => setIsBankAccountsModalOpen(true)}
                     className="px-3.5 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-terracotta border border-amber-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shrink-0 shadow-2xs"
@@ -3038,7 +3293,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-warmborder text-sm">
-                      {seTeamState.map((se) => (
+                      {(realSummary?.seTeamPerformance?.length ? realSummary.seTeamPerformance : seTeamState).map((se: any) => (
                         <tr key={se.seId} className="hover:bg-sandstone/40">
                           <td className="py-3 px-5">
                             <span className="font-bold text-espresso">{se.nama}</span>
@@ -3390,6 +3645,13 @@ export default function App() {
                       <Users className="size-3.5" /> Tim SE ({seTeamState.length})
                     </button>
                     <button
+                      type="button"
+                      onClick={() => setIsUserMgmtModalOpen(true)}
+                      className="px-3.5 py-2 rounded-xl bg-espresso hover:bg-espresso/90 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <Users className="size-3.5" /> Kelola User (6 Role)
+                    </button>
+                    <button
                       onClick={() => setIsBankAccountsModalOpen(true)}
                       className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-terracotta border border-amber-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
                     >
@@ -3428,7 +3690,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-warmborder text-xs">
-                      {BOOKING_TRANSACTIONS.map((b) => (
+                      {(realSummary?.bookingTransactions?.length ? realSummary.bookingTransactions : BOOKING_TRANSACTIONS).map((b: any) => (
                         <tr key={b.id} className="hover:bg-sandstone/40">
                           <td className="py-3 px-4">
                             <span className="font-extrabold text-espresso">{b.pembeli}</span>
@@ -3475,6 +3737,12 @@ export default function App() {
           {/* ========================================================================= */}
           {activeView === 'dashboard' && role === 'IT' && (
             <div className="space-y-6">
+              {/* Knowledge AI Terpusat + OCR Lokal */}
+              <ItKnowledgeAiPanel
+                projectId={activeProjectId}
+                projectName={activeProject.nama}
+              />
+
               {/* ========================================================================= */}
               {/* IT DEVELOPER: PUSAT MANAJEMEN PERSONEL TIM (SE s.d. DIREKSI) */}
               {/* ========================================================================= */}
@@ -3689,7 +3957,14 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-warmborder text-xs">
-                      {IT_AUDIT_LOGS.map((a) => (
+                      {(realSummary?.auditLogs?.length ? realSummary.auditLogs.map((a: any) => ({
+                        id: String(a.id).slice(0, 6).toUpperCase(),
+                        tabel: 'sales_os',
+                        aksi: String(a.action_type || 'UPDATE').slice(0, 10),
+                        dataPerubahan: String(a.summary || ''),
+                        oleh: `${a.actor_name || 'System'} (${a.actor_role || ''})`,
+                        waktu: a.created_at ? new Date(a.created_at).toLocaleTimeString('id-ID') : '-',
+                      })) : IT_AUDIT_LOGS).map((a: any) => (
                         <tr key={a.id} className="hover:bg-sandstone/40">
                           <td className="py-3 px-4 font-mono font-bold text-warmmuted">{a.id}</td>
                           <td className="py-3 px-3 font-bold text-espresso font-mono">{a.tabel}</td>
@@ -3888,7 +4163,15 @@ export default function App() {
                   </div>
 
                   <div className="divide-y divide-warmborder">
-                    {SE_LEAD_FEEDBACKS.map((fb) => (
+                    {(realSummary?.leadFeedbacks?.length ? realSummary.leadFeedbacks.map((fb: any) => ({
+                      id: fb.id,
+                      leadName: fb.leadName,
+                      kodeKonten: fb.quality,
+                      alasan: fb.reason,
+                      seName: fb.seName,
+                      waktu: 'Terbaru',
+                      label: fb.quality === 'SPAM' || fb.quality === 'INVALID' ? 'Tidak Valid' : 'Valid',
+                    })) : SE_LEAD_FEEDBACKS).map((fb: any) => (
                       <div key={fb.id} className="py-2.5 flex items-start justify-between gap-3 text-xs">
                         <div>
                           <div className="flex items-center gap-2">
@@ -3979,6 +4262,22 @@ export default function App() {
 
           {activeView === 'dashboard' && role === 'SUPERADMIN_IT' && (
             <ItCommandCenterDashboard
+              activeSection={
+                activeSection === 'it-permissions'
+                  ? 'permissions'
+                  : activeSection === 'it-knowledge' || activeSection === 'knowledge-ai'
+                  ? 'knowledge'
+                  : activeSection === 'it-hierarchy'
+                  ? 'hierarchy'
+                  : 'dashboard'
+              }
+              onChangeSection={(sec: ItAdminSection) => {
+                if (sec === 'permissions') openDashboardSection('it-permissions');
+                else if (sec === 'knowledge') openDashboardSection('it-knowledge');
+                else if (sec === 'hierarchy') openDashboardSection('it-hierarchy');
+                else openDashboardSection('top');
+              }}
+              realSummary={realSummary}
               onOpenSuperadminModal={() => setShowSuperadminModal(true)}
               onImpersonateUser={(u, pId) => {
                 if (authSession) saveImpersonatorBackup(authSession);
@@ -4256,36 +4555,72 @@ export default function App() {
             </div>
 
             <div className="p-5 space-y-4">
-
-              <p className="text-xs sm:text-sm font-medium text-slate-600 leading-relaxed">
-                Halo, saya <strong className="text-slate-900">Developer Assistant</strong> Anda. Seluruh persiapan lapangan, jadwal konten, dan prospek prioritas hari ini sudah saya susun di menu <strong className="text-slate-900">Notifikasi</strong>.
-              </p>
-
-              {/* 3-Column Clean Metric Preview */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
-                  <span className="text-[10px] font-bold text-slate-500 block">Agenda Aktif</span>
-                  <strong className="text-base font-extrabold text-slate-900 tabular-nums mt-0.5 block">
-                    {buildSeRealtimeNotifications(seRealData?.quickStatus, Date.now(), {
+              {(() => {
+                if (role === 'SE') {
+                  const seNotifCount =
+                    buildSeRealtimeNotifications(seRealData?.quickStatus, Date.now(), {
                       leadsTodayValidCount: seRealData?.metrics?.leadsTodayValidCount,
                       needsCompletionLeadsCount: seRealData?.metrics?.needsCompletionLeadsCount,
                       waConnectionStatus: seRealData?.metrics?.waConnectionStatus,
-                    }).length || 4}
-                  </strong>
-                </div>
-                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
-                  <span className="text-[10px] font-bold text-slate-500 block">Konten Hari Ini</span>
-                  <strong className="text-base font-extrabold text-emerald-600 tabular-nums mt-0.5 block">
-                    {seRealData?.quickStatus?.slotsUploadedToday ?? 0}/{seRealData?.quickStatus?.slotsTotalToday ?? 3}
-                  </strong>
-                </div>
-                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
-                  <span className="text-[10px] font-bold text-slate-500 block">Target Lead</span>
-                  <strong className="text-base font-extrabold text-slate-900 tabular-nums mt-0.5 block">
-                    {seRealData?.metrics?.leadsTodayValidCount ?? 0}/8
-                  </strong>
-                </div>
-              </div>
+                      totpEnabled: Boolean(authSession?.totpEnabled),
+                    }).length || 0;
+                  return (
+                    <>
+                      <p className="text-xs sm:text-sm font-medium text-slate-600 leading-relaxed">
+                        Halo, saya <strong className="text-slate-900">Developer Assistant</strong> Anda. Seluruh persiapan lapangan, jadwal konten, dan prospek prioritas hari ini sudah saya susun di menu <strong className="text-slate-900">Notifikasi</strong>.
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
+                          <span className="text-[10px] font-bold text-slate-500 block">Agenda Aktif</span>
+                          <strong className="text-base font-extrabold text-slate-900 tabular-nums mt-0.5 block">
+                            {seNotifCount}
+                          </strong>
+                        </div>
+                        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
+                          <span className="text-[10px] font-bold text-slate-500 block">Konten Hari Ini</span>
+                          <strong className="text-base font-extrabold text-emerald-600 tabular-nums mt-0.5 block">
+                            {seRealData?.quickStatus?.slotsUploadedToday ?? 0}/{seRealData?.quickStatus?.slotsTotalToday ?? 3}
+                          </strong>
+                        </div>
+                        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
+                          <span className="text-[10px] font-bold text-slate-500 block">Target Lead</span>
+                          <strong className="text-base font-extrabold text-slate-900 tabular-nums mt-0.5 block">
+                            {seRealData?.metrics?.leadsTodayValidCount ?? 0}/8
+                          </strong>
+                        </div>
+                      </div>
+                    </>
+                  );
+                }
+
+                const roleSummary = buildRoleGreetingAndNotifications(
+                  role,
+                  realSummary,
+                  escalations,
+                  Boolean(authSession?.totpEnabled)
+                );
+                return (
+                  <>
+                    <p className="text-xs sm:text-sm font-medium text-slate-600 leading-relaxed">
+                      Halo, saya <strong className="text-slate-900">Developer Assistant</strong> Anda ({role}). {roleSummary.subtitle}
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {roleSummary.metrics.map((m) => (
+                        <div key={m.label} className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
+                          <span className="text-[10px] font-bold text-slate-500 block truncate">{m.label}</span>
+                          <strong
+                            className={`text-base font-extrabold tabular-nums mt-0.5 block ${
+                              m.highlight ? 'text-emerald-600' : 'text-slate-900'
+                            }`}
+                          >
+                            {m.value}
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
 
               <div className="flex items-center gap-2 pt-1">
                 <button
@@ -4664,6 +4999,14 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Modal Manajemen User Tim (SM & Admin · 6 Role Dasar) */}
+      <OrgUserManagementModal
+        isOpen={isUserMgmtModalOpen}
+        onClose={() => setIsUserMgmtModalOpen(false)}
+        projectId={activeProjectId}
+        projectName={activeProject.nama}
+      />
 
       {/* Modal Manajemen Rekening Resmi Perusahaan (SM & Admin) */}
       <CompanyBankAccountsModal

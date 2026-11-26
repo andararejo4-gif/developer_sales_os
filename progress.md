@@ -3,59 +3,85 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
-## P-092 | 2026-11-25 | Dukungan Multi Titik Koordinat GPS per Proyek (Multi-Cluster)
+## P-093 | 2026-11-25 | Restrukturisasi Menu Admin Panel IT & Flow 2-Langkah Permission Fitur (6 Role Utama)
+- Status: selesai & live di `https://developerproperti.giivepro.com` (`hades`, commit `fb18193` di `origin/feat/totp-2fa`)
+- Ubah: `src/components/superadmin/PermissionMatrixPanel.tsx` (alur 2 langkah: default tabel daftar user dengan tab filter 6 role utama mengecualikan `SUPERADMIN` & `SUPERADMIN_IT` -> klik user masuk halaman detail atur permission CRUD + tombol kembali & opsi Global Per-Role), `src/components/superadmin/ItCommandCenterDashboard.tsx` (pisah 4 halaman: `dashboard`, `permissions`, `knowledge`, `hierarchy` + metrik real & pintasan cepat di dashboard), `src/App.tsx` (menu sidebar khusus `SUPERADMIN_IT`: Permission Fitur, Knowledge AI Terpusat, Hierarki Tenant & Support)
+- Alasan/keputusan: Sebelumnya semua modul menumpuk di satu halaman Dashboard IT dan panel permission masih memuat akun Superadmin dalam split-view. Pemisahan halaman + flow tabel user -> detail membuat navigasi lebih terstruktur dan fokus pada 6 role operasional.
+- Verifikasi: `npm run build`, `bun build server/index.ts`, push `origin/feat/totp-2fa` (`fb18193`), backup DB `sales_os-20261126-0000.dump`, migrasi `0021`–`0024` sukses di `hades`, deploy backend+frontend & `pm2 restart developer-sales-os-api`; smoke live `/` (`200`, `index-tN02wvMh.js`), `/api/health` (`200`), `/api/it/knowledge-ai` (`401`), `/api/dashboard/summary` (`401`), `/api/permissions/me` (`401`)
+- Berikutnya: Uji langsung di browser `https://developerproperti.giivepro.com` (hard refresh `Ctrl+Shift+R`).
+- Catatan: Rollback backend `dist-server.mjs.pre-20261126-0000`, frontend `~/db-backup/index.html.20261126-0000`, DB `~/db-backup/sales_os-20261126-0000.dump`.
 
+## P-092 | 2026-11-25 | Pop-up Pengingat & Notification Center Dinamis Semua Role + Auto-Load .env Backend
+- Status: selesai di lokal
+- Ubah: `src/components/RoleNotificationCenter.tsx` (baru: `RoleNotificationBell` & `buildRoleGreetingAndNotifications`), `src/App.tsx` (greeting `showAssistantGreeting` & header bell memakai data real `/api/dashboard/summary` per role), `server/db.ts` (auto-load `.env` via `process.loadEnvFile()` bila `DATABASE_URL` belum terset)
+- Alasan/keputusan: (1) Pop-up pengingat sebelumnya static untuk SE dan tombol notifikasi tidak membuka panel di role lain. (2) Error `404` disebabkan proses lama `server.mjs` (22:40) belum di-restart, lalu berubah jadi `500` saat `node dist-server.mjs` dijalankan tanpa `--env-file=.env` sehingga jatuh ke fallback port `5433` padahal PostgreSQL berjalan di `5435` (`.env`).
+- Verifikasi: `npm run build`, `bun build server/index.ts --outfile dist-server.mjs --target node --packages=external`, server jalan di `:3040` terhubung PostgreSQL `:5435` tanpa error startup
+- Berikutnya: Refresh browser & uji Knowledge AI IT + pop-up pengingat di semua role.
+- Catatan: `server/db.ts` kini otomatis membaca `.env` saat dijalankan via `node dist-server.mjs` tanpa flag tambahan.
+
+## P-091 | 2026-11-25 | Knowledge AI Terpusat di Panel IT + Integrasi OCR Lokal & AI Engine
+- Status: selesai di lokal
+- Ubah: `db/migrations/0024_ai_central_knowledge.sql`, `server/truth-engine.ts` (`getCentralAiKnowledge`, `rebuildCentralKnowledgeFromDocs`, `saveCentralAiKnowledge`), `server/index.ts` (`/api/it/knowledge-ai*`), `server/ai-engine.ts` (suntik `masterMarkdown` ke `systemPrompt`), `src/components/it/ItKnowledgeAiPanel.tsx`, `src/components/superadmin/ItCommandCenterDashboard.tsx`, `src/App.tsx` (panel & navigasi Knowledge AI di role IT)
+- Alasan/keputusan: Memusatkan seluruh materi training/knowledge AI (termasuk hasil ekstrak brosur PDF/gambar via `doc-extractor.py` + `RapidOCR` lokal) ke 1 data `sales_os.ai_central_knowledge` yang dikelola Divisi IT.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`), `bun build server/index.ts`, dan uji DB + ekstraktor lokal
+- Berikutnya: Jalankan server & uji unggah brosur PDF/gambar melalui browser di dashboard IT.
+- Catatan: Pastikan Python + `pymupdf` + `rapidocr_onnxruntime` terpasang pada lingkungan server produksi.
+
+## P-090 | 2026-11-25 | Permission Matrix Superadmin IT + Migrasi Dashboard, Referral, DLP & Marketing ke DB
+- Status: selesai di lokal
+- Ubah: `db/migrations/0023_permissions_and_full_db.sql`, `server/permissions.ts` (matriks izin per-user & global-role CRUD), `server/index.ts` (`/api/permissions/me`, `/api/superadmin/permissions`, `/api/dashboard/summary`, `/api/escalations`, `/api/referrals`, `/api/partner-config`, `/api/complaints`, `/api/marketing/campaigns`, `/api/project-settings`), `src/components/superadmin/PermissionMatrixPanel.tsx`, `src/components/superadmin/ItCommandCenterDashboard.tsx`, `src/components/CustomerComplaintsPage.tsx`, `src/components/ReferralProgramPage.tsx`, `src/App.tsx`
+- Alasan/keputusan: Memberi kontrol permission CRUD granular per-user & global-role di Superadmin IT serta menyambungkan modul Referral, Keluhan DLP, Eskalasi Direksi, dan ringkasan dashboard SM/TL/Admin/IT/DM ke PostgreSQL.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`), `bun build server/index.ts`, dan uji alur DB/API
+- Berikutnya: Jalankan server & lakukan uji end-to-end dengan PostgreSQL aktif.
+- Catatan: Resolusi permission memprioritaskan override Per-User di atas Global Role.
+
+## P-089 | 2026-11-25 | Vault KPR & KPR Bank DB Asli (Lead-Linked), Approval SM/Admin, & Kelola User 6 Role
+- Status: selesai di lokal (migrasi 0022 belum dijalankan ke DB produksi)
+- Ubah: `db/migrations/0022_vault_kpr_and_org_users.sql`, `server/auth.ts` (`BASIC_ORG_ROLES`, `listTenantUsers`, `createTenantUser`, `updateTenantUserStatus`), `server/index.ts` (`/api/org/users`, `/api/vault/documents`, `/api/kpr/applications` dengan auto-sync lead KPR), `src/components/SecureDocumentVaultPage.tsx` (pilih dari lead + input manual, multi-dokumen sekaligus, dikelompokkan per nama debitur, approval SM/Admin), `src/components/BankSubmissionWorkflowPage.tsx` (auto-sync lead KPR, pilih lead + manual, edit/majukan tahap ke DB), `src/components/OrgUserManagementModal.tsx`, `src/App.tsx` (tombol Kelola User 6 Role di SM & Admin + navigasi Vault/KPR)
+- Alasan/keputusan: Menghilangkan data dummy `localStorage` pada Vault KPR & KPR Bank, mendukung multi-dokumen per nama pengguna dari daftar lead, serta memberi Admin & SM manajemen user 6 role dasar.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`), `bun build server/index.ts`, dan `bun test tests`
+- Berikutnya: Jalankan migrasi `0022` pada PostgreSQL & lanjutkan Fase 3 (migrasi `CustomerComplaintsPage`, `ReferralProgramPage`, dan tabel ringkasan dummy di `SM`/`ADMIN`/`DIREKSI`)
+- Catatan: Role `SM`, `ADMIN`, dan `DIREKSI` di `App.tsx` masih memiliki beberapa ringkasan dashboard (`BOOKING_TRANSACTIONS`, `SE_TEAM_DATA`, `ESCALATION_DATA`) yang belum tersambung ke endpoint DB.
+
+## P-088 | 2026-11-25 | Merge IT-kantor ke branch 2FA + penguatan 2FA & akses mitra
+- Status: selesai di lokal (branch `feat/totp-2fa`, belum push/deploy)
+- Ubah: `server/auth.ts` (batas 5 percobaan/15 menit, secret aktif tak bisa ditimpa, klaim step & recovery atomik), `server/partner-access.ts` (tolak-default mitra), `server/index.ts`, `src/App.tsx` (logout mencabut sesi server), `src/components/LoginModal.tsx` (tombol akun demo dihapus), `src/lib/auth/dummy-accounts.ts` (login/OTP offline dihapus), `tests/auth-dummy.test.ts`, `tests/totp-2fa-guardrails.test.ts`, `tests/totp-auth-flow.test.ts`
+- Alasan/keputusan: auth ikut versi TOTP, halaman & layout ikut IT-kantor; akun mitra hanya di-seed bila `DEVOS_PARTNER_SEED_PASSWORD` diset
+- Verifikasi: `tsc --noEmit` bersih, vite build & bun build server sukses, `bun test tests` 145 lulus (AI_ROUTER_API_KEY dikosongkan); PostgreSQL sandbox: migrasi 0017-0021 OK, HTTP 57/57; browser 27/27 (login, TOTP, lonceng SE, mitra, mobile)
+- Berikutnya: push, lalu deploy server dan frontend bersamaan setelah backup DB + migrasi 0021
+- Catatan: fallback login offline (P-072/P-081/P-084) jangan dimasukkan lagi; dijaga test guardrails. P-087 semula bernomor P-072 lokal. `JSON.stringify(..)::jsonb` terbukti tersimpan sebagai string; pola sama masih ada di `server/units-quotes.ts:346-347`.
+
+## P-087 | 2026-11-25 | 2FA TOTP (Google Authenticator), Halaman Profil & Notifikasi Rekomendasi Semua Role
+- Status: selesai di local (belum push/deploy ke hades)
+- Ubah: `db/migrations/0021_totp_2fa_profiles.sql`, `server/totp.ts` (RFC 6238 murni `node:crypto`), `server/auth.ts` (default TOTP mati, login langsung jika nonaktif, wajib kode TOTP/recovery jika aktif, API profil & setup/enable/disable TOTP), `server/index.ts` (`/api/profile*`), `src/components/ProfilePage.tsx`, `src/components/TotpSecurityBell.tsx`, `src/components/LoginModal.tsx`, `src/components/se/SeNotificationCenter.tsx`, `src/components/se/SeGuidedTour.tsx`, `src/lib/navigation/router.ts`, `src/lib/auth/dummy-accounts.ts`, `src/App.tsx`
+- Alasan/keputusan: TOTP gratis (Rp0) untuk semua role dengan default mati; saat belum aktif tidak ada verify WA saat login dan muncul notifikasi rekomendasi di ikon lonceng; kartu profil di sidebar dapat diklik menuju `/profil` untuk aktivasi QR TOTP + 6 recovery codes.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`) bersih; `bun build server/index.ts --outfile dist-server.mjs --target node --packages=external` sukses (23 modul, 0.50 MB); unit check TOTP (`generateTotpSecret`, `verifyTotpToken`, anti-replay, `buildOtpAuthUri`) lulus (`true true true`).
+- Berikutnya: push & deploy ke `hades` bila user siap.
+- Catatan: setelah TOTP diaktifkan pada sebuah akun, login berikutnya wajib memasukkan 6-digit kode Google Authenticator atau salah satu dari 6 recovery codes.
+
+## P-092 (IT-kantor) | 2026-11-25 | Dukungan Multi Titik Koordinat GPS per Proyek (Multi-Cluster)
 - Status: selesai
 - Ubah: `src/lib/projects/projects-data.ts`, `src/components/projects/ManageClusterCoordsModal.tsx`, `src/components/JalurProyek.tsx`, `src/App.tsx`, `tests/projects-data.test.ts`.
 - Alasan/keputusan: Mengakomodasi 1 proyek yang memiliki beberapa titik lokasi/cluster (misal Gerbang Utama, Cluster Nagoya, Cluster Osaka) dengan mempertahankan backward compatibility `koordinatGps` primer.
 - Verifikasi: `bun test` (151 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
-- Berikutnya: -
-- Catatan: Modal `ManageClusterCoordsModal` memungkinkan penambahan, penyalinan koordinat, tautan langsung ke Google Maps, dan setel titik primer.
 
-## P-091 | 2026-11-25 | Manajemen Akun Internal Developer oleh IT Developer (SE s.d. Direksi) dengan Isolasi Tenant
-
+## P-091 (IT-kantor) | 2026-11-25 | Manajemen Akun Internal Developer oleh IT Developer (SE s.d. Direksi) dengan Isolasi Tenant
 - Status: selesai
 - Ubah: `src/lib/auth/developer-user-management.ts`, `src/components/it/AddDeveloperUserModal.tsx`, `src/App.tsx`, `tests/developer-user-management.test.ts`.
-- Alasan/keputusan: Memberikan otoritas kepada role IT Developer (`IT`) untuk menambah dan mengelola akun seluruh hierarki tim internal (SE, TL, SM, Admin, Digital Marketing, hingga Direksi) dengan batasan ketat isolasi tenant (hanya untuk developer/perusahaan yang dipegangnya saja).
+- Alasan/keputusan: Memberikan otoritas kepada role IT Developer (`IT`) untuk menambah dan mengelola akun seluruh hierarki tim internal dengan batasan isolasi tenant.
 - Verifikasi: `bun test` (150 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
-- Berikutnya: -
-- Catatan: Akun baru otomatis didaftarkan ke otentikasi login dan data personel tersimpan terisolasi per perusahaan developer.
 
-## P-090 | 2026-11-25 | Fitur Override Paket Langganan (Gold, Platinum, Diamond) per Developer untuk IT Internal
-
+## P-090 (IT-kantor) | 2026-11-25 | Fitur Override Paket Langganan (Gold, Platinum, Diamond) per Developer untuk IT Internal
 - Status: selesai
 - Ubah: `src/lib/plans/plan-override.ts`, `src/components/superadmin/ItCommandCenterDashboard.tsx`, `src/components/SuperadminPanel.tsx`, `src/App.tsx`, `tests/plan-override.test.ts`.
-- Alasan/keputusan: Menambahkan kemampuan bagi Tim IT Internal (`SUPERADMIN_IT`) untuk meng-override paket langganan (Gold 63 fitur, Platinum 88 fitur + AI, Diamond 100 fitur Enterprise) per developer / tenant dengan catatan alasan dan masa berlaku, menampilkan badge override khusus, serta tombol reset ke paket kontrak awal.
+- Alasan/keputusan: Menambahkan kemampuan bagi Tim IT Internal (`SUPERADMIN_IT`) untuk meng-override paket langganan per developer/tenant.
 - Verifikasi: `bun test` (143 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
-- Berikutnya: -
-- Catatan: Override tersimpan persisten dan langsung sinkron ke pembukaan fitur (misal AI activity guide di FieldOps).
 
-## P-089 | 2026-11-25 | Fitur Tambah Akun SE Inhouse (SM & Admin) & Kuesioner Struktur Tim Pendaftar
-
+## P-089 (IT-kantor) | 2026-11-25 | Fitur Tambah Akun SE Inhouse (SM & Admin) & Kuesioner Struktur Tim Pendaftar
 - Status: selesai
-- Ubah: `src/App.tsx`, `src/components/AddSeModal.tsx`, `src/lib/auth/se-management.ts`, `src/components/LoginModal.tsx`, `src/lib/auth/dummy-accounts.ts`, `tests/auth-dummy.test.ts`.
-- Alasan/keputusan: Memberikan hak tambah akun SE in-house beserta kredensial login kepada SM dan Admin (Direksi tidak diberikan tombol ini karena tidak turun mengoperasikan); serta menyediakan formulir registrasi karyawan pendaftar (pilihan role SM/Admin/IT/Direksi, nama direktur pemilik) dilengkapi kuesioner struktur developer untuk penyesuaian sistem otomatis.
+- Ubah: `src/App.tsx`, `src/components/AddSeModal.tsx`, `src/lib/auth/se-management.ts`, `src/components/LoginModal.tsx`.
+- Alasan/keputusan: Memberikan hak tambah akun SE in-house kepada SM dan Admin serta menyediakan kuesioner struktur developer saat registrasi.
 - Verifikasi: `bun test` (139 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
-- Berikutnya: -
-- Catatan: Akun SE baru langsung aktif di tabel supervisi SM/Admin dan langsung dapat digunakan login.
-
-## P-088 | 2026-11-25 | Redesain Vault Dokumen Terpusat per Nasabah & Pembersihan Label Blueprint F-Code
-
-- Status: selesai
-- Ubah: `src/components/SecureDocumentVaultPage.tsx`, `src/App.tsx`, `src/components/mobile/MobileMoreSheet.tsx`, `src/components/BankSubmissionWorkflowPage.tsx`, `src/components/ExecutiveControlTowerPage.tsx`, `src/components/LoveLetterViewerModal.tsx`, `src/components/PipelinePage.tsx`, `src/components/PlaybookViewer.tsx`.
-- Alasan/keputusan: Merestrukturisasi antarmuka Dokumen Vault KPR menjadi 1 baris per pelanggan (accordion folder) sehingga seluruh berkas (KTP, NPWP, Slip Gaji, Foto Konsumen, Foto Lokasi) terkelompok rapi dalam 1 folder debitur; mendukung upload foto/gambar; serta membersihkan seluruh teks label kode blueprint seperti "(F79)", "(F74)", "(F86)", "(F75)", "(F90)" dari sidebar dan antarmuka.
-- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
-- Berikutnya: -
-- Catatan: Menghilangkan kekacauan tabel berkas terpisah dan menjaga tampilan navigasi tetap bersih dan profesional.
-
-## P-087 | 2026-11-25 | Pemulihan Login Offline Lokal Tanpa Server Auth
-
-- Status: selesai
-- Ubah: `src/lib/auth/dummy-accounts.ts`, `tests/auth-dummy.test.ts`.
-- Alasan/keputusan: Mengaktifkan kembali autentikasi dummy offline lokal (`ROLE_DEFAULT_PASSWORDS`, `mock-offline-token`, dan fallback otomatis di `loginWithServer` / `verifyMfaWithServer`) agar sistem bisa langsung dibuka dan login di browser lokal tanpa memerlukan backend server aktif.
-- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
-- Berikutnya: -
-- Catatan: Mendukung pengujian lokal offline sepenuhnya dengan 11 akun role.
 
 ## P-086 | 2026-11-25 | Integrasi Tunggal Dashboard Mitra & Pemulihan Server Auth untuk Push IT-kantor
 

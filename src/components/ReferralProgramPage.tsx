@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Share2,
   Copy,
@@ -15,11 +15,19 @@ import {
   Clock,
   Briefcase,
 } from 'lucide-react';
-import { loadPersistedState, savePersistedState } from '../lib/navigation/router';
+import { loadAuthSession } from '../lib/auth/dummy-accounts';
 import {
   DEFAULT_PARTNER_CONFIG,
   type PartnerSchemeCustomConfig,
 } from '../lib/foundations/partner-scheme-config';
+
+function getAuthHeaders(): HeadersInit {
+  const session = loadAuthSession();
+  return {
+    'Content-Type': 'application/json',
+    ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+  };
+}
 
 export interface ReferralLeadRecord {
   id: string;
@@ -49,76 +57,64 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
   projectId = 'the-park-sukoharjo',
   userRole,
 }) => {
-  const [referrals, setReferrals] = useState<ReferralLeadRecord[]>(() =>
-    loadPersistedState<ReferralLeadRecord[]>(`devos_referrals_${projectId}`, [
-      {
-        id: 'ref_1',
-        advocateName: 'Ibu Anita Wijaya',
-        advocatePhone: '0812-9876-5432',
-        advocateType: 'KONSUMEN_PEMILIK',
-        referredFriendName: 'Pak Hendra Kusuma',
-        referredFriendPhone: '0813-1122-3344',
-        unitInterest: 'Nagoya A-03',
-        status: 'AKAD_SELESAI',
-        rewardAmount: 5000000,
-        rewardStatus: 'SUDAH_DITRANSFER',
-        registeredAt: '2026-11-10',
-        partnerRole: 'REFERRAL_PARTNER',
-      },
-      {
-        id: 'ref_2',
-        advocateName: 'Pak Dimas Anggoro',
-        advocatePhone: '0857-2233-4455',
-        advocateType: 'AGENT_EXTERNAL',
-        referredFriendName: 'Ibu Maya Safitri',
-        referredFriendPhone: '0812-4455-6677',
-        unitInterest: 'Osaka B-02',
-        status: 'BOOKING',
-        rewardAmount: 12500000,
-        rewardStatus: 'PENDING_AKAD',
-        registeredAt: '2026-11-18',
-        partnerRole: 'SALES_PARTNER',
-        leadResponseMinutes: 12,
-      },
-      {
-        id: 'ref_3',
-        advocateName: 'Ibu Anita Wijaya',
-        advocatePhone: '0812-9876-5432',
-        advocateType: 'KONSUMEN_PEMILIK',
-        referredFriendName: 'Pak Rully Setiawan',
-        referredFriendPhone: '0818-7788-9900',
-        unitInterest: 'Tokyo C-01',
-        status: 'SURVEI_LOKASI',
-        rewardAmount: 5000000,
-        rewardStatus: 'PENDING_AKAD',
-        registeredAt: '2026-11-23',
-        partnerRole: 'REFERRAL_PARTNER',
-      },
-      {
-        id: 'ref_4',
-        advocateName: 'Pak Joko Santoso',
-        advocatePhone: '0811-3344-5566',
-        advocateType: 'KONSUMEN_PEMILIK',
-        referredFriendName: 'Ibu Clara Melinda',
-        referredFriendPhone: '0878-1234-5678',
-        unitInterest: 'Nagoya B-05',
-        status: 'BOOKING',
-        rewardAmount: 5000000,
-        rewardStatus: 'SIAP_CAIR',
-        registeredAt: '2026-11-20',
-        partnerRole: 'REFERRAL_PARTNER',
-      },
-    ])
-  );
+  const [referrals, setReferrals] = useState<ReferralLeadRecord[]>([]);
 
-  // Kustomisasi Skema Mitra (Persisted)
-  const [partnerConfig, setPartnerConfig] = useState<PartnerSchemeCustomConfig>(() =>
-    loadPersistedState<PartnerSchemeCustomConfig>(`devos_partner_config_${projectId}`, {
-      ...DEFAULT_PARTNER_CONFIG,
-      projectId,
-      projectName,
-    })
-  );
+  // Kustomisasi Skema Mitra (DB PostgreSQL)
+  const [partnerConfig, setPartnerConfig] = useState<PartnerSchemeCustomConfig>({
+    ...DEFAULT_PARTNER_CONFIG,
+    projectId,
+    projectName,
+  });
+
+  const loadReferralData = useCallback(async () => {
+    try {
+      const headers = getAuthHeaders();
+      const [refRes, cfgRes] = await Promise.all([
+        fetch(`/api/referrals?projectId=${encodeURIComponent(projectId)}`, {
+          credentials: 'include',
+          headers,
+        }),
+        fetch(`/api/partner-config?projectId=${encodeURIComponent(projectId)}`, {
+          credentials: 'include',
+          headers,
+        }),
+      ]);
+      if (refRes.ok) {
+        const rJson = await refRes.json();
+        const rows = Array.isArray(rJson.referrals) ? rJson.referrals : [];
+        setReferrals(
+          rows.map((r: any) => ({
+            id: String(r.id),
+            advocateName: String(r.advocate_name),
+            advocatePhone: String(r.advocate_phone || ''),
+            advocateType: (r.advocate_type || 'KONSUMEN_PEMILIK') as ReferralLeadRecord['advocateType'],
+            referredFriendName: String(r.referred_friend_name),
+            referredFriendPhone: String(r.referred_friend_phone || ''),
+            unitInterest: String(r.unit_interest || ''),
+            status: (r.status || 'TERDAFTAR') as ReferralLeadRecord['status'],
+            rewardAmount: Number(r.reward_amount || 0),
+            rewardStatus: (r.reward_status || 'PENDING_AKAD') as ReferralLeadRecord['rewardStatus'],
+            registeredAt: r.registered_at ? String(r.registered_at).slice(0, 10) : '-',
+            partnerRole: (r.partner_role || 'REFERRAL_PARTNER') as 'REFERRAL_PARTNER' | 'SALES_PARTNER',
+            leadResponseMinutes: r.lead_response_minutes !== null ? Number(r.lead_response_minutes) : undefined,
+            slaBreach: Boolean(r.sla_breach),
+          }))
+        );
+      }
+      if (cfgRes.ok) {
+        const cJson = await cfgRes.json();
+        if (cJson.config) {
+          setPartnerConfig({ ...DEFAULT_PARTNER_CONFIG, ...cJson.config, projectId, projectName });
+        }
+      }
+    } catch {
+      /* abaikan error jaringan sementara */
+    }
+  }, [projectId, projectName]);
+
+  useEffect(() => {
+    loadReferralData();
+  }, [loadReferralData]);
 
   const [activePartnerTab, setActivePartnerTab] = useState<'ALL' | 'REFERRAL_PARTNER' | 'SALES_PARTNER'>(() => {
     if (userRole === 'REFERRAL_PARTNER') return 'REFERRAL_PARTNER';
@@ -168,7 +164,7 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
     window.open(`https://wa.me/?text=${text}`, '_blank');
   };
 
-  const handleAddReferral = (e: React.FormEvent) => {
+  const handleAddReferral = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!advocateName.trim() || !friendName.trim()) {
       showToastMsg('Nama pemberi referral dan nama teman wajib diisi');
@@ -177,36 +173,42 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
 
     const rewardCalculated =
       partnerRoleInput === 'SALES_PARTNER'
-        ? 500000000 * (partnerConfig.salesPartner.commissionPercent / 100) // Ilustrasi basis net Rp 500jt
+        ? 500000000 * (partnerConfig.salesPartner.commissionPercent / 100)
         : partnerConfig.referralPartner.defaultAmount;
 
-    const newRecord: ReferralLeadRecord = {
-      id: `ref_${Date.now()}`,
-      advocateName: advocateName.trim(),
-      advocatePhone: advocatePhone.trim() || '0812-xxxx-xxxx',
-      advocateType,
-      partnerRole: partnerRoleInput,
-      referredFriendName: friendName.trim(),
-      referredFriendPhone: friendPhone.trim() || '0813-xxxx-xxxx',
-      unitInterest: unitInterest.trim() || 'Nagoya Townhouse',
-      status: 'TERDAFTAR',
-      rewardAmount: rewardCalculated,
-      rewardStatus: 'PENDING_AKAD',
-      registeredAt: new Date().toISOString().split('T')[0],
-      leadResponseMinutes: partnerRoleInput === 'SALES_PARTNER' ? 8 : undefined,
-    };
-
-    const next = [newRecord, ...referrals];
-    setReferrals(next);
-    savePersistedState(`devos_referrals_${projectId}`, next);
-
-    setAdvocateName('');
-    setAdvocatePhone('');
-    setFriendName('');
-    setFriendPhone('');
-    setUnitInterest('');
-    setShowAddForm(false);
-    showToastMsg(`Data ${partnerRoleInput === 'SALES_PARTNER' ? 'Sales Partner' : 'Referral'} baru berhasil dicatat`);
+    try {
+      const res = await fetch('/api/referrals', {
+        method: 'POST',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          projectId,
+          advocateName: advocateName.trim(),
+          advocatePhone: advocatePhone.trim(),
+          advocateType,
+          partnerRole: partnerRoleInput,
+          referredFriendName: friendName.trim(),
+          referredFriendPhone: friendPhone.trim(),
+          unitInterest: unitInterest.trim() || 'Nagoya Townhouse',
+          rewardAmount: rewardCalculated,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        await loadReferralData();
+        setAdvocateName('');
+        setAdvocatePhone('');
+        setFriendName('');
+        setFriendPhone('');
+        setUnitInterest('');
+        setShowAddForm(false);
+        showToastMsg(`Data ${partnerRoleInput === 'SALES_PARTNER' ? 'Sales Partner' : 'Referral'} tersimpan & masuk antrean lead.`);
+      } else {
+        showToastMsg(json.error || 'Gagal menyimpan data referral.');
+      }
+    } catch {
+      showToastMsg('Gagal menghubungi server.');
+    }
   };
 
   const filteredReferrals = referrals.filter((item) => {
@@ -622,13 +624,21 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
                       {item.rewardStatus === 'SIAP_CAIR' ? (
                         <button
                           type="button"
-                          onClick={() => {
-                            const next = referrals.map((r) =>
-                              r.id === item.id ? { ...r, rewardStatus: 'SUDAH_DITRANSFER' as const } : r
-                            );
-                            setReferrals(next);
-                            savePersistedState(`devos_referrals_${projectId}`, next);
-                            showToastMsg(`Reward untuk ${item.advocateName} dicatat cair`);
+                          onClick={async () => {
+                            const res = await fetch('/api/referrals', {
+                              method: 'PATCH',
+                              credentials: 'include',
+                              headers: getAuthHeaders(),
+                              body: JSON.stringify({ id: item.id, rewardStatus: 'SUDAH_DITRANSFER' }),
+                            });
+                            if (res.ok) {
+                              setReferrals((prev) =>
+                                prev.map((r) =>
+                                  r.id === item.id ? { ...r, rewardStatus: 'SUDAH_DITRANSFER' as const } : r
+                                )
+                              );
+                              showToastMsg(`Reward untuk ${item.advocateName} dicatat cair`);
+                            }
                           }}
                           className="h-7 px-2.5 rounded bg-olive hover:bg-olive/90 text-white font-medium text-xs cursor-pointer"
                         >
@@ -896,9 +906,14 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
             <div className="flex items-center justify-between pt-3 border-t border-warmborder">
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   setPartnerConfig(DEFAULT_PARTNER_CONFIG);
-                  savePersistedState(`devos_partner_config_${projectId}`, DEFAULT_PARTNER_CONFIG);
+                  await fetch('/api/partner-config', {
+                    method: 'PUT',
+                    credentials: 'include',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ projectId, config: DEFAULT_PARTNER_CONFIG }),
+                  });
                   showToastMsg('Skema dikembalikan ke default blueprint');
                 }}
                 className="h-8 px-3 rounded-lg border border-warmborder text-xs text-warmmuted hover:text-espresso cursor-pointer"
@@ -915,15 +930,20 @@ export const ReferralProgramPage: React.FC<ReferralProgramPageProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     const updated = {
                       ...partnerConfig,
                       updatedAt: new Date().toISOString(),
                     };
                     setPartnerConfig(updated);
-                    savePersistedState(`devos_partner_config_${projectId}`, updated);
+                    await fetch('/api/partner-config', {
+                      method: 'PUT',
+                      credentials: 'include',
+                      headers: getAuthHeaders(),
+                      body: JSON.stringify({ projectId, config: updated }),
+                    });
                     setShowConfigModal(false);
-                    showToastMsg('Konfigurasi skema mitra berhasil disimpan');
+                    showToastMsg('Konfigurasi skema mitra berhasil disimpan ke database');
                   }}
                   className="h-8 px-4 rounded-lg bg-terracotta hover:bg-terracotta/90 text-white text-xs font-semibold cursor-pointer"
                 >

@@ -15,6 +15,7 @@ export type DashboardView =
   | 'surat_cinta'
   | 'unit_park'
   | 'kinerja_se'
+  | 'profile'
   | 'vault'
   | 'referral'
   | 'garansi'
@@ -38,6 +39,7 @@ export const VIEW_PATHS: Record<DashboardView, string> = {
   surat_cinta: '/surat-cinta',
   unit_park: '/unit-park',
   kinerja_se: '/kinerja-se',
+  profile: '/profil',
   vault: '/dokumen-vault',
   referral: '/program-referral',
   garansi: '/keluhan-garansi',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   X,
   LogIn,
@@ -13,13 +13,11 @@ import {
   UserPlus,
   ShieldCheck,
   KeyRound,
-  RotateCcw,
 } from "lucide-react";
 import {
   loginWithServer,
   registerWithServer,
   verifyMfaWithServer,
-  createMfaChallenge,
   type MfaChallenge,
 } from "../lib/auth/dummy-accounts";
 import { saveOnboardingProfile } from "../lib/auth/se-management";
@@ -64,17 +62,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   // MFA form state
   const [mfaChallenge, setMfaChallenge] = useState<MfaChallenge | null>(null);
   const [otpCode, setOtpCode] = useState("");
-  const [resendCooldown, setResendCooldown] = useState(0);
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  useEffect(() => {
-    let timer: any;
-    if (resendCooldown > 0) {
-      timer = setTimeout(() => setResendCooldown((prev) => prev - 1), 1000);
-    }
-    return () => clearTimeout(timer);
-  }, [resendCooldown]);
 
   if (!isOpen) return null;
 
@@ -87,10 +76,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
+    if (!result.requiresMfa) {
+      if (onSuccessLogin) onSuccessLogin(result.session.role);
+      onClose();
+      return;
+    }
+
     setMfaChallenge(result.challenge);
     setMode("mfa");
     setOtpCode("");
-    setResendCooldown(60);
   };
 
   const handleSignupSubmit = async (e: React.FormEvent) => {
@@ -128,10 +122,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
+    if (!result.requiresMfa) {
+      if (onSuccessLogin) onSuccessLogin(result.session.role);
+      onClose();
+      return;
+    }
+
     setMfaChallenge(result.challenge);
     setMode("mfa");
     setOtpCode("");
-    setResendCooldown(60);
   };
 
   const handleMfaSubmit = async (e: React.FormEvent) => {
@@ -149,16 +148,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       onSuccessLogin(res.session.role);
     }
     onClose();
-  };
-
-  const handleResendOtp = () => {
-    if (resendCooldown > 0 || !mfaChallenge) return;
-    const challenge = createMfaChallenge(mfaChallenge.email);
-    if (challenge) {
-      setMfaChallenge(challenge);
-      setResendCooldown(60);
-      setErrorMsg(null);
-    }
   };
 
   return (
@@ -180,7 +169,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   ? "Akses dashboard penjualan & operasional proyek"
                   : mode === "signup"
                   ? "Pendaftaran mandiri oleh staf/manajer operasional & kuesioner tim"
-                  : "Keamanan ganda terenkripsi untuk seluruh akun"}
+                  : "Perlindungan tambahan yang Anda aktifkan di Profil"}
               </p>
             </div>
             <button
@@ -230,7 +219,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           ) : (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800">
               <ShieldCheck className="size-4 text-emerald-600 shrink-0" />
-              <span>Multi-Factor Authentication (MFA) Wajib Aktif</span>
+              <span>2FA aktif pada akun ini</span>
             </div>
           )}
         </div>
@@ -251,66 +240,36 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   <KeyRound className="size-5" />
                 </div>
                 <h3 className="text-xs font-extrabold text-espresso">
-                  Masukkan 6-Digit Kode Verifikasi
+                  Verifikasi 2 Faktor (Google Authenticator / TOTP)
                 </h3>
                 <p className="text-[11px] text-warmmuted">
-                  Kode OTP telah dikirimkan ke nomor WhatsApp terdaftar akun Anda:
+                  Akun Anda telah mengaktifkan TOTP. Masukkan 6-digit kode dari aplikasi Authenticator (atau recovery code) untuk akun:
                 </p>
                 <p className="text-xs font-mono font-bold text-espresso bg-white px-3 py-1 rounded-lg border border-warmborder inline-block">
-                  {mfaChallenge.maskedPhone}
+                  {mfaChallenge.email}
                 </p>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-espresso mb-1 text-center">
-                  Kode Verifikasi (OTP) *
+                  Kode Authenticator 6-Digit / Recovery Code *
                 </label>
                 <input
                   type="text"
                   required
                   autoFocus
-                  maxLength={6}
+                  maxLength={12}
                   value={otpCode}
                   onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, "");
-                    setOtpCode(val);
+                    setOtpCode(e.target.value.toUpperCase());
                     if (errorMsg) setErrorMsg(null);
                   }}
-                  placeholder="829104"
+                  placeholder="000000"
                   className="w-full h-12 rounded-xl border border-warmborder text-center text-xl font-mono font-bold tracking-widest focus:border-terracotta focus:outline-none bg-sandstone/30"
                 />
               </div>
 
-              {/* Bantuan Verifikasi Demo */}
-              <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-[11px] text-amber-900 space-y-1">
-                <div className="font-bold flex items-center gap-1.5">
-                  <ShieldCheck className="size-3.5 text-terracotta" />
-                  <span>Kode Verifikasi Resmi:</span>
-                </div>
-                <p className="leading-relaxed">
-                  Masukkan kode <strong className="font-mono text-terracotta font-extrabold">829104</strong> (atau master bypass: <strong className="font-mono">123456</strong>) untuk menyelesaikan autentikasi.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between text-xs pt-1">
-                <button
-                  type="button"
-                  onClick={handleResendOtp}
-                  disabled={resendCooldown > 0}
-                  className={`inline-flex items-center gap-1 font-semibold ${
-                    resendCooldown > 0
-                      ? "text-warmmuted cursor-not-allowed"
-                      : "text-terracotta hover:underline cursor-pointer"
-                  }`}
-                >
-                  <RotateCcw className="size-3" />
-                  <span>
-                    {resendCooldown > 0
-                      ? `Kirim ulang (${resendCooldown}s)`
-                      : "Kirim ulang kode OTP"}
-                  </span>
-                </button>
-
+              <div className="flex items-center justify-end text-xs pt-1">
                 <button
                   type="button"
                   onClick={() => {
@@ -411,37 +370,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     Daftar Developer Baru
                   </strong>
                 </button>
-              </div>
-
-              {/* Quick Fill Akun Demo (Termasuk Mitra Gmail Nyata) */}
-              <div className="pt-3 border-t border-warmborder/80">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-warmmuted block mb-2 text-center">
-                  Akun Demo Resmi &amp; Mitra Lapangan:
-                </span>
-                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail("anita.wijaya92@gmail.com");
-                      setPassword("MitraReferral#2026");
-                    }}
-                    className="p-1.5 rounded-lg bg-sandstone/60 hover:bg-sandstone border border-warmborder text-left transition-colors cursor-pointer truncate"
-                  >
-                    <span className="font-bold text-espresso block truncate">Ibu Anita (Referral)</span>
-                    <span className="text-[10px] text-warmmuted block truncate">anita.wijaya92@gmail.com</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail("dimas.property.solo@gmail.com");
-                      setPassword("MitraSales#2026");
-                    }}
-                    className="p-1.5 rounded-lg bg-sandstone/60 hover:bg-sandstone border border-warmborder text-left transition-colors cursor-pointer truncate"
-                  >
-                    <span className="font-bold text-espresso block truncate">Pak Dimas (Sales Partner)</span>
-                    <span className="text-[10px] text-warmmuted block truncate">dimas.property.solo@gmail.com</span>
-                  </button>
-                </div>
               </div>
             </form>
           ) : (
@@ -758,7 +686,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         {/* Footer Clean */}
         <div className="p-3 bg-sandstone/40 border-t border-warmborder text-center text-[11px] text-warmmuted shrink-0 flex items-center justify-center gap-1.5">
           <ShieldCheck className="size-3.5 text-emerald-600" />
-          <span>Developer Sales OS &middot; Dilindungi Verifikasi Dua Langkah (MFA)</span>
+          <span>Developer Sales OS &middot; Mendukung Verifikasi Dua Langkah (2FA)</span>
         </div>
       </div>
     </div>

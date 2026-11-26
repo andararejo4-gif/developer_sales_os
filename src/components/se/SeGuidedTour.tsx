@@ -246,10 +246,10 @@ interface SeGuidedTourModalProps {
     summary: string;
     recommendations: string[];
     ctaLabel: string;
-    target: 'lapangan' | 'pipeline' | 'kalender' | 'rute' | 'export';
+    target: 'lapangan' | 'pipeline' | 'kalender' | 'rute' | 'export' | 'profile';
   } | null;
   onDismissH5?: () => void;
-  onNavigateH5?: (target: 'lapangan' | 'pipeline' | 'kalender' | 'rute' | 'export') => void;
+  onNavigateH5?: (target: 'lapangan' | 'pipeline' | 'kalender' | 'rute' | 'export' | 'profile') => void;
   onSnooze: () => void;
   onGoToFieldOps: () => void;
   onGoToUrgentPipeline: () => void;
