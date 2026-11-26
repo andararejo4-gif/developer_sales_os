@@ -3,25 +3,55 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
-## P-096 | 2026-11-26 | Sinkronisasi Live Radar GPS SE ke Dashboard SM (Online DB + Offline Shared Store)
+## P-096 (IT-kantor) | 2026-11-26 | Sinkronisasi Live Radar GPS SE ke Dashboard SM (Online DB + Offline Shared Store)
 - Status: selesai
 - Ubah: `server/index.ts` (endpoint ringan in-memory `GET`/`POST /api/se/live-location` tanpa mengotori counter `canvassing_contacts`), `src/components/FieldOpsModal.tsx` (sync live SE setiap 5 detik / 10m + polling SM setiap 4 detik + perbaiki pencocokan email SE + fallback `devos_live_radar_se_<projectId>` & `devos_offline_field_logs_<projectId>`), `src/components/field/GpsLiveRadarMap.tsx` (isolasi z-index tombol `Pusatkan ke Saya` di bawah navbar).
 - Alasan/keputusan: Sebelumnya: (1) SM tidak punya polling real-time (hanya fetch sekali saat halaman dibuka), (2) SE hanya sync per 45 detik dan menembak `POST /api/se/field-logs` yang menambah counter canvassing, (3) `Cek Titik Sekarang` tidak mem-publish posisi ke server/store bersama, (4) pencocokan email membentuk `raka.pratama@...` alih-alih `raka@...`.
 - Verifikasi: `bun run build` (`tsc --noEmit && vite build`) dan `bun build server/index.ts` lulus 100%.
 
-## P-095 | 2026-11-26 | Hilangkan Duplikat Menu "Dokumen Vault KPR" di Sidebar SM & Admin
+## P-095 (IT-kantor) | 2026-11-26 | Hilangkan Duplikat Menu "Dokumen Vault KPR" di Sidebar SM & Admin
 - Status: selesai
 - Ubah: `src/App.tsx` (sembunyikan item `Dokumen Vault KPR` di bagian Manajemen Perusahaan untuk role `SM` & `ADMIN` karena sudah ada `Approve Dokumen Vault KPR` / `Verifikasi Dokumen Vault KPR` di bagian atas).
 - Alasan/keputusan: Menghilangkan duplikasi menu vault di sidebar SM & Admin.
 - Verifikasi: `bun run build` (`tsc --noEmit && vite build`) lulus.
 
-## P-094 | 2026-11-26 | Merge main ke IT-kantor & Aktifkan Fallback Login Offline Lokal
-- Status: selesai di lokal (belum di-commit ke branch `IT-kantor`)
+## P-094 (IT-kantor) | 2026-11-26 | Merge main ke IT-kantor & Aktifkan Fallback Login Offline Lokal
+- Status: selesai di lokal
 - Ubah: `src/lib/auth/dummy-accounts.ts` (pulihkan 11 akun `DUMMY_ACCOUNTS` + akun lokal `SUPERADMIN_IT` `kazukirentarou92@gmail.com`, `ROLE_DEFAULT_PASSWORDS`, `authenticateDummyUser`, `registerDeveloperAccount`, dan fallback otomatis di `loginWithServer`/`registerWithServer`), `src/lib/auth/se-management.ts`, `src/lib/auth/developer-user-management.ts`, `tests/developer-user-management.test.ts`
 - Alasan/keputusan: Mengaktifkan pengujian lokal tanpa server backend/DB aktif selama pengembangan di branch `IT-kantor`.
 - Verifikasi: `bun run build` (`tsc --noEmit && vite build`) lulus; `bun test tests/developer-user-management.test.ts` (7 pass, 0 fail).
-- Berikutnya: Matikan/hapus kembali fallback offline sebelum merge ke `main` agar lolos guardrail `totp-2fa-guardrails.test.ts` & `auth-dummy.test.ts`.
-- Catatan: Karena mode offline aktif, `tests/totp-2fa-guardrails.test.ts` dan `tests/auth-dummy.test.ts` akan gagal selama mode lokal ini aktif.
+
+## P-097 | 2026-11-26 | Soft-Selling 4 Pilar pada AI Follow-Up Berkala (/pipeline?tab=FOLLOWUP)
+- Status: selesai di lokal
+- Ubah: `server/wa-nurture.ts` (fix baca `full_name`/`owner_se_name`/`owner_se_email`, memory antar-step anti-pengulangan, konteks persona `lead_ai_analyses` + `getCentralAiKnowledge` + deteksi `unitMentionedInChat` + adaptasi stage `VISITED`, 4 gaya soft-selling `NurtureTone`, `regenerateAllNurtureDraftsForLead`, `getRecentLeadTurnsForNurture`), `server/index.ts` (`/api/nurture/jobs` kembalikan `recentTurns`, `/api/nurture/jobs/generate` dukung `tone`, tambah `/api/nurture/jobs/regenerate-all`), `src/components/pipeline/FollowupScheduleTab.tsx` (tampilkan 1–2 bubble chat terakhir di preview WA, selector Gaya Pesan, & tombol `Regenerate Semua (H0–H14)`)
+- Alasan/keputusan: Menghilangkan kesan template kaku/robotik dan mencegah pengulangan antar-tahap H0–H14, sekaligus memudahkan SE membaca konteks chat terakhir sebelum mengirim atau mengedit draf.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`) & `bun build server/index.ts`
+- Berikutnya: Push ke GitHub & deploy ke `hades`, lalu uji `Regenerate Semua (H0–H14)` di `/pipeline?tab=FOLLOWUP`.
+- Catatan: Draf lama di DB bisa langsung diganti serentak lewat tombol `Regenerate Semua (H0–H14)`.
+
+## P-096 | 2026-11-26 | Halaman Khusus Kelola User (/kelola-user) + CRUD Penuh & Reset Kata Sandi
+- Status: selesai di lokal
+- Ubah: `server/auth.ts` (`updateTenantUser`, `deleteTenantUser`), `server/index.ts` (`PATCH` lengkap termasuk ubah kata sandi/role/email/proyek & `DELETE /api/org/users`), `src/lib/navigation/router.ts` (rute `org_users` -> `/kelola-user`), `src/components/OrgUserManagementPage.tsx` (halaman khusus CRUD penuh + filter 6 role + reset kata sandi), `src/App.tsx` (navigasi sidebar, SM, Admin ke `/kelola-user`)
+- Alasan/keputusan: Mengganti modal sempit menjadi halaman penuh agar manajemen akun (tambah, edit profil/role/proyek, reset kata sandi, aktif/nonaktif, hapus) jauh lebih leluasa.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`) & `bun build server/index.ts`
+- Berikutnya: Push ke GitHub & deploy ke `hades` bila user siap.
+- Catatan: Akun `SUPERADMIN`/`SUPERADMIN_IT` diproteksi agar tidak bisa dihapus atau diubah role-nya oleh role operasional.
+
+## P-095 | 2026-11-26 | Kelola User 6 Role Utama (IT, SM, SE, Owner, Admin, TL) di Sidebar & Pengelompokan Riwayat Aktivitas Tim
+- Status: selesai di lokal
+- Ubah: `server/auth.ts` (`BASIC_ORG_ROLES` = `IT`, `SM`, `SE`, `DIREKSI`, `ADMIN`, `TL`), `src/components/OrgUserManagementModal.tsx` (label & opsi 6 role utama), `src/App.tsx` (tambah menu `Kelola User (6 Role)` di sidebar `MANAJEMEN PERUSAHAAN`), `server/index.ts` (`/api/company/audit-logs` join `app_users` per `tenant_id` + filter `actorRole`/`actorEmail` + `teamMembers`), `src/components/company/CompanyAuditLogsModal.tsx` (auth Bearer token, filter Role & Anggota Tim, mode pengelompokan per Divisi & Anggota Tim)
+- Alasan/keputusan: Sebelumnya tombol `Kelola User (6 Role)` hanya ada di header Dashboard SM/Admin (tidak tampil di menu lain seperti Knowledge Base), daftar role masih memakai `DIGITAL_MARKETING` bukan `IT`, dan `CompanyAuditLogsModal` menampilkan log datar tanpa otentikasi Bearer maupun pengelompokan anggota tim dari `app_users`.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`) & `bun build server/index.ts`
+- Berikutnya: Deploy ke `hades` (`https://developerproperti.giivepro.com`) jika siap agar perubahan lokal tampil di live.
+- Catatan: Semua perubahan ini masih di lokal; live `developerproperti.giivepro.com` masih menjalankan build P-093.
+
+## P-094 | 2026-11-26 | CRUD Lengkap (Create, Read, Update, Delete) Role SE pada F74, F75, F79 & F86
+- Status: selesai di lokal
+- Ubah: `server/index.ts` (perluas `PATCH` & tambah `DELETE` pada `/api/vault/documents`, `/api/kpr/applications`, `/api/referrals`, `/api/complaints` dengan cek kepemilikan SE), `src/components/SecureDocumentVaultPage.tsx` (edit inline dokumen & error handling hapus), `src/components/BankSubmissionWorkflowPage.tsx` (edit nama/WA/unit/tahap KPR + tombol hapus), `src/components/ReferralProgramPage.tsx` (edit inline & tombol hapus referral), `src/components/CustomerComplaintsPage.tsx` (edit inline & tombol hapus tiket DLP)
+- Alasan/keputusan: Sebelumnya `DELETE` belum ada pada `/api/kpr/applications`, `/api/referrals`, dan `/api/complaints`, serta `PATCH` dan UI di keempat modul belum mendukung edit penuh untuk role SE.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`) & `bun build server/index.ts`
+- Berikutnya: Uji CRUD langsung di browser pada role SE (F74, F75, F79, F86).
+- Catatan: Pengajuan KPR berstatus `LEAD_AUTO` akan tersinkronisasi ulang dari `pipeline_leads` saat `GET` jika lead masih berkategori KPR.
 
 ## P-093 | 2026-11-25 | Restrukturisasi Menu Admin Panel IT & Flow 2-Langkah Permission Fitur (6 Role Utama)
 - Status: selesai & live di `https://developerproperti.giivepro.com` (`hades`, commit `fb18193` di `origin/feat/totp-2fa`)

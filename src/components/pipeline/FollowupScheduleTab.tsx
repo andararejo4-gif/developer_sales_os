@@ -34,6 +34,21 @@ interface NurtureJob {
   sent_at?: string | null;
 }
 
+interface RecentChatTurn {
+  direction: string;
+  body: string;
+  createdAt?: string | null;
+}
+
+type NurtureTone = 'santai' | 'value' | 'finansial' | 'singkat';
+
+const TONE_OPTIONS: Array<{ id: NurtureTone; label: string }> = [
+  { id: 'santai', label: 'Santai & Akrab' },
+  { id: 'value', label: 'Story & Value Lokasi' },
+  { id: 'finansial', label: 'Bantu Hitungan' },
+  { id: 'singkat', label: 'Check-in Singkat' },
+];
+
 interface CadenceTemplate {
   step_code: string;
   step_label: string;
@@ -78,6 +93,8 @@ export function FollowupScheduleTab({
   const selectedLead = activeLeads.find((l) => l.id === selectedLeadId) || activeLeads[0] || null;
 
   const [jobs, setJobs] = useState<NurtureJob[]>([]);
+  const [recentTurns, setRecentTurns] = useState<RecentChatTurn[]>([]);
+  const [selectedTone, setSelectedTone] = useState<NurtureTone>('santai');
   const [selectedJobId, setSelectedJobId] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -100,6 +117,7 @@ export function FollowupScheduleTab({
       if (json.ok && Array.isArray(json.data)) {
         const list = json.data as NurtureJob[];
         setJobs(list);
+        setRecentTurns(Array.isArray(json.recentTurns) ? json.recentTurns : []);
         const drafts: Record<string, string> = {};
         const times: Record<string, string> = {};
         for (const j of list) {
@@ -197,15 +215,41 @@ export function FollowupScheduleTab({
       const res = await fetch('/api/nurture/jobs/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId, force: true }),
+        body: JSON.stringify({ jobId, force: true, tone: selectedTone }),
       });
       const json = await res.json();
       if (json.ok && json.job) {
         setEditingDrafts((prev) => ({ ...prev, [jobId]: json.job.draft_message }));
         setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, ...json.job } : j)));
-        setNotice('Rekomendasi pesan baru berhasil dibuat oleh AI.');
+        setNotice('Rekomendasi pesan soft-selling baru berhasil disusun AI.');
       } else {
         setNotice(json.error || 'Gagal menyusun ulang pesan AI.');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRegenerateAll = async () => {
+    if (!selectedLead) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const res = await fetch('/api/nurture/jobs/regenerate-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId: selectedLead.id, tone: selectedTone }),
+      });
+      const json = await res.json();
+      if (json.ok && Array.isArray(json.data)) {
+        const list = json.data as NurtureJob[];
+        setJobs(list);
+        const drafts: Record<string, string> = {};
+        for (const j of list) drafts[j.id] = j.draft_message || '';
+        setEditingDrafts(drafts);
+        setNotice('Seluruh rangkaian follow-up (H0–H14) berhasil disusun ulang berurutan & anti-pengulangan.');
+      } else {
+        setNotice(json.error || 'Gagal menyusun ulang semua tahap.');
       }
     } finally {
       setBusy(false);
@@ -327,6 +371,16 @@ export function FollowupScheduleTab({
               >
                 <Settings2 className="h-3.5 w-3.5" />
                 Pola Jam
+              </button>
+              <button
+                type="button"
+                disabled={busy || loading}
+                onClick={handleRegenerateAll}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-700/30 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
+                title="Susun ulang seluruh rangkaian H0–H14 secara berurutan agar tidak saling mengulang"
+              >
+                <Sparkles className={`h-3.5 w-3.5 ${busy ? 'animate-spin' : ''}`} />
+                Regenerate Semua (H0–H14)
               </button>
             </div>
           </div>
@@ -489,6 +543,34 @@ export function FollowupScheduleTab({
 
               {/* Area Chat WhatsApp Preview */}
               <div className="min-h-[210px] bg-[#EFEAE2] p-4 space-y-3">
+                {recentTurns.length > 0 && (
+                  <div className="space-y-2 pb-2 border-b border-black/10">
+                    <div className="text-center">
+                      <span className="rounded-lg bg-white/75 px-2 py-0.5 text-[10px] font-semibold text-neutral-500">
+                        Konteks Chat Terakhir
+                      </span>
+                    </div>
+                    {recentTurns.slice(-2).map((turn, idx) => {
+                      const isInbound = turn.direction === 'IN';
+                      return (
+                        <div
+                          key={idx}
+                          className={`max-w-[85%] rounded-2xl px-3 py-2 text-[11px] leading-relaxed shadow-2xs ${
+                            isInbound
+                              ? 'mr-auto rounded-tl-xs bg-white text-[#111B21]'
+                              : 'ml-auto rounded-tr-xs bg-[#E7F8E2] text-[#111B21]/85'
+                          }`}
+                        >
+                          <span className="block text-[9px] font-bold uppercase text-neutral-400 mb-0.5">
+                            {isInbound ? selectedLead.full_name : 'SE (Terkirim)'}
+                          </span>
+                          <p className="whitespace-pre-wrap">{turn.body}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <div className="text-center">
                   <span className="rounded-lg bg-white/85 px-2.5 py-1 text-[10px] font-semibold text-neutral-600 shadow-2xs">
                     Jadwal Kirim: {activeTimeLabel} WIB
@@ -525,6 +607,20 @@ export function FollowupScheduleTab({
 
                 {activeJob.status !== 'SENT' && (
                   <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={selectedTone}
+                      onChange={(e) => setSelectedTone(e.target.value as NurtureTone)}
+                      disabled={busy}
+                      className="rounded-xl border border-[#128C7E]/30 bg-white px-2.5 py-2 text-xs font-bold text-[#075E54] cursor-pointer"
+                      title="Pilih gaya soft-selling AI"
+                    >
+                      {TONE_OPTIONS.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          Gaya: {t.label}
+                        </option>
+                      ))}
+                    </select>
+
                     <button
                       type="button"
                       disabled={busy}

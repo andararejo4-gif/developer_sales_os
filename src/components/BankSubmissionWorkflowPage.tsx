@@ -10,6 +10,7 @@ import {
   FileText,
   BadgeCheck,
   Edit3,
+  Trash2,
 } from 'lucide-react';
 import { loadAuthSession } from '../lib/auth/dummy-accounts';
 import type { BankApplicationRecord, BankSubmissionStatus } from '../lib/foundations/r3-r4-contracts';
@@ -109,6 +110,10 @@ export const BankSubmissionWorkflowPage: React.FC<BankSubmissionWorkflowPageProp
   const [notes, setNotes] = useState('');
 
   // Edit inline state
+  const [editApplicantName, setEditApplicantName] = useState('');
+  const [editApplicantPhone, setEditApplicantPhone] = useState('');
+  const [editUnitCode, setEditUnitCode] = useState('');
+  const [editStatus, setEditStatus] = useState<BankSubmissionStatus>('SUBMITTED_TO_BANK');
   const [editBank, setEditBank] = useState<BankApplicationRecord['targetBank']>('Bank BSI');
   const [editPlafond, setEditPlafond] = useState(0);
   const [editAnalyst, setEditAnalyst] = useState('');
@@ -235,6 +240,10 @@ export const BankSubmissionWorkflowPage: React.FC<BankSubmissionWorkflowPageProp
 
   const startEdit = (app: ExtendedBankApp) => {
     setEditingId(app.id);
+    setEditApplicantName(app.applicantName);
+    setEditApplicantPhone(app.applicantPhone || '');
+    setEditUnitCode(app.unitCode);
+    setEditStatus(app.status);
     setEditBank(app.targetBank);
     setEditPlafond(app.plafondAmount);
     setEditAnalyst(app.assignedAnalyst || '');
@@ -242,6 +251,10 @@ export const BankSubmissionWorkflowPage: React.FC<BankSubmissionWorkflowPageProp
   };
 
   const handleSaveEdit = async (id: string) => {
+    if (!editApplicantName.trim() || !editUnitCode.trim()) {
+      showToastMsg('Nama pemohon dan kode unit wajib diisi.');
+      return;
+    }
     try {
       const res = await fetch('/api/kpr/applications', {
         method: 'PATCH',
@@ -249,6 +262,10 @@ export const BankSubmissionWorkflowPage: React.FC<BankSubmissionWorkflowPageProp
         headers: getAuthHeaders(),
         body: JSON.stringify({
           id,
+          applicantName: editApplicantName.trim(),
+          applicantPhone: editApplicantPhone.trim(),
+          unitCode: editUnitCode.trim(),
+          status: editStatus,
           targetBank: editBank,
           plafondAmount: editPlafond,
           assignedAnalyst: editAnalyst,
@@ -260,9 +277,33 @@ export const BankSubmissionWorkflowPage: React.FC<BankSubmissionWorkflowPageProp
         setApplications((prev) => prev.map((a) => (a.id === id ? mapApiApp(json.application) : a)));
         setEditingId(null);
         showToastMsg('Data pengajuan KPR diperbarui.');
+      } else {
+        showToastMsg(json.error || 'Gagal menyimpan perubahan.');
       }
     } catch {
       showToastMsg('Gagal menyimpan perubahan.');
+    }
+  };
+
+  const handleDeleteApp = async (app: ExtendedBankApp) => {
+    if (!window.confirm(`Hapus pengajuan KPR atas nama "${app.applicantName}" (${app.unitCode})?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/kpr/applications?id=${encodeURIComponent(app.id)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok) {
+        setApplications((prev) => prev.filter((a) => a.id !== app.id));
+        showToastMsg(`Pengajuan KPR ${app.applicantName} dihapus.`);
+      } else {
+        showToastMsg(json.error || 'Gagal menghapus pengajuan KPR.');
+      }
+    } catch {
+      showToastMsg('Gagal menghubungi server.');
     }
   };
 
@@ -616,6 +657,14 @@ export const BankSubmissionWorkflowPage: React.FC<BankSubmissionWorkflowPageProp
                         Majukan Tahap <ArrowRight className="size-3.5" />
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteApp(app)}
+                      className="p-1.5 rounded-lg bg-sandstone hover:bg-rose-100 text-warmmuted hover:text-rose-700 cursor-pointer"
+                      title="Hapus Pengajuan KPR"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
                   </div>
                 </div>
 
@@ -627,6 +676,47 @@ export const BankSubmissionWorkflowPage: React.FC<BankSubmissionWorkflowPageProp
 
                 {isEditing && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-warmborder text-xs">
+                    <div>
+                      <label className="font-bold text-espresso block mb-1">Nama Pemohon</label>
+                      <input
+                        type="text"
+                        value={editApplicantName}
+                        onChange={(e) => setEditApplicantName(e.target.value)}
+                        className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-sandstone text-espresso font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bold text-espresso block mb-1">No. WA Pemohon</label>
+                      <input
+                        type="text"
+                        value={editApplicantPhone}
+                        onChange={(e) => setEditApplicantPhone(e.target.value)}
+                        className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-sandstone text-espresso"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bold text-espresso block mb-1">Kode Unit</label>
+                      <input
+                        type="text"
+                        value={editUnitCode}
+                        onChange={(e) => setEditUnitCode(e.target.value)}
+                        className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-sandstone text-espresso font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bold text-espresso block mb-1">Tahap KPR</label>
+                      <select
+                        value={editStatus}
+                        onChange={(e) => setEditStatus(e.target.value as BankSubmissionStatus)}
+                        className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-sandstone text-espresso font-bold"
+                      >
+                        {(Object.keys(STATUS_LABELS) as BankSubmissionStatus[]).map((stKey) => (
+                          <option key={stKey} value={stKey}>
+                            {STATUS_LABELS[stKey].label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <div>
                       <label className="font-bold text-espresso block mb-1">Bank Tujuan</label>
                       <select

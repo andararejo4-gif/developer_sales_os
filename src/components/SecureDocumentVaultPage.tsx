@@ -14,6 +14,7 @@ import {
   XCircle,
   UserCheck,
   FileText,
+  Edit3,
 } from 'lucide-react';
 import { loadAuthSession } from '../lib/auth/dummy-accounts';
 
@@ -122,6 +123,11 @@ export const SecureDocumentVaultPage: React.FC<SecureDocumentVaultPageProps> = (
     { docType: 'KTP', fileName: '', fileSize: '1.0 MB' },
   ]);
   const [selectedBanks, setSelectedBanks] = useState<string[]>(['Bank BSI']);
+  const [editingDocId, setEditingDocId] = useState<string | null>(null);
+  const [editDocType, setEditDocType] = useState<VaultDocument['docType']>('KTP');
+  const [editFileName, setEditFileName] = useState('');
+  const [editUnitInterest, setEditUnitInterest] = useState('');
+  const [editLeadName, setEditLeadName] = useState('');
 
   const canApprove = ['SM', 'ADMIN', 'TL', 'DIREKSI', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(
     userRole
@@ -306,16 +312,68 @@ export const SecureDocumentVaultPage: React.FC<SecureDocumentVaultPageProps> = (
     }
   };
 
+  const startEditDoc = (doc: VaultDocument) => {
+    setEditingDocId(doc.id);
+    setEditDocType(doc.docType);
+    setEditFileName(doc.fileName);
+    setEditUnitInterest(doc.unitInterest === '-' ? '' : doc.unitInterest);
+    setEditLeadName(doc.leadName);
+  };
+
+  const handleSaveEditDoc = async (doc: VaultDocument) => {
+    if (!editFileName.trim()) {
+      showToastMsg('Nama berkas wajib diisi.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/vault/documents', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          id: doc.id,
+          docType: editDocType,
+          fileName: editFileName.trim(),
+          unitInterest: editUnitInterest.trim(),
+          leadName: editLeadName.trim() || doc.leadName,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        showToastMsg(json.error || 'Gagal memperbarui dokumen.');
+        return;
+      }
+      setDocuments((prev) =>
+        prev.map((d) =>
+          d.id === doc.id
+            ? {
+                ...mapApiDoc(json.document),
+                leadName: editLeadName.trim() || d.leadName,
+              }
+            : d
+        )
+      );
+      setEditingDocId(null);
+      showToastMsg(`Dokumen ${editFileName.trim()} diperbarui.`);
+    } catch {
+      showToastMsg('Gagal terhubung ke server.');
+    }
+  };
+
   const handleDeleteDoc = async (doc: VaultDocument) => {
+    if (!window.confirm(`Hapus dokumen "${doc.fileName}" milik ${doc.leadName}?`)) return;
     try {
       const res = await fetch(`/api/vault/documents?id=${encodeURIComponent(doc.id)}`, {
         method: 'DELETE',
         credentials: 'include',
         headers: getAuthHeaders(),
       });
-      if (res.ok) {
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok) {
         setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
         showToastMsg(`Dokumen ${doc.fileName} dihapus.`);
+      } else {
+        showToastMsg(json.error || 'Gagal menghapus dokumen.');
       }
     } catch {
       showToastMsg('Gagal menghapus dokumen.');
@@ -710,8 +768,8 @@ export const SecureDocumentVaultPage: React.FC<SecureDocumentVaultPageProps> = (
               {/* Daftar Dokumen Milik Pengguna Tersebut */}
               <div className="divide-y divide-warmborder">
                 {group.docs.map((doc) => (
+                  <React.Fragment key={doc.id}>
                   <div
-                    key={doc.id}
                     className="p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 hover:bg-sandstone/30"
                   >
                     <div className="space-y-1 min-w-0">
@@ -801,6 +859,17 @@ export const SecureDocumentVaultPage: React.FC<SecureDocumentVaultPageProps> = (
 
                       <button
                         type="button"
+                        onClick={() =>
+                          editingDocId === doc.id ? setEditingDocId(null) : startEditDoc(doc)
+                        }
+                        className="p-1.5 rounded-lg bg-sandstone hover:bg-warmborder text-espresso cursor-pointer"
+                        title="Edit Dokumen"
+                      >
+                        <Edit3 className="size-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => handleDeleteDoc(doc)}
                         className="p-1.5 rounded-lg bg-sandstone hover:bg-rose-100 text-warmmuted hover:text-rose-700 cursor-pointer"
                         title="Hapus Dokumen"
@@ -809,6 +878,62 @@ export const SecureDocumentVaultPage: React.FC<SecureDocumentVaultPageProps> = (
                       </button>
                     </div>
                   </div>
+                  {editingDocId === doc.id && (
+                    <div className="px-4 pb-4 pt-2 bg-sandstone/40 border-t border-warmborder grid grid-cols-1 sm:grid-cols-12 gap-2 items-end text-xs">
+                      <div className="sm:col-span-3">
+                        <label className="font-bold text-espresso block mb-1">Tipe Dokumen</label>
+                        <select
+                          value={editDocType}
+                          onChange={(e) => setEditDocType(e.target.value as VaultDocument['docType'])}
+                          className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-white text-espresso font-bold"
+                        >
+                          <option value="KTP">KTP</option>
+                          <option value="NPWP">NPWP</option>
+                          <option value="SLIP_GAJI">Slip Gaji 3 Bln</option>
+                          <option value="REKENING_KORAN">Rekening Koran 3 Bln</option>
+                          <option value="SURAT_NIKAH">Buku / Surat Nikah</option>
+                          <option value="SPT_TAHUNAN">SPT Tahunan PPh 21</option>
+                        </select>
+                      </div>
+                      <div className="sm:col-span-3">
+                        <label className="font-bold text-espresso block mb-1">Nama Debitur</label>
+                        <input
+                          type="text"
+                          value={editLeadName}
+                          onChange={(e) => setEditLeadName(e.target.value)}
+                          className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-white text-espresso"
+                        />
+                      </div>
+                      <div className="sm:col-span-3">
+                        <label className="font-bold text-espresso block mb-1">Nama Berkas</label>
+                        <input
+                          type="text"
+                          value={editFileName}
+                          onChange={(e) => setEditFileName(e.target.value)}
+                          className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-white text-espresso"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="font-bold text-espresso block mb-1">Unit</label>
+                        <input
+                          type="text"
+                          value={editUnitInterest}
+                          onChange={(e) => setEditUnitInterest(e.target.value)}
+                          className="w-full h-9 px-2.5 rounded-lg border border-warmborder bg-white text-espresso"
+                        />
+                      </div>
+                      <div className="sm:col-span-1 flex justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEditDoc(doc)}
+                          className="h-9 px-3 rounded-lg bg-olive text-white font-bold cursor-pointer"
+                        >
+                          Simpan
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </React.Fragment>
                 ))}
               </div>
             </div>
