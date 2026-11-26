@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PublicHomepageV3 } from './components/v3/PublicHomepageV3';
+import { AddSeModal } from './components/AddSeModal';
+import { loadSeTeamList } from './lib/auth/se-management';
+import { getDeveloperPlan } from './lib/plans/plan-override';
+import { AddDeveloperUserModal } from './components/it/AddDeveloperUserModal';
+import {
+  loadDeveloperUsers,
+  toggleDeveloperUserStatus,
+  type DeveloperTeamUser,
+  IT_MANAGEABLE_ROLES,
+} from './lib/auth/developer-user-management';
 import { MarketResearchViewer } from './components/MarketResearchViewer';
 import { SalesTargetViewer } from './components/SalesTargetViewer';
 import { JalurProyek } from './components/JalurProyek';
@@ -96,12 +106,14 @@ import {
   PhoneCall,
   Plus,
   RefreshCw,
+  Search,
   Download,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
   TrendingUp,
   Users,
+  UserPlus,
   X,
   Lock,
   Share2,
@@ -123,7 +135,6 @@ import {
   PERIODS,
   SCORECARD_DATA,
   SE_LEAD_FEEDBACKS,
-  SE_TEAM_DATA,
   AI_AD_INSIGHTS,
   USERS_BY_ROLE,
   evalStatus,
@@ -131,6 +142,7 @@ import {
   type PeriodKey,
   type ReportItem,
   type RoleKey,
+  type SePerformance,
   type Status,
   type UnitProperty,
 } from './data';
@@ -224,6 +236,41 @@ export default function App() {
     dailyContactTarget: 8,
   };
 
+  // Manajemen Akun SE Inhouse (Hanya untuk SM dan Admin)
+  const [isAddSeModalOpen, setIsAddSeModalOpen] = useState(false);
+  const [seTeamState, setSeTeamState] = useState<SePerformance[]>(() => loadSeTeamList(loadSavedProjectId()));
+
+  useEffect(() => {
+    setSeTeamState(loadSeTeamList(activeProjectId));
+  }, [activeProjectId]);
+
+  // Manajemen Pengguna Tim Developer oleh IT Developer (Tenant Scoped: SE s.d. Direksi)
+  const currentDevCompany = user?.proyek || 'PT Andara Rejo Makmur';
+  const [developerUsersList, setDeveloperUsersList] = useState<DeveloperTeamUser[]>(() =>
+    loadDeveloperUsers(currentDevCompany)
+  );
+  const [isAddDevUserModalOpen, setIsAddDevUserModalOpen] = useState(false);
+  const [itUserRoleFilter, setItUserRoleFilter] = useState<string>('ALL');
+  const [itUserSearchQuery, setItUserSearchQuery] = useState<string>('');
+
+  useEffect(() => {
+    setDeveloperUsersList(loadDeveloperUsers(currentDevCompany));
+  }, [currentDevCompany]);
+
+  const filteredDeveloperUsers = useMemo(() => {
+    return developerUsersList.filter((u) => {
+      const matchRole = itUserRoleFilter === 'ALL' || u.role === itUserRoleFilter;
+      const q = itUserSearchQuery.trim().toLowerCase();
+      const matchSearch =
+        !q ||
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        u.phone.includes(q) ||
+        u.role.toLowerCase().includes(q);
+      return matchRole && matchSearch;
+    });
+  }, [developerUsersList, itUserRoleFilter, itUserSearchQuery]);
+
   const handleSelectProject = (projectId: string) => {
     setActiveProjectId(projectId);
     saveSelectedProjectId(projectId);
@@ -244,6 +291,35 @@ export default function App() {
     const tipe = (fd.get('tipeProyek') as 'Mewah' | 'Menengah' | 'Subsidi') || 'Menengah';
     const lokasi = (fd.get('lokasiProyek') as string)?.trim() || 'Sukoharjo';
     const koordinatGps = (fd.get('koordinatGps') as string)?.trim() || '-7.673872, 110.843978';
+    const cluster1Nama = (fd.get('cluster1Nama') as string)?.trim() || 'Gerbang Utama & Cluster 1';
+    const cluster2Nama = (fd.get('cluster2Nama') as string)?.trim();
+    const cluster2Gps = (fd.get('cluster2Gps') as string)?.trim();
+    const cluster3Nama = (fd.get('cluster3Nama') as string)?.trim();
+    const cluster3Gps = (fd.get('cluster3Gps') as string)?.trim();
+
+    const titikKoordinatList: import('./lib/projects/projects-data').ProjectGpsLocation[] = [
+      {
+        id: 'coord-1',
+        namaCluster: cluster1Nama,
+        koordinat: koordinatGps,
+        isPrimary: true,
+      },
+    ];
+    if (cluster2Nama && cluster2Gps) {
+      titikKoordinatList.push({
+        id: 'coord-2',
+        namaCluster: cluster2Nama,
+        koordinat: cluster2Gps,
+      });
+    }
+    if (cluster3Nama && cluster3Gps) {
+      titikKoordinatList.push({
+        id: 'coord-3',
+        namaCluster: cluster3Nama,
+        koordinat: cluster3Gps,
+      });
+    }
+
     const radiusKm = Number(fd.get('radiusKm')) || 25;
     const totalUnit = Number(fd.get('totalUnit')) || 30;
     const kisaranHarga = (fd.get('kisaranHarga') as string)?.trim() || 'Rp 500 Jt - Rp 800 Jt';
@@ -257,6 +333,7 @@ export default function App() {
       tipe,
       lokasi,
       koordinatGps,
+      titikKoordinatList,
       radiusKm,
       totalUnit,
       kisaranHarga,
@@ -1113,6 +1190,14 @@ export default function App() {
           <>
             <button
               type="button"
+              onClick={() => handleItemClick(() => openDashboardSection('manage-users'))}
+              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-bold text-terracotta bg-terracotta/10 hover:bg-terracotta/20 text-left cursor-pointer"
+            >
+              <Users className="size-4 shrink-0 text-terracotta" />
+              <span>Kelola Personel (SE - Direksi)</span>
+            </button>
+            <button
+              type="button"
               onClick={() => handleItemClick(() => openDashboardSection('db-schema'))}
               className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
             >
@@ -1272,7 +1357,7 @@ export default function App() {
               }`}
             >
               <Lock className="size-4 shrink-0 text-olive" />
-              <span>Dokumen Vault KPR (F74)</span>
+              <span>Dokumen Vault KPR</span>
             </button>
             <button
               type="button"
@@ -1284,7 +1369,7 @@ export default function App() {
               }`}
             >
               <Share2 className="size-4 shrink-0 text-terracotta" />
-              <span>Program Referral (F79)</span>
+              <span>Program Referral</span>
             </button>
             <button
               type="button"
@@ -1296,7 +1381,7 @@ export default function App() {
               }`}
             >
               <Wrench className="size-4 shrink-0 text-warmmuted" />
-              <span>Keluhan &amp; Garansi DLP (F86)</span>
+              <span>Keluhan &amp; Garansi DLP</span>
             </button>
             <button
               type="button"
@@ -1308,7 +1393,7 @@ export default function App() {
               }`}
             >
               <Building2 className="size-4 shrink-0 text-olive" />
-              <span>Alur KPR Bank (F75)</span>
+              <span>Alur KPR Bank</span>
             </button>
           </div>
         )}
@@ -1455,7 +1540,7 @@ export default function App() {
               }`}
             >
               <Lock className="size-4 shrink-0 text-olive" />
-              <span>Dokumen Vault KPR (F74)</span>
+              <span>Dokumen Vault KPR</span>
             </button>
             <button
               type="button"
@@ -1467,7 +1552,7 @@ export default function App() {
               }`}
             >
               <Share2 className="size-4 shrink-0 text-terracotta" />
-              <span>Program Referral (F79)</span>
+              <span>Program Referral</span>
             </button>
             <button
               type="button"
@@ -1479,7 +1564,7 @@ export default function App() {
               }`}
             >
               <Wrench className="size-4 shrink-0 text-warmmuted" />
-              <span>Keluhan &amp; Garansi DLP (F86)</span>
+              <span>Keluhan &amp; Garansi DLP</span>
             </button>
             <button
               type="button"
@@ -1491,7 +1576,7 @@ export default function App() {
               }`}
             >
               <Building2 className="size-4 shrink-0 text-olive" />
-              <span>Alur KPR Bank (F75)</span>
+              <span>Alur KPR Bank</span>
             </button>
             <button
               type="button"
@@ -1503,7 +1588,7 @@ export default function App() {
               }`}
             >
               <TrendingUp className="size-4 shrink-0 text-terracotta" />
-              <span>Control Tower Portofolio (F90)</span>
+              <span>Control Tower Portofolio</span>
             </button>
           </>
         )}
@@ -1969,7 +2054,7 @@ export default function App() {
               userRole={role}
               userProfile={user}
               hideAiGuide={role === 'SE'}
-              planCode="platinum"
+              planCode={getDeveloperPlan('dev-001', 'Platinum').toLowerCase() as 'gold' | 'platinum' | 'diamond'}
               onDataChanged={fetchSeRealDashboard}
               onUpgradeRequest={() => {
                 setViewMode('homepage');
@@ -2887,15 +2972,27 @@ export default function App() {
                     <h2 className="text-lg font-bold text-espresso">Pemantauan Kinerja Tim SE Binaan SM</h2>
                   </div>
                   <p className="text-xs text-warmmuted mt-1">
-                    Supervisi real-time 3 Sales Executive: SLA respons pesan (≤5 menit), pipeline lead, kunjungan lapangan, closing booking, dan rekap scorecard Playbook §6.4.
+                    Supervisi real-time {seTeamState.length} Sales Executive in-house: SLA respons pesan (≤5 menit), pipeline lead, kunjungan lapangan, closing booking, dan rekap scorecard Playbook §6.4.
                   </p>
                 </div>
-                <button
-                  onClick={() => openView('pipeline')}
-                  className="px-4 py-2.5 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center gap-2 hover:bg-espresso/90 cursor-pointer shrink-0 shadow-sm"
-                >
-                  <Users className="size-4 text-amber-400" /> Buka Pipeline &amp; WA AI
-                </button>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {/* HANYA ROLE SM & ADMIN YANG BISA TAMBAH SE - DIREKSI TIDAK DISEDIAKAN */}
+                  {(role === 'SM' || role === 'ADMIN') && (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddSeModalOpen(true)}
+                      className="px-4 py-2.5 rounded-xl bg-terracotta text-white text-xs font-bold flex items-center gap-2 hover:bg-terracotta/90 cursor-pointer shadow-sm"
+                    >
+                      <UserPlus className="size-4" /> + Tambah SE Baru
+                    </button>
+                  )}
+                  <button
+                    onClick={() => openView('pipeline')}
+                    className="px-4 py-2.5 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center gap-2 hover:bg-espresso/90 cursor-pointer shrink-0 shadow-sm"
+                  >
+                    <Users className="size-4 text-amber-400" /> Buka Pipeline &amp; WA AI
+                  </button>
+                </div>
               </div>
 
               {/* SM Pantau Tim SE Table Section */}
@@ -2907,9 +3004,20 @@ export default function App() {
                       Data real-time SE: Waktu respons, lead terancam 72 jam, status laporan cut-off 18.00, dan scorecard.
                     </p>
                   </div>
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-sandstone text-espresso">
-                    Tim 3 SE Aktif
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-sandstone text-espresso">
+                      Tim {seTeamState.length} SE Aktif
+                    </span>
+                    {(role === 'SM' || role === 'ADMIN') && (
+                      <button
+                        type="button"
+                        onClick={() => setIsAddSeModalOpen(true)}
+                        className="text-xs font-bold px-2.5 py-1 rounded-lg bg-terracotta/10 text-terracotta hover:bg-terracotta/20 cursor-pointer flex items-center gap-1"
+                      >
+                        <UserPlus className="size-3.5" /> + SE Baru
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Mobile Card List (< md) */}
@@ -2930,7 +3038,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-warmborder text-sm">
-                      {SE_TEAM_DATA.map((se) => (
+                      {seTeamState.map((se) => (
                         <tr key={se.seId} className="hover:bg-sandstone/40">
                           <td className="py-3 px-5">
                             <span className="font-bold text-espresso">{se.nama}</span>
@@ -3268,6 +3376,20 @@ export default function App() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
+                      type="button"
+                      onClick={() => setIsAddSeModalOpen(true)}
+                      className="px-3.5 py-2 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <UserPlus className="size-3.5" /> + Tambah SE Baru
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openView('kinerja_se')}
+                      className="px-3.5 py-2 rounded-xl bg-olive hover:bg-olive/90 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <Users className="size-3.5" /> Tim SE ({seTeamState.length})
+                    </button>
+                    <button
                       onClick={() => setIsBankAccountsModalOpen(true)}
                       className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-terracotta border border-amber-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
                     >
@@ -3353,6 +3475,159 @@ export default function App() {
           {/* ========================================================================= */}
           {activeView === 'dashboard' && role === 'IT' && (
             <div className="space-y-6">
+              {/* ========================================================================= */}
+              {/* IT DEVELOPER: PUSAT MANAJEMEN PERSONEL TIM (SE s.d. DIREKSI) */}
+              {/* ========================================================================= */}
+              <section id="manage-users" className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm space-y-5">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-warmborder">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-purple-100 text-purple-900 border border-purple-200">
+                        Otoritas IT Developer
+                      </span>
+                      <span className="text-xs text-warmmuted">
+                        Isolasi Tenant: <strong>{currentDevCompany}</strong>
+                      </span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-black text-espresso mt-1 flex items-center gap-2">
+                      <Users className="size-5 text-terracotta" />
+                      <span>Manajemen Personel Tim Developer (SE s.d. Direksi)</span>
+                    </h3>
+                    <p className="text-xs text-warmmuted mt-0.5 max-w-2xl leading-relaxed">
+                      Sebagai IT developer internal, Anda berwenang menerbitkan akun baru untuk seluruh hierarki internal perusahaan Anda—mulai dari <strong>Sales Executive (SE), Team Leader, Sales Manager, Admin, Digital Marketer, hingga Direksi</strong>.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAddDevUserModalOpen(true)}
+                    className="px-4 py-2.5 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-sm shrink-0 transition-colors"
+                  >
+                    <UserPlus className="size-4" />
+                    <span>+ Tambah Akun Personel</span>
+                  </button>
+                </div>
+
+                {/* Filter Tabs & Search */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                    {[
+                      { key: 'ALL', label: `Semua (${developerUsersList.length})` },
+                      { key: 'SE', label: 'SE' },
+                      { key: 'TL', label: 'TL' },
+                      { key: 'SM', label: 'SM' },
+                      { key: 'ADMIN', label: 'Admin' },
+                      { key: 'DIGITAL_MARKETING', label: 'Marketing' },
+                      { key: 'DIREKSI', label: 'Direksi' },
+                    ].map((tab) => (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setItUserRoleFilter(tab.key)}
+                        className={`px-3 py-1.5 rounded-xl font-bold cursor-pointer transition-all ${
+                          itUserRoleFilter === tab.key
+                            ? 'bg-espresso text-white shadow-2xs'
+                            : 'bg-sandstone/50 hover:bg-sandstone text-espresso'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="relative w-full sm:w-64">
+                    <Search className="size-3.5 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={itUserSearchQuery}
+                      onChange={(e) => setItUserSearchQuery(e.target.value)}
+                      placeholder="Cari nama, email, role..."
+                      className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-warmborder text-xs focus:outline-none focus:border-terracotta bg-sandstone/30"
+                    />
+                  </div>
+                </div>
+
+                {/* Users Table */}
+                <div className="overflow-x-auto rounded-xl border border-warmborder">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-sandstone/70 border-b border-warmborder text-[11px] font-bold uppercase tracking-wider text-warmmuted">
+                        <th className="py-3 px-4">Nama Personel</th>
+                        <th className="py-3 px-3">Role / Jabatan</th>
+                        <th className="py-3 px-3">Kontak Login</th>
+                        <th className="py-3 px-3">Penugasan Proyek</th>
+                        <th className="py-3 px-3 text-center">Status</th>
+                        <th className="py-3 px-4 text-right">Aksi IT</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-warmborder">
+                      {filteredDeveloperUsers.map((u) => {
+                        const roleMeta = IT_MANAGEABLE_ROLES.find((r) => r.role === u.role);
+                        const badgeStyle = roleMeta?.badgeColor || 'bg-sandstone text-espresso border-warmborder';
+                        return (
+                          <tr key={u.id} className="hover:bg-sandstone/40 transition-colors">
+                            <td className="py-3 px-4 font-bold text-espresso">
+                              <div className="flex items-center gap-2">
+                                <div className="size-7 rounded-lg bg-espresso text-white flex items-center justify-center font-bold text-[10px]">
+                                  {u.name.slice(0, 2).toUpperCase()}
+                                </div>
+                                <div>
+                                  <span className="block font-bold">{u.name}</span>
+                                  <span className="block text-[10px] text-warmmuted font-normal">
+                                    Dibuat: {new Date(u.createdAt).toLocaleDateString('id-ID')}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeStyle}`}>
+                                {u.role} &middot; {u.roleLabel}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 font-mono text-[11px]">
+                              <span className="block text-espresso font-medium">{u.email}</span>
+                              <span className="block text-emerald-700 text-[10px]">{u.phone}</span>
+                            </td>
+                            <td className="py-3 px-3 text-warmmuted font-medium">
+                              {u.assignedProjectName}
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  toggleDeveloperUserStatus(u.id, currentDevCompany);
+                                  setDeveloperUsersList(loadDeveloperUsers(currentDevCompany));
+                                  setToast(`Status akun ${u.name} diperbarui.`);
+                                }}
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${
+                                  u.status === 'ACTIVE'
+                                    ? 'bg-lime-100 text-olive hover:bg-lime-200'
+                                    : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
+                                }`}
+                              >
+                                {u.status === 'ACTIVE' ? 'Aktif' : 'Nonaktif'}
+                              </button>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setToast(`Kata sandi akun ${u.name} di-reset ke default: Andara${u.role}#2026`);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-sandstone hover:bg-warmborder text-espresso font-bold text-[11px] cursor-pointer transition-colors"
+                                title="Reset kata sandi pengguna"
+                              >
+                                Reset Sandi
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
               {/* Migration Status Cards */}
               <section id="db-schema" className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-warmborder">
@@ -4215,23 +4490,81 @@ export default function App() {
                 <p className="font-extrabold text-espresso uppercase tracking-wider text-[10px] text-terracotta">
                   2. Parameter Acuan (Koordinat GPS, Radius 25km, Katalog, Pricelist)
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                  <div className="sm:col-span-8">
-                    <label className="font-bold text-espresso block mb-1">
-                      Titik Koordinat GPS Gerbang Proyek (Lat, Lng) *
-                    </label>
-                    <div className="relative">
+                <div className="p-3 bg-sandstone/40 border border-warmborder/80 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-espresso text-xs flex items-center gap-1.5">
+                      <MapPin className="size-3.5 text-terracotta" />
+                      <span>Titik Koordinat GPS Multi-Cluster (Bisa &gt; 1 Titik)</span>
+                    </span>
+                    <span className="text-[10px] text-terracotta font-semibold">Mendukung Multi-Cluster</span>
+                  </div>
+
+                  {/* Titik 1 (Primer) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <div className="sm:col-span-5">
+                      <label className="text-[10px] font-bold text-espresso block mb-0.5">Nama Titik / Cluster 1 (Utama) *</label>
+                      <input
+                        name="cluster1Nama"
+                        defaultValue="Gerbang Utama & Cluster 1"
+                        placeholder="Contoh: Gerbang & Cluster A"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder text-espresso text-xs"
+                      />
+                    </div>
+                    <div className="sm:col-span-7">
+                      <label className="text-[10px] font-bold text-espresso block mb-0.5">Koordinat GPS Titik 1 (Lat, Lng) *</label>
                       <input
                         required
                         name="koordinatGps"
                         defaultValue="-7.673872, 110.843978"
                         placeholder="-7.673872, 110.843978"
-                        className="w-full pl-8 pr-3 py-2 rounded-xl border border-warmborder text-espresso focus:outline-none focus:border-terracotta font-mono text-[11px]"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder text-espresso font-mono text-[11px]"
                       />
-                      <MapPin className="size-4 text-terracotta absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
                   </div>
-                  <div className="sm:col-span-4">
+
+                  {/* Titik 2 (Opsional) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <div className="sm:col-span-5">
+                      <label className="text-[10px] font-medium text-warmmuted block mb-0.5">Nama Cluster 2 (Opsional)</label>
+                      <input
+                        name="cluster2Nama"
+                        placeholder="Contoh: Cluster Osaka (Tahap 2)"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder text-espresso text-xs"
+                      />
+                    </div>
+                    <div className="sm:col-span-7">
+                      <label className="text-[10px] font-medium text-warmmuted block mb-0.5">Koordinat GPS Cluster 2 (Opsional)</label>
+                      <input
+                        name="cluster2Gps"
+                        placeholder="-7.674510, 110.844230"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder text-espresso font-mono text-[11px]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Titik 3 (Opsional) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <div className="sm:col-span-5">
+                      <label className="text-[10px] font-medium text-warmmuted block mb-0.5">Nama Cluster 3 (Opsional)</label>
+                      <input
+                        name="cluster3Nama"
+                        placeholder="Contoh: Cluster Tokyo (Tahap 3)"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder text-espresso text-xs"
+                      />
+                    </div>
+                    <div className="sm:col-span-7">
+                      <label className="text-[10px] font-medium text-warmmuted block mb-0.5">Koordinat GPS Cluster 3 (Opsional)</label>
+                      <input
+                        name="cluster3Gps"
+                        placeholder="-7.675200, 110.845100"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder text-espresso font-mono text-[11px]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                  <div className="sm:col-span-12">
                     <label className="font-bold text-espresso block mb-1">Radius Riset Pasar</label>
                     <input
                       name="radiusKm"
@@ -4240,7 +4573,7 @@ export default function App() {
                       readOnly
                       className="w-full px-3 py-2 rounded-xl border border-warmborder bg-sandstone/70 text-espresso font-semibold"
                     />
-                    <span className="text-[10px] text-warmmuted">Standar cincin radius 25km</span>
+                    <span className="text-[10px] text-warmmuted">Standar cincin radius 25km dari koordinat titik acuan proyek</span>
                   </div>
                 </div>
 
@@ -4410,6 +4743,30 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Modal Tambah SE Baru (Otoritas SM & Admin) */}
+      <AddSeModal
+        isOpen={isAddSeModalOpen}
+        onClose={() => setIsAddSeModalOpen(false)}
+        onSuccess={(nama) => {
+          setSeTeamState(loadSeTeamList(activeProjectId));
+          setToast(`Akun SE ${nama} berhasil dibuat & aktif. Password default: AndaraSE#2026`);
+        }}
+        projectId={activeProjectId}
+      />
+
+      {/* Modal Tambah Pengguna Developer (Otoritas IT Developer: SE s.d. Direksi) */}
+      <AddDeveloperUserModal
+        isOpen={isAddDevUserModalOpen}
+        onClose={() => setIsAddDevUserModalOpen(false)}
+        onSuccess={(newUser) => {
+          setDeveloperUsersList(loadDeveloperUsers(currentDevCompany));
+          setToast(`Akun ${newUser.role} (${newUser.name}) berhasil diterbitkan untuk ${currentDevCompany}.`);
+        }}
+        developerCompany={currentDevCompany}
+        projectOptions={projects}
+        itUserName={user.name}
+      />
 
       {/* Floating Toast Notification */}
       {toast && (

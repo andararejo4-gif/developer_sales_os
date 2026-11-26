@@ -6,14 +6,20 @@ import {
   createMfaChallenge,
   verifyMfaChallenge,
 } from '../src/lib/auth/dummy-accounts';
+import {
+  addNewSeInhouse,
+  loadSeTeamList,
+  saveOnboardingProfile,
+  loadOnboardingProfile,
+} from '../src/lib/auth/se-management';
 
 describe('Dummy Auth Per Role', () => {
-  it('memiliki 9 akun dummy unik untuk seluruh role (7 developer + 2 platform superadmin)', () => {
-    expect(DUMMY_ACCOUNTS.length).toBe(9);
+  it('memiliki 11 akun dummy unik untuk seluruh role (7 developer + 2 platform superadmin + 2 mitra eksternal)', () => {
+    expect(DUMMY_ACCOUNTS.length).toBe(11);
     const roles = new Set(DUMMY_ACCOUNTS.map((a) => a.role));
     const emails = new Set(DUMMY_ACCOUNTS.map((a) => a.email.toLowerCase()));
-    expect(roles.size).toBe(9);
-    expect(emails.size).toBe(9);
+    expect(roles.size).toBe(11);
+    expect(emails.size).toBe(11);
   });
 
   it('berhasil login untuk setiap akun dummy dengan kredensial valid', () => {
@@ -65,6 +71,82 @@ describe('Dummy Auth Per Role', () => {
     if (loginRes.ok) {
       expect(loginRes.session.role).toBe('DIREKSI');
     }
+  });
+
+  it('mendukung pendaftaran oleh staf/karyawan (SM/Admin) dan otomatis assign role yang dipilih', () => {
+    const smSignup = {
+      companyName: 'PT Cipta Graha Mandiri',
+      name: 'Fajar SM Operasional',
+      email: 'fajar.sm@ciptagraha.com',
+      password: 'CiptaGraha#2026',
+      phone: '081211112222',
+      role: 'SM' as const,
+    };
+
+    const res = registerDeveloperAccount(smSignup);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.session.role).toBe('SM');
+      expect(res.session.name).toBe('Fajar SM Operasional');
+    }
+
+    const loginRes = authenticateDummyUser('fajar.sm@ciptagraha.com', 'CiptaGraha#2026');
+    expect(loginRes.ok).toBe(true);
+    if (loginRes.ok) {
+      expect(loginRes.session.role).toBe('SM');
+    }
+  });
+
+  describe('Manajemen SE Inhouse oleh SM/Admin & Kuesioner Developer', () => {
+    it('berhasil menambahkan SE inhouse baru dan mendaftarkan kredensial login akun SE', () => {
+      const addRes = addNewSeInhouse({
+        nama: 'Rian Firmansyah',
+        email: 'rian.firmansyah@andara.co.id',
+        noWa: '081299998888',
+        password: 'RianPassword#2026',
+        zonaHariIni: 'Zona C Perbankan',
+        targetNetSales: 3,
+        projectId: 'the-park-sukoharjo',
+      });
+
+      expect(addRes.ok).toBe(true);
+      expect(addRes.se.nama).toBe('Rian Firmansyah');
+      expect(addRes.se.targetNetSales).toBe(3);
+
+      const seList = loadSeTeamList('the-park-sukoharjo');
+      expect(seList.some((s) => s.nama === 'Rian Firmansyah')).toBe(true);
+
+      const loginSe = authenticateDummyUser('rian.firmansyah@andara.co.id', 'RianPassword#2026');
+      expect(loginSe.ok).toBe(true);
+      if (loginSe.ok) {
+        expect(loginSe.session.role).toBe('SE');
+        expect(loginSe.session.name).toBe('Rian Firmansyah');
+      }
+    });
+
+    it('berhasil menyimpan profil kuesioner onboarding developer', () => {
+      saveOnboardingProfile({
+        companyName: 'PT Mitra Megah Perkasa',
+        applicantName: 'Deni Sales Manager',
+        applicantRole: 'SM',
+        directorName: 'Bpk. Hartono',
+        email: 'deni@mitramegah.com',
+        phone: '081300001111',
+        hasInternalSales: true,
+        seCountEstimate: 5,
+        hasMarketingTeam: true,
+        useExternalBrokers: true,
+        activeProjectsCount: 2,
+        selectedPlan: 'GROWTH',
+        registeredAt: new Date().toISOString(),
+      });
+
+      const profile = loadOnboardingProfile();
+      expect(profile).not.toBeNull();
+      expect(profile?.applicantRole).toBe('SM');
+      expect(profile?.directorName).toBe('Bpk. Hartono');
+      expect(profile?.seCountEstimate).toBe(5);
+    });
   });
 
   describe('Multi-Factor Authentication (MFA) untuk Seluruh Akun', () => {

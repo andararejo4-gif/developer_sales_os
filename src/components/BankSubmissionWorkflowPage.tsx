@@ -196,7 +196,7 @@ export const BankSubmissionWorkflowPage: React.FC<BankSubmissionWorkflowPageProp
         <div className="pt-3 border-t border-warmborder/60 text-xs text-warmmuted flex items-start gap-2">
           <BadgeCheck className="size-4 text-olive shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            <strong className="text-espresso">Kesiapan Integrasi API Bank:</strong> Modul ini terhubung dengan Secure Document Vault (F74) dan siap disambungkan ke API Host-to-Host Bank BSI, BTN, dan Mandiri saat endpoint produksi aktif.
+            <strong className="text-espresso">Kesiapan Integrasi API Bank:</strong> Modul ini terhubung dengan Secure Document Vault dan siap disambungkan ke API Host-to-Host Bank BSI, BTN, dan Mandiri saat endpoint produksi aktif.
           </p>
         </div>
       </div>

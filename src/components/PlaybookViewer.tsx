@@ -252,7 +252,7 @@ export function PlaybookViewer({
                 { key: 'bant', label: 'Kualifikasi BANT' },
                 { key: 'kpi', label: 'Matriks KPI' },
                 { key: 'funnel', label: 'Reverse Funnel' },
-                { key: 'roleplay', label: 'Latihan & Sertifikasi SE (F65)' },
+                { key: 'roleplay', label: 'Latihan & Sertifikasi SE' },
               ] as const
             ).map((t) => (
               <button

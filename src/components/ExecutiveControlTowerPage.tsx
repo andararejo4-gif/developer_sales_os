@@ -78,7 +78,7 @@ export const ExecutiveControlTowerPage: React.FC<ExecutiveControlTowerPageProps>
                 </span>
               </div>
               <p className="text-xs text-warmmuted mt-0.5">
-                Konsolidasi Seluruh Proyek &middot; Cashflow Real-Time &middot; Mitigasi Pembatalan (F78)
+                Konsolidasi Seluruh Proyek &middot; Cashflow Real-Time &middot; Mitigasi Pembatalan Konsumen
               </p>
             </div>
           </div>
@@ -125,7 +125,7 @@ export const ExecutiveControlTowerPage: React.FC<ExecutiveControlTowerPageProps>
           </span>
         </div>
         <div className="bg-white border border-warmborder rounded-xl p-4">
-          <span className="text-[11px] text-warmmuted block">Rata-rata Risiko Batal (F78)</span>
+          <span className="text-[11px] text-warmmuted block">Rata-rata Risiko Batal</span>
           <span className="text-xl font-bold text-terracotta mt-1 block tabular-nums">
             5.5% <span className="text-xs font-normal text-olive font-medium">(Terkendali)</span>
           </span>
@@ -196,7 +196,7 @@ export const ExecutiveControlTowerPage: React.FC<ExecutiveControlTowerPageProps>
                         )}
                       </div>
                       <div className="text-[10px] text-warmmuted mt-0.5">
-                        Mitigasi KPR alternatif (F78)
+                        Mitigasi KPR alternatif
                       </div>
                     </td>
                     <td className="py-3 px-4 text-right">

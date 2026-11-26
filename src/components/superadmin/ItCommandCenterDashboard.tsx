@@ -15,8 +15,19 @@ import {
   CheckCircle2,
   UserCheck,
   Zap,
+  Sparkles,
+  X,
+  RefreshCcw,
 } from 'lucide-react';
 import type { RoleKey } from '../../data';
+import {
+  loadDeveloperPlanOverrides,
+  setDeveloperPlanOverride,
+  removeDeveloperPlanOverride,
+  PLAN_TIER_DETAILS,
+  type PlanTier,
+  type DeveloperPlanOverride,
+} from '../../lib/plans/plan-override';
 import {
   saveAuthSession,
   saveImpersonatorBackup,
@@ -268,9 +279,67 @@ export function ItCommandCenterDashboard({
   const [formPhone, setFormPhone] = useState('');
   const [formRole, setFormRole] = useState<RoleKey>('SE');
 
+  // State Override Paket Langganan untuk IT Internal
+  const [overrides, setOverrides] = useState<Record<string, DeveloperPlanOverride>>(() => loadDeveloperPlanOverrides());
+  const [overrideModalDev, setOverrideModalDev] = useState<DeveloperHierarchyItem | null>(null);
+  const [selectedTier, setSelectedTier] = useState<PlanTier>('Diamond');
+  const [overrideReason, setOverrideReason] = useState<string>('Uji coba fitur enterprise & modul AI');
+  const [overrideValidity, setOverrideValidity] = useState<string>('30 Hari');
+
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const openPlanOverrideModal = (dev: DeveloperHierarchyItem) => {
+    const existing = overrides[dev.id];
+    setOverrideModalDev(dev);
+    setSelectedTier(existing ? existing.overriddenPlan : dev.plan);
+    setOverrideReason(existing?.reason || 'Kebutuhan uji coba fitur & eskalasi teknis IT');
+    setOverrideValidity(existing?.validUntil || '30 Hari');
+  };
+
+  const handleSavePlanOverride = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!overrideModalDev) return;
+
+    const newOverride: DeveloperPlanOverride = {
+      developerId: overrideModalDev.id,
+      companyName: overrideModalDev.companyName,
+      originalPlan: overrideModalDev.plan,
+      overriddenPlan: selectedTier,
+      overriddenAt: new Date().toISOString(),
+      overriddenBy: 'Tim IT Internal (SUPERADMIN_IT)',
+      reason: overrideReason.trim() || 'Override paket oleh IT',
+      validUntil: overrideValidity,
+    };
+
+    setDeveloperPlanOverride(newOverride);
+    const updated = loadDeveloperPlanOverrides();
+    setOverrides(updated);
+
+    setHierarchyData((prev) =>
+      prev.map((d) => (d.id === overrideModalDev.id ? { ...d, plan: selectedTier } : d))
+    );
+
+    triggerToast(`Paket ${overrideModalDev.companyName} berhasil di-override ke ${selectedTier}.`);
+    setOverrideModalDev(null);
+  };
+
+  const handleResetPlanOverride = (devId: string) => {
+    removeDeveloperPlanOverride(devId);
+    const updated = loadDeveloperPlanOverrides();
+    setOverrides(updated);
+
+    const originalDev = INITIAL_HIERARCHY_DATA.find((d) => d.id === devId);
+    if (originalDev) {
+      setHierarchyData((prev) =>
+        prev.map((d) => (d.id === devId ? { ...d, plan: originalDev.plan } : d))
+      );
+    }
+
+    triggerToast(`Override paket untuk developer ini telah di-reset ke paket awal.`);
+    setOverrideModalDev(null);
   };
 
   // Impersonate / Login Sebagai Akun Ini untuk Membantu Masalah Teknis
@@ -581,9 +650,22 @@ export function ItCommandCenterDashboard({
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <strong className="text-sm font-black text-espresso">{dev.companyName}</strong>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-900 border border-purple-200">
-                          {dev.plan}
-                        </span>
+                        {(() => {
+                          const override = overrides[dev.id];
+                          const effectivePlan = override ? override.overriddenPlan : dev.plan;
+                          const tierMeta = PLAN_TIER_DETAILS[effectivePlan] || PLAN_TIER_DETAILS.Platinum;
+                          return (
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${tierMeta.color} flex items-center gap-1 shadow-2xs`}>
+                              <Sparkles className="size-3" />
+                              <span>{effectivePlan}</span>
+                              {override && (
+                                <span className="bg-espresso text-amber-300 px-1.5 py-0.2 rounded text-[8px] font-black tracking-normal ml-0.5">
+                                  OVERRIDE IT
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })()}
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
                           {dev.status}
                         </span>
@@ -599,6 +681,15 @@ export function ItCommandCenterDashboard({
 
                   {/* Quick IT Helper Actions on Developer */}
                   <div className="flex items-center gap-2 flex-wrap self-end md:self-center">
+                    <button
+                      type="button"
+                      onClick={() => openPlanOverrideModal(dev)}
+                      className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-950 font-bold text-[11px] flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                      title="Override paket Gold, Platinum, atau Diamond untuk developer ini"
+                    >
+                      <Zap className="size-3.5 text-purple-600" />
+                      <span>Override Paket</span>
+                    </button>
                     {dev.waGatewayStatus === 'PAIRING_NEEDED' ? (
                       <button
                         type="button"
@@ -796,6 +887,158 @@ export function ItCommandCenterDashboard({
           })}
         </div>
       </div>
+
+      {/* MODAL OVERRIDE PAKET DEVELOPER (KHUSUS IT INTERNAL) */}
+      {overrideModalDev && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-espresso/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-lg bg-white border border-warmborder rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-5 border-b border-warmborder bg-sandstone/40 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="size-9 rounded-xl bg-purple-100 border border-purple-200 flex items-center justify-center text-purple-700">
+                  <Zap className="size-4.5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-espresso">Override Paket Langganan Developer</h3>
+                  <p className="text-[11px] text-warmmuted">Otoritas Tim IT: Penyesuaian paket Gold, Platinum, atau Diamond</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOverrideModalDev(null)}
+                className="size-8 rounded-xl hover:bg-sandstone text-warmmuted hover:text-espresso flex items-center justify-center cursor-pointer"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePlanOverride} className="p-6 space-y-4 overflow-y-auto text-xs">
+              {/* Info Developer Target */}
+              <div className="p-3.5 rounded-2xl bg-sandstone/50 border border-warmborder flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-warmmuted uppercase">Developer Target:</span>
+                  <h4 className="text-sm font-bold text-espresso">{overrideModalDev.companyName}</h4>
+                  <p className="text-[11px] text-warmmuted">
+                    Paket Kontrak Asli: <strong className="text-espresso">{overrideModalDev.plan}</strong>
+                  </p>
+                </div>
+                {overrides[overrideModalDev.id] && (
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300">
+                    Status: Sedang di-Override
+                  </span>
+                )}
+              </div>
+
+              {/* Pilihan Paket Gold / Platinum / Diamond */}
+              <div>
+                <label className="block text-xs font-bold text-espresso mb-2">
+                  Pilih Paket yang Diberikan (Override Tier) *
+                </label>
+                <div className="grid grid-cols-1 gap-2.5">
+                  {(['Gold', 'Platinum', 'Diamond'] as PlanTier[]).map((tier) => {
+                    const meta = PLAN_TIER_DETAILS[tier];
+                    const isSelected = selectedTier === tier;
+                    return (
+                      <div
+                        key={tier}
+                        onClick={() => setSelectedTier(tier)}
+                        className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                          isSelected
+                            ? `bg-purple-50/70 ${meta.border} ring-2 ring-purple-500/30 shadow-xs`
+                            : 'bg-white border-warmborder hover:bg-sandstone/40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="planTier"
+                              checked={isSelected}
+                              onChange={() => setSelectedTier(tier)}
+                              className="size-4 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                            />
+                            <span className="font-extrabold text-espresso text-sm">{meta.badgeLabel}</span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-sandstone text-espresso">
+                            {meta.featureCount} Fitur Terbuka
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-warmmuted pl-6">{meta.description}</p>
+                        <div className="flex items-center gap-4 text-[10px] font-semibold text-warmmuted pl-6 mt-1.5">
+                          <span>Maks {meta.maxProjects} Proyek</span>
+                          <span>&middot;</span>
+                          <span>Maks {meta.maxUsers} Tim Sales</span>
+                          <span>&middot;</span>
+                          <span>{tier === 'Gold' ? 'Tanpa AI Guide' : 'AI Activity Guide Aktif'}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Alasan Override */}
+              <div>
+                <label className="block text-xs font-bold text-espresso mb-1">Alasan / Catatan Override IT *</label>
+                <input
+                  type="text"
+                  required
+                  value={overrideReason}
+                  onChange={(e) => setOverrideReason(e.target.value)}
+                  placeholder="Contoh: Demo fitur AI Platinum ke Direksi, atau uji coba Enterprise Diamond"
+                  className="w-full px-3 py-2 rounded-xl border border-warmborder text-xs focus:outline-none focus:border-terracotta bg-sandstone/30"
+                />
+              </div>
+
+              {/* Masa Berlaku Override */}
+              <div>
+                <label className="block text-xs font-bold text-espresso mb-1">Masa Berlaku Override</label>
+                <select
+                  value={overrideValidity}
+                  onChange={(e) => setOverrideValidity(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-warmborder text-xs font-semibold bg-white cursor-pointer"
+                >
+                  <option value="14 Hari">14 Hari (Uji Coba Singkat)</option>
+                  <option value="30 Hari">30 Hari (Standar Demo / POC)</option>
+                  <option value="90 Hari">90 Hari (1 Kuartal Operasional)</option>
+                  <option value="Permanen">Permanen (Kemitraan Khusus Internal)</option>
+                </select>
+              </div>
+
+              {/* Tombol Aksi */}
+              <div className="pt-3 border-t border-warmborder flex items-center justify-between gap-2">
+                <div>
+                  {overrides[overrideModalDev.id] && (
+                    <button
+                      type="button"
+                      onClick={() => handleResetPlanOverride(overrideModalDev.id)}
+                      className="px-3.5 py-2 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                    >
+                      <RefreshCcw className="size-3.5" />
+                      <span>Kembalikan ke Paket Asli</span>
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOverrideModalDev(null)}
+                    className="px-4 py-2 rounded-xl border border-warmborder text-xs font-bold text-warmmuted hover:bg-sandstone cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-extrabold shadow-md flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Zap className="size-3.5" />
+                    <span>Terapkan Override Paket</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL EDIT / TAMBAH USER TIM SALES DEVELOPER */}
       {editingUser && (

@@ -3,6 +3,7 @@ import { USERS_BY_ROLE, type RoleKey, type UserProfile } from '../../data';
 export interface DummyAccount {
   role: RoleKey;
   email: string;
+  password?: string;
   label: string;
   profile: UserProfile;
 }
@@ -89,6 +90,7 @@ export function verifyMfaChallenge(
     role: challenge.role,
     email: challenge.email,
     name: challenge.name,
+    token: 'mock-offline-token',
     loggedInAt: new Date().toISOString(),
     mfaVerified: true,
     mfaMethod: 'WHATSAPP_OTP',
@@ -129,6 +131,7 @@ export function registerDeveloperAccount(data: {
   email: string;
   password: string;
   phone: string;
+  role?: RoleKey;
 }): { ok: true; session: AuthSession } | { ok: false; error: string } {
   const normEmail = data.email.trim().toLowerCase();
   if (!normEmail || !data.password || !data.companyName.trim()) {
@@ -140,13 +143,15 @@ export function registerDeveloperAccount(data: {
     return { ok: false, error: 'Email ini sudah terdaftar. Silakan pilih tab Masuk.' };
   }
 
+  const assignedRole: RoleKey = data.role || 'DIREKSI';
+
   const newUser: RegisteredUser = {
     companyName: data.companyName.trim(),
     name: data.name.trim() || 'Direktur Developer',
     email: normEmail,
     password: data.password,
     phone: data.phone.trim(),
-    role: 'DIREKSI',
+    role: assignedRole,
     registeredAt: new Date().toISOString(),
   };
 
@@ -160,9 +165,10 @@ export function registerDeveloperAccount(data: {
   }
 
   const session: AuthSession = {
-    role: 'DIREKSI',
+    role: assignedRole,
     email: newUser.email,
     name: newUser.name,
+    token: 'mock-offline-token',
     loggedInAt: new Date().toISOString(),
   };
 
@@ -171,19 +177,38 @@ export function registerDeveloperAccount(data: {
 }
 
 /**
+ * Kata sandi default akun dummy untuk pengujian lokal.
+ */
+export const ROLE_DEFAULT_PASSWORDS: Record<RoleKey, string> = {
+  SE: 'AndaraSE#2026',
+  TL: 'AndaraTL#2026',
+  SM: 'AndaraSM#2026',
+  DIREKSI: 'AndaraDireksi#2026',
+  ADMIN: 'AndaraAdmin#2026',
+  IT: 'AndaraIT#2026',
+  DIGITAL_MARKETING: 'AndaraMkt#2026',
+  SUPERADMIN: 'DevosOwner#2026',
+  SUPERADMIN_IT: 'DevosIT#2026',
+  REFERRAL_PARTNER: 'MitraReferral#2026',
+  SALES_PARTNER: 'MitraSales#2026',
+};
+
+/**
  * Kredensial akun dummy per role untuk simulasi login Developer Sales OS.
  * Email diselaraskan dengan USERS_BY_ROLE di src/data.ts.
  */
 export const DUMMY_ACCOUNTS: DummyAccount[] = [
-  { role: 'SE', email: USERS_BY_ROLE.SE.email, label: 'Sales Executive (SE)', profile: USERS_BY_ROLE.SE },
-  { role: 'TL', email: USERS_BY_ROLE.TL.email, label: 'Team Leader (TL)', profile: USERS_BY_ROLE.TL },
-  { role: 'SM', email: USERS_BY_ROLE.SM.email, label: 'Sales Manager (SM)', profile: USERS_BY_ROLE.SM },
-  { role: 'DIREKSI', email: USERS_BY_ROLE.DIREKSI.email, label: 'Direksi Developer Properti', profile: USERS_BY_ROLE.DIREKSI },
-  { role: 'ADMIN', email: USERS_BY_ROLE.ADMIN.email, label: 'Admin Sales Developer', profile: USERS_BY_ROLE.ADMIN },
-  { role: 'IT', email: USERS_BY_ROLE.IT.email, label: 'IT & System Developer', profile: USERS_BY_ROLE.IT },
-  { role: 'DIGITAL_MARKETING', email: USERS_BY_ROLE.DIGITAL_MARKETING.email, label: 'Digital Marketer', profile: USERS_BY_ROLE.DIGITAL_MARKETING },
-  { role: 'SUPERADMIN', email: USERS_BY_ROLE.SUPERADMIN.email, label: 'Direksi Pemilik Developer Sales OS', profile: USERS_BY_ROLE.SUPERADMIN },
-  { role: 'SUPERADMIN_IT', email: USERS_BY_ROLE.SUPERADMIN_IT.email, label: 'Tim IT Internal Developer Sales OS', profile: USERS_BY_ROLE.SUPERADMIN_IT },
+  { role: 'SE', email: USERS_BY_ROLE.SE.email, password: ROLE_DEFAULT_PASSWORDS.SE, label: 'Sales Executive (SE)', profile: USERS_BY_ROLE.SE },
+  { role: 'TL', email: USERS_BY_ROLE.TL.email, password: ROLE_DEFAULT_PASSWORDS.TL, label: 'Team Leader (TL)', profile: USERS_BY_ROLE.TL },
+  { role: 'SM', email: USERS_BY_ROLE.SM.email, password: ROLE_DEFAULT_PASSWORDS.SM, label: 'Sales Manager (SM)', profile: USERS_BY_ROLE.SM },
+  { role: 'DIREKSI', email: USERS_BY_ROLE.DIREKSI.email, password: ROLE_DEFAULT_PASSWORDS.DIREKSI, label: 'Direksi Developer Properti', profile: USERS_BY_ROLE.DIREKSI },
+  { role: 'ADMIN', email: USERS_BY_ROLE.ADMIN.email, password: ROLE_DEFAULT_PASSWORDS.ADMIN, label: 'Admin Sales Developer', profile: USERS_BY_ROLE.ADMIN },
+  { role: 'IT', email: USERS_BY_ROLE.IT.email, password: ROLE_DEFAULT_PASSWORDS.IT, label: 'IT & System Developer', profile: USERS_BY_ROLE.IT },
+  { role: 'DIGITAL_MARKETING', email: USERS_BY_ROLE.DIGITAL_MARKETING.email, password: ROLE_DEFAULT_PASSWORDS.DIGITAL_MARKETING, label: 'Digital Marketer', profile: USERS_BY_ROLE.DIGITAL_MARKETING },
+  { role: 'SUPERADMIN', email: USERS_BY_ROLE.SUPERADMIN.email, password: ROLE_DEFAULT_PASSWORDS.SUPERADMIN, label: 'Direksi Pemilik Developer Sales OS', profile: USERS_BY_ROLE.SUPERADMIN },
+  { role: 'SUPERADMIN_IT', email: USERS_BY_ROLE.SUPERADMIN_IT.email, password: ROLE_DEFAULT_PASSWORDS.SUPERADMIN_IT, label: 'Tim IT Internal Developer Sales OS', profile: USERS_BY_ROLE.SUPERADMIN_IT },
+  { role: 'REFERRAL_PARTNER', email: USERS_BY_ROLE.REFERRAL_PARTNER.email, password: ROLE_DEFAULT_PASSWORDS.REFERRAL_PARTNER, label: 'Referral Partner (Konsumen)', profile: USERS_BY_ROLE.REFERRAL_PARTNER },
+  { role: 'SALES_PARTNER', email: USERS_BY_ROLE.SALES_PARTNER.email, password: ROLE_DEFAULT_PASSWORDS.SALES_PARTNER, label: 'Sales Partner (Agen)', profile: USERS_BY_ROLE.SALES_PARTNER },
 ];
 
 export async function loginWithServer(
@@ -214,7 +239,16 @@ export async function loginWithServer(
       },
     };
   } catch {
-    return { ok: false, error: 'Tidak dapat terhubung ke server autentikasi.' };
+    // Fallback otomatis ke autentikasi lokal dummy jika server backend belum berjalan
+    const localAuth = authenticateDummyUser(email, password);
+    if (!localAuth.ok) {
+      return { ok: false, error: localAuth.error };
+    }
+    const challenge = createMfaChallenge(email);
+    if (!challenge) {
+      return { ok: false, error: 'Gagal membuat sesi verifikasi MFA.' };
+    }
+    return { ok: true, challenge };
   }
 }
 
@@ -224,6 +258,7 @@ export async function registerWithServer(data: {
   email: string;
   phone: string;
   password: string;
+  role?: RoleKey;
 }): Promise<{ ok: true; challenge: MfaChallenge } | { ok: false; error: string }> {
   try {
     const res = await fetch('/api/auth/register', {
@@ -249,7 +284,16 @@ export async function registerWithServer(data: {
       },
     };
   } catch {
-    return { ok: false, error: 'Tidak dapat terhubung ke server autentikasi.' };
+    // Fallback otomatis ke registrasi lokal jika server backend belum berjalan
+    const localReg = registerDeveloperAccount(data);
+    if (!localReg.ok) {
+      return { ok: false, error: localReg.error };
+    }
+    const challenge = createMfaChallenge(data.email);
+    if (!challenge) {
+      return { ok: false, error: 'Gagal membuat sesi verifikasi MFA.' };
+    }
+    return { ok: true, challenge };
   }
 }
 
@@ -271,7 +315,8 @@ export async function verifyMfaWithServer(
     saveAuthSession(data.session as AuthSession);
     return { ok: true, session: data.session as AuthSession };
   } catch {
-    return { ok: false, error: 'Tidak dapat memverifikasi OTP ke server.' };
+    // Fallback otomatis ke verifikasi MFA lokal jika server backend belum berjalan
+    return verifyMfaChallenge(challengeId, code);
   }
 }
 
@@ -295,9 +340,44 @@ export function authenticateDummyUser(
   if (!normalizedEmail || !password) {
     return { ok: false, error: 'Email dan kata sandi wajib diisi.' };
   }
+
+  // 1. Cek akun dummy bawaan sistem
+  const dummyMatch = DUMMY_ACCOUNTS.find(
+    (acc) => acc.email.toLowerCase() === normalizedEmail && acc.password === password
+  );
+
+  if (dummyMatch) {
+    const session: AuthSession = {
+      role: dummyMatch.role,
+      email: dummyMatch.email,
+      name: dummyMatch.profile.name,
+      token: 'mock-offline-token',
+      loggedInAt: new Date().toISOString(),
+    };
+    saveAuthSession(session);
+    return { ok: true, session };
+  }
+
+  // 2. Cek akun developer mandiri yang baru didaftarkan
+  const registeredMatch = getRegisteredUsers().find(
+    (u) => u.email.toLowerCase() === normalizedEmail && u.password === password
+  );
+
+  if (registeredMatch) {
+    const session: AuthSession = {
+      role: registeredMatch.role,
+      email: registeredMatch.email,
+      name: registeredMatch.name,
+      token: 'mock-offline-token',
+      loggedInAt: new Date().toISOString(),
+    };
+    saveAuthSession(session);
+    return { ok: true, session };
+  }
+
   return {
     ok: false,
-    error: 'Gunakan autentikasi server (loginWithServer).',
+    error: 'Email atau kata sandi tidak sesuai. Periksa kembali kredensial Anda.',
   };
 }
 

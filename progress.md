@@ -3,7 +3,62 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-092 | 2026-11-25 | Dukungan Multi Titik Koordinat GPS per Proyek (Multi-Cluster)
+
+- Status: selesai
+- Ubah: `src/lib/projects/projects-data.ts`, `src/components/projects/ManageClusterCoordsModal.tsx`, `src/components/JalurProyek.tsx`, `src/App.tsx`, `tests/projects-data.test.ts`.
+- Alasan/keputusan: Mengakomodasi 1 proyek yang memiliki beberapa titik lokasi/cluster (misal Gerbang Utama, Cluster Nagoya, Cluster Osaka) dengan mempertahankan backward compatibility `koordinatGps` primer.
+- Verifikasi: `bun test` (151 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: -
+- Catatan: Modal `ManageClusterCoordsModal` memungkinkan penambahan, penyalinan koordinat, tautan langsung ke Google Maps, dan setel titik primer.
+
+## P-091 | 2026-11-25 | Manajemen Akun Internal Developer oleh IT Developer (SE s.d. Direksi) dengan Isolasi Tenant
+
+- Status: selesai
+- Ubah: `src/lib/auth/developer-user-management.ts`, `src/components/it/AddDeveloperUserModal.tsx`, `src/App.tsx`, `tests/developer-user-management.test.ts`.
+- Alasan/keputusan: Memberikan otoritas kepada role IT Developer (`IT`) untuk menambah dan mengelola akun seluruh hierarki tim internal (SE, TL, SM, Admin, Digital Marketing, hingga Direksi) dengan batasan ketat isolasi tenant (hanya untuk developer/perusahaan yang dipegangnya saja).
+- Verifikasi: `bun test` (150 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: -
+- Catatan: Akun baru otomatis didaftarkan ke otentikasi login dan data personel tersimpan terisolasi per perusahaan developer.
+
+## P-090 | 2026-11-25 | Fitur Override Paket Langganan (Gold, Platinum, Diamond) per Developer untuk IT Internal
+
+- Status: selesai
+- Ubah: `src/lib/plans/plan-override.ts`, `src/components/superadmin/ItCommandCenterDashboard.tsx`, `src/components/SuperadminPanel.tsx`, `src/App.tsx`, `tests/plan-override.test.ts`.
+- Alasan/keputusan: Menambahkan kemampuan bagi Tim IT Internal (`SUPERADMIN_IT`) untuk meng-override paket langganan (Gold 63 fitur, Platinum 88 fitur + AI, Diamond 100 fitur Enterprise) per developer / tenant dengan catatan alasan dan masa berlaku, menampilkan badge override khusus, serta tombol reset ke paket kontrak awal.
+- Verifikasi: `bun test` (143 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: -
+- Catatan: Override tersimpan persisten dan langsung sinkron ke pembukaan fitur (misal AI activity guide di FieldOps).
+
+## P-089 | 2026-11-25 | Fitur Tambah Akun SE Inhouse (SM & Admin) & Kuesioner Struktur Tim Pendaftar
+
+- Status: selesai
+- Ubah: `src/App.tsx`, `src/components/AddSeModal.tsx`, `src/lib/auth/se-management.ts`, `src/components/LoginModal.tsx`, `src/lib/auth/dummy-accounts.ts`, `tests/auth-dummy.test.ts`.
+- Alasan/keputusan: Memberikan hak tambah akun SE in-house beserta kredensial login kepada SM dan Admin (Direksi tidak diberikan tombol ini karena tidak turun mengoperasikan); serta menyediakan formulir registrasi karyawan pendaftar (pilihan role SM/Admin/IT/Direksi, nama direktur pemilik) dilengkapi kuesioner struktur developer untuk penyesuaian sistem otomatis.
+- Verifikasi: `bun test` (139 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: -
+- Catatan: Akun SE baru langsung aktif di tabel supervisi SM/Admin dan langsung dapat digunakan login.
+
+## P-088 | 2026-11-25 | Redesain Vault Dokumen Terpusat per Nasabah & Pembersihan Label Blueprint F-Code
+
+- Status: selesai
+- Ubah: `src/components/SecureDocumentVaultPage.tsx`, `src/App.tsx`, `src/components/mobile/MobileMoreSheet.tsx`, `src/components/BankSubmissionWorkflowPage.tsx`, `src/components/ExecutiveControlTowerPage.tsx`, `src/components/LoveLetterViewerModal.tsx`, `src/components/PipelinePage.tsx`, `src/components/PlaybookViewer.tsx`.
+- Alasan/keputusan: Merestrukturisasi antarmuka Dokumen Vault KPR menjadi 1 baris per pelanggan (accordion folder) sehingga seluruh berkas (KTP, NPWP, Slip Gaji, Foto Konsumen, Foto Lokasi) terkelompok rapi dalam 1 folder debitur; mendukung upload foto/gambar; serta membersihkan seluruh teks label kode blueprint seperti "(F79)", "(F74)", "(F86)", "(F75)", "(F90)" dari sidebar dan antarmuka.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: -
+- Catatan: Menghilangkan kekacauan tabel berkas terpisah dan menjaga tampilan navigasi tetap bersih dan profesional.
+
+## P-087 | 2026-11-25 | Pemulihan Login Offline Lokal Tanpa Server Auth
+
+- Status: selesai
+- Ubah: `src/lib/auth/dummy-accounts.ts`, `tests/auth-dummy.test.ts`.
+- Alasan/keputusan: Mengaktifkan kembali autentikasi dummy offline lokal (`ROLE_DEFAULT_PASSWORDS`, `mock-offline-token`, dan fallback otomatis di `loginWithServer` / `verifyMfaWithServer`) agar sistem bisa langsung dibuka dan login di browser lokal tanpa memerlukan backend server aktif.
+- Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
+- Berikutnya: -
+- Catatan: Mendukung pengujian lokal offline sepenuhnya dengan 11 akun role.
+
 ## P-086 | 2026-11-25 | Integrasi Tunggal Dashboard Mitra & Pemulihan Server Auth untuk Push IT-kantor
+
 - Status: selesai
 - Ubah: `src/App.tsx`, `src/components/mobile/MobileMoreSheet.tsx`, `progress.md`.
 - Alasan/keputusan: Menghapus item navigasi duplikat "Program Referral" di sidebar mitra (cukup melalui "Dashboard Referral" / "Dashboard Sales Mitra"), mengembalikan `src/lib/auth/dummy-accounts.ts` ke versi server auth database, dan bersiap push ke remote branch `IT-kantor`.
@@ -12,6 +67,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Area kerja mitra terpusat di dashboard utama tanpa menu duplikat.
 
 ## P-085 | 2026-11-25 | Render Dashboard Khusus Role REFERRAL_PARTNER & SALES_PARTNER
+
 - Status: selesai
 - Ubah: `src/App.tsx`, `src/components/ReferralProgramPage.tsx`.
 - Alasan/keputusan: Mengaktifkan render tampilan dasbor utama ketika login sebagai `REFERRAL_PARTNER` atau `SALES_PARTNER` (sebelumnya area utama masih kosong karena belum ada kondisi render di `activeView === 'dashboard'`). Sekarang langsung menampilkan halaman portal mitra sesuai peran dengan tautan referral personal (`?src=anita_wijaya` atau `?src=dimas_property`) dan tab status yang terfilter otomatis.
@@ -20,6 +76,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Menampilkan header ramah mitra ("Dashboard Referral" / "Dashboard Sales Mitra") dan menyembunyikan navigasi teknis internal.
 
 ## P-084 | 2026-11-25 | Fallback Otomatis Server Auth ke Dummy Offline (Login Tanpa Koneksi Server)
+
 - Status: selesai
 - Ubah: `src/lib/auth/dummy-accounts.ts`.
 - Alasan/keputusan: Menambahkan fallback otomatis pada `loginWithServer`, `registerWithServer`, dan `verifyMfaWithServer` ketika fetch `/api/auth/*` gagal/error jaringan ("Tidak dapat terhubung ke server autentikasi"). Sistem secara otomatis mengalihkan autentikasi ke akun dummy lokal & offline MFA challenge (`829104` atau `123456`) sehingga modal login langsung berhasil masuk ke dashboard tanpa memblokir pengguna saat backend database lokal belum aktif.
@@ -28,6 +85,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Mendukung transisi otomatis transparan antara server live dan offline mock.
 
 ## P-083 | 2026-11-25 | Penambahan Akun & Akses Nyata Gmail untuk Referral & Sales Partner
+
 - Status: selesai
 - Ubah: `src/data.ts`, `src/lib/auth/dummy-accounts.ts`, `tests/auth-dummy.test.ts`, `src/App.tsx`, `src/components/LoginModal.tsx`, `src/components/mobile/MobileMoreSheet.tsx`.
 - Alasan/keputusan: Menambahkan 2 peran & akun mitra pengguna nyata dengan domain `@gmail.com` (`anita.wijaya92@gmail.com` sebagai Referral Partner & `dimas.property.solo@gmail.com` sebagai Sales Partner), melengkapi password lokal, tombol quick-fill di LoginModal, serta menu navigasi sidebar khusus mitra.
@@ -36,6 +94,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Kredensial dapat langsung digunakan di login modal atau diuji offline.
 
 ## P-082 | 2026-11-25 | Kustomisasi Skema Mitra: Dual-Model Referral & Sales Partner (Blueprint v1.0)
+
 - Status: selesai
 - Ubah: `src/lib/foundations/partner-scheme-config.ts`, `src/components/ReferralProgramPage.tsx`.
 - Alasan/keputusan: Mengimplementasikan kustomisasi parameter skema kemitraan sesuai Master Blueprint v1.0: diferensiasi peran (Referral Partner vs Sales Partner), pengaturan fee/komisi fleksibel (Rp 2,5jt - Rp 5jt vs 1,5% - 2,5%), SLA respon lead (<15 menit), override inhouse (0,5%), milestone payout (M1 30%, M2 50%, M3 20%), dan aturan proteksi inhouse (30 hari claim window & auto-takeover SLA).
@@ -44,6 +103,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Modal kustomisasi skema dapat diakses langsung oleh admin/direksi dari tombol "Kustomisasi Skema" di header halaman mitra.
 
 ## P-081 | 2026-11-25 | Pemulihan Fallback Auth & Akun Dummy Offline untuk Pengujian Lokal
+
 - Status: selesai
 - Ubah: `src/lib/auth/dummy-accounts.ts`.
 - Alasan/keputusan: Mengaktifkan kembali kredensial password lokal `ROLE_DEFAULT_PASSWORDS`, token mock offline (`mock-offline-token`), dan validasi akun dummy lokal pada `authenticateDummyUser` agar pengembang dapat bebas mengedit dan menguji login/unit test tanpa harus menyalakan server DB PostgreSQL backend.
@@ -52,6 +112,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Mendukung pengujian unit test offline dan pengujian live backend secara bersamaan.
 
 ## P-080 | 2026-11-25 | Pembangunan Fondasi R3 & R4: Kontrak API, Alur KPR & Control Tower
+
 - Status: selesai
 - Ubah: `src/lib/foundations/r3-r4-contracts.ts`, `src/components/BankSubmissionWorkflowPage.tsx` (F75), `src/components/ExecutiveControlTowerPage.tsx` (F90 & F88), `src/lib/navigation/router.ts`, `src/components/mobile/MobileMoreSheet.tsx`, `src/App.tsx`.
 - Alasan/keputusan: Menyiapkan fondasi deterministik R3 (Alur KPR Bank mitra & SP3K) dan R4 (Control Tower Portofolio & Proyeksi Cashflow) dalam bentuk halaman kerja utuh bergaya `/unslop` dan kontrak adapter API, siap disambungkan ke backend/third-party tanpa merombak UI.
@@ -60,6 +121,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Rute view `kpr_bank` dan `control_tower` terintegrasi di sidebar dan router.
 
 ## P-079 | 2026-11-25 | Unslopping UI: Quiet Chrome, Clean Spacing & Tipografi Elegan
+
 - Status: selesai
 - Ubah: `src/components/ReferralProgramPage.tsx`, `src/components/SecureDocumentVaultPage.tsx`, `src/components/CustomerComplaintsPage.tsx`.
 - Alasan/keputusan: Mengaplikasikan prinsip skill `/unslop`: menghilangkan badge/banner mencolok, menata quiet chrome, merapikan card angka, dan menertibkan tabel data agar berkarakter studio arsitektur/pengembang properti.
@@ -67,6 +129,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Berikutnya: Audit visual halaman dashboard role lain (TL, SM, Admin, Direksi).
 
 ## P-078 | 2026-11-25 | Integrasi Halaman Penuh F74, F79, F86 di Sidebar & Main View (Anti-Popup)
+
 - Status: selesai
 - Ubah: `src/components/SecureDocumentVaultPage.tsx`, `src/components/ReferralProgramPage.tsx`, `src/components/CustomerComplaintsPage.tsx`, `src/lib/navigation/router.ts`, `src/components/mobile/MobileMoreSheet.tsx`, `src/App.tsx`.
 - Alasan/keputusan: Mengembalikan menu F74, F79, F86 ke sidebar dan mobile sheet sebagai view halaman utuh (`activeView` main area), bukan modal popup overlay, sesuai instruksi user.
@@ -75,6 +138,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Menambahkan route view `vault`, `referral`, `garansi` ke router state dan sidebar navigation.
 
 ## P-077 | 2026-11-25 | Penghapusan Tombol Popup F86/F79/F74 & Unslopping Layout Responsif
+
 - Status: selesai
 - Ubah: `src/App.tsx`, `src/components/PipelinePage.tsx`, `src/components/PlaybookViewer.tsx`, hapus modal dead code `CustomerComplaintsModal.tsx`, `ReferralTrackingModal.tsx`, `SecureDocumentVaultModal.tsx`.
 - Alasan/keputusan: Menghilangkan tombol popup F86, F79, F74 dari sidebar sesuai instruksi user; menjaga navigasi berbasis halaman utuh (`activeView`), serta menata ulang header Pipeline & kartu SOP Playbook agar tidak bertumpuk di layar menengah/kecil.
@@ -83,6 +147,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Semua navigasi alat kerja diarahkan ke view halaman penuh, bukan overlay popup acak.
 
 ## P-076 | 2026-11-25 | Pembangunan Persiapan Fitur R2 (F14, F47, F57, F62, F65, F74, F79, F86)
+
 - Status: selesai
 - Ubah: `src/components/LoveLetterViewerModal.tsx` (F14 Claim Ledger), `src/components/pipeline/TaskInboxTab.tsx` (F47 Task Inbox), `src/components/pipeline/BuyerPackModal.tsx` (F57 Buyer Pack), `src/components/DailyRouteViewer.tsx` (F62 Replan Hujan), `src/components/PlaybookViewer.tsx` (F65 Sertifikasi SE), `src/components/SecureDocumentVaultModal.tsx` (F74 Vault KPR), `src/components/ReferralTrackingModal.tsx` (F79 Referral Link), `src/components/CustomerComplaintsModal.tsx` (F86 DLP Garansi), `src/components/PipelinePage.tsx`, `src/App.tsx`.
 - Alasan/keputusan: Menutup kesenjangan fitur R2 dengan membangun antarmuka dan kontrak persiapan deterministik tanpa ketergantungan API pihak ketiga / database baru sesuai arahan user.
@@ -90,6 +155,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Berikutnya: -
 
 ## P-075 | 2026-11-25 | Unslopping Card SOP Playbook & Perataan Responsif Multi-Role
+
 - Status: selesai
 - Ubah: `src/components/PlaybookViewer.tsx`, `src/components/CrmPipelineView.tsx`, `src/App.tsx`
 - Alasan/keputusan: Merestrukturisasi card SOP Playbook harian: meletakkan target output di footer card berikon Target (tidak lagi menekan kolom kiri), memadukan waktu/channel/SLA dengan flex-wrap & no-wrap agar tidak terpotong vertikal; menambahkan flex-wrap & gap pada seluruh header sub-modul (TL, SM, ADMIN, IT, DIREKSI).
@@ -97,6 +163,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Berikutnya: -
 
 ## P-074 | 2026-11-25 | Standardisasi Breakpoint Responsif Pipeline & Modul Viewer
+
 - Status: selesai
 - Ubah: `src/components/PipelinePage.tsx`, `ContentCalendarViewer.tsx`, `PlaybookViewer.tsx`, `SalesTargetViewer.tsx`, `DailyRouteViewer.tsx`, `MarketResearchViewer.tsx`, `CrmPipelineView.tsx`, `DireksiMultiProjectView.tsx`
 - Alasan/keputusan: Mengganti breakpoint `sm:flex-row` menjadi `xl:flex-row` / `lg:flex-row` pada header halaman agar judul tidak terjepit 30px dan tombol aksi tidak menumpuk saat sidebar aktif di layar menengah/restore down.
@@ -104,6 +171,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Berikutnya: -
 
 ## P-073 | 2026-11-25 | Perbaikan Responsivitas Header Desktop saat Window Dikecilkan / Minimize
+
 - Status: selesai
 - Ubah: `src/App.tsx`, `src/components/se/SeNotificationCenter.tsx` (tambah truncation, responsivitas lebar dropdown proyek, label tombol adaptif, badge online adaptif, dan shrink-0 pada lonceng notifikasi)
 - Alasan/keputusan: Mengatasi masalah elemen header (tombol Tambah Proyek, dropdown, lonceng notifikasi SE) saling bertumpuk dan menyebabkan overflow horizontal saat ukuran window browser dikecilkan/restore down.
@@ -111,6 +179,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Berikutnya: -
 
 ## P-072 | 2026-11-25 | Offline Resilience Fallback untuk Login & Verifikasi MFA
+
 - Status: selesai
 - Ubah: `src/lib/auth/dummy-accounts.ts` (fallback otomatis ke dummy auth & token mock saat backend/DB offline)
 - Alasan/keputusan: Mengatasi kendala gagal login/MFA saat backend server atau PostgreSQL lokal belum aktif setelah pull dari main; dapat di-revert kapan saja sebelum push bila diinginkan.
@@ -119,6 +188,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Jika ingin kembali murni server auth saat push, cukup `git checkout src/lib/auth/dummy-accounts.ts`.
 
 ## P-071 | 2026-11-25 | F55 AI Nurture Cadence Terjadwal (Tab Khusus, WA Preview 2-Kolom, Baileys)
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `db/migrations/0020_wa_nurture_cadence.sql`, `server/wa-nurture.ts` (+auto-fill draf AI & `rescheduleAnchorForLead`), `server/index.ts` (+`/api/nurture/jobs/reschedule-anchor`), `src/components/pipeline/FollowupScheduleTab.tsx` (tab khusus 2 kolom + anchor tanggal follow-up pertama + WA preview), `src/components/PipelinePage.tsx` (tab `FOLLOWUP` & tombol pintas dari kartu lead)
 - Alasan/keputusan: F55 dipindah menjadi tab tersendiri agar kartu Pipeline ringkas; draf pesan otomatis disusun AI saat jadwal dibuka, dengan visualisasi gelembung WhatsApp di sisi kanan & editor penuh SE.
@@ -127,6 +197,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: scheduler berjalan tiap 60 dtk (dapat dimatikan via `WA_NURTURE_SCHEDULER=off`).
 
 ## P-070 | 2026-11-25 | Wave 1-4 R1 Local: Auth Server-Side, Unit Lock/Quote, Public Site, Doc Extractor & Conflict Inbox
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`; commit `e679668`)
 - Ubah: `server/auth.ts`, `server/units-quotes.ts`, `server/truth-engine.ts`, `server/doc-extractor.py`, `server/index.ts`, `db/migrations/0017_auth_sessions_rbac.sql`, `db/migrations/0018_unit_inventory_quotes.sql`, `db/migrations/0019_document_truth_conflicts.sql`, `src/lib/auth/dummy-accounts.ts`, `src/lib/auth/fetch-interceptor.ts`, `src/components/LoginModal.tsx`, `src/components/PublicProjectSitePage.tsx`, `src/App.tsx`, `src/main.tsx`
 - Alasan/keputusan: tutup celah auth header (F91), tambah DB row-lock anti double-booking & quote deterministik (F67-F69), buka route publik `/p/:slug` + form lead consent/honeypot (F31-F33), dan pasang extractor `PyMuPDF+RapidOCR+openpyxl` agar `9router` hanya membaca Markdown hasil ekstrak (F01/F02/F04/F05).
@@ -135,6 +206,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: password hardcoded dihapus dari `DUMMY_ACCOUNTS` frontend; default seed password server pakai `DEVOS_SEED_PASSWORD` (fallback lokal `AndaraOS2026!`).
 
 ## P-069 | 2026-11-24 | Perbaikan insiden: pipeline 500 sejak deploy 20:57 + migrasi 0015/0016
+
 - Status: selesai (live)
 - Ubah: `db/migrations/0016_fix_pipeline_columns_and_tenant.sql` (kolom lead_quality/spam_reason/is_in_pool/pool_reason/last_activity_at, company_bank_accounts.created_by, tenant_id lead disamakan), ensure di `server/index.ts`
 - Alasan/keputusan: deploy P-064 membawa kode multi-tenant (commit 0c6c632) ke DB lama; `/api/pipeline/leads` 500 pukul 20:57-23:52 dan lead baru gagal dibuat. Verifikasi P-064 hanya `/api/health`.
@@ -143,6 +215,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: 3 baris tenant_id diubah `pt-andara-rejo-makmur` -> `andara_rejo_makmur`. Rollback backend `dist-server.mjs.pre-20261124-2355`, frontend `~/db-backup/index.html.20261124-2355`. Selalu smoke semua endpoint setelah deploy.
 
 ## P-068 | 2026-11-24 | AI WA: kapan diam/singkat/jawab/jelaskan/tanya balik/serahkan + riwayat 10 giliran
+
 - Status: live di hades 2026-11-24 23:55 (riwayat chat disimpan & dipakai AI, tetapi BELUM ditampilkan: `WA_HISTORY_API` belum `on` sampai login server diperbaiki). Terpisah: jadwal konten hanya role SE (`SE_EMAILS`) SUDAH live (rollback `dist-server.mjs.pre-20261124-2317`).
 - Ubah: `server/wa-turn-engine.ts`, `server/wa-conversation.ts`, `server/wa-consent.ts` (baru), `db/migrations/0015_wa_conversation_turns.sql` + ensure di `server/index.ts`, `server/ai-engine.ts` (35->30 unit, klaim naik Rp50 juta dibuang, turn engine paralel), `server/wa-baileys.ts` (simpan giliran, tunggu burst 6 dtk, persona awal LAINNYA & BANT 1), `src/components/PipelinePage.tsx` (riwayat chat, label mode, keadaan diam), `src/components/PlaybookViewer.tsx`, `scripts/wa_turn_*.ts`, `docs/wa-turn/`
 - Alasan/keputusan: LLM hanya membaca maksud, kode memetakan mode; knowledge lain tidak disentuh (keputusan user); SE tetap yang mengirim; opt-out tidak lagi terpicu kata 'batal'.
@@ -151,6 +224,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: cacat draf tersisa lihat `docs/wa-turn/contoh-10.txt`. `ai-engine.ts` `u.unitCode` tidak ada di katalog (bug lama: harga fallback selalu 'mulai Rp650 juta').
 
 ## P-067 | 2026-11-24 | Carousel 5 foto konten + poster marketing (foto ke-6), bank teks, anti kembar
+
 - Status: live di hades (belum pernah dirender; uji nyata 25 Nov 08:00 WIB)
 - Ubah: `server/poster-copy.ts` (baru, 204 judul), `server/poster-planner.ts` (TOFU: sampul+3 tips+contoh nyata; MOFU: sampul+2 bukti+denah+cocok untuk siapa; foto 6 = banner harga), `server/poster-engine.ts` (tema dikunci Senja Megah/Blue Hour/Malam Hangat, bahan marmer/beludru/kaca emerald), `server/content-media-worker.ts` (judul 14 hari semua SE, caption ikut slide, poster 3x percobaan, slot tanpa poster = FAILED), `docs/poster-engine/bank-teks.md`
 - Alasan/keputusan: poster wajib di akhir; interior/clubhouse ditunda sampai ada foto asli; BOFU tetap poster tunggal.
@@ -159,6 +233,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: rollback `dist-server.mjs.pre-20261124-2311`.
 
 ## P-066 | 2026-11-24 | Mesin poster+carousel tersambung kalender, antrean 1 jam, live di hades
+
 - Status: live (belum pernah generate lewat jalur kalender; uji nyata pertama 25 Nov 08:00 WIB)
 - Ubah: `server/poster-planner.ts` (baru: banner, carousel 6 slide, cadangan tanpa LLM), `server/poster-engine.ts`, `server/content-media-worker.ts` (planner di enqueue, `getManualLock`, jendela 60+10 mnt, retry 1x, job 404/macet dilepas, slot tak disela, urutan SE digilir, tempel logo), `server/index.ts` (kolom `media_render_queue.render_meta`, kunci manual), `server/poster-composer.py`; hades `/opt/flow-service/app.py` (lane + kunci 08-09, 13-14, 18:30-19:30 + jeda 10 dtk), `flow_engine.py` (bersihkan referensi juga untuk video)
 - Alasan/keputusan: judul/fakta carousel dari bank resmi; LLM memilih tema/card & menulis hook; `LLM` gagal -> rancangan cadangan agar tersedia jam 9. Prompt Flow-native lama dibuang.
@@ -167,6 +242,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: rollback backend `dist-server.mjs.pre-20261124-2258`, Hermes `*.bak-20261124-2258`. `andarasales` (siteplan) juga pakai Hermes dan akan dapat 423 di jendela terkunci. Jalur LOCAL_PENDING/OpenRouter masih ada di kode tapi tak diproduksi lagi.
 
 ## P-065 | 2026-11-24 | Mesin poster mandiri (LLM art director) + uji 3 gambar
+
 - Status: sebagian (mesin banner jalan lokal; belum tersambung kalender, belum deploy)
 - Ubah: `server/poster-engine.ts` (baru: tema/card/fakta/pita/footer dari daftar, hook oleh `cbai/glm-5.2` + editor, pemeriksa isi, perakit prompt, `inspectPoster`), `server/poster-composer.py` (plakat murni sistem, `headroom`, `add_sky`), `server/visual-bible.ts` (tanpa plakat AI), `scripts/poster_engine_briefs.ts`, `scripts/poster_engine_render.ts`, `docs/poster-engine/` (banner-v1, uji-1)
 - Alasan/keputusan: LLM hanya memilih ID & menulis hook; klaim/harga/pita/footer dari kode. Combo `andararejomakmurjosjis` 504 untuk brief dan timeout untuk vision; jadi cadangan saja.
@@ -175,6 +251,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: perubahan prompt 'EXACT houses', kata sambung kecil, larangan 'aman' di hook, vision gemini-flash-lite BELUM diuji dengan generate. Skrip render butuh env `FLOW_API_KEY`.
 
 ## P-064 | 2026-11-24 | Hermes jadi satu-satunya generator + tes Flow + deploy ke hades
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`); bug aspect Flow belum diperbaiki
 - Ubah: `.env` lokal (baris `OPENROUTER_FREE_IMAGE_KEY` dikomentari `#OFF-hermes-only#` agar jalur Recraft/OpenRouter mati), deploy `dist-server.mjs` (backup `dist-server.mjs.pre-*` di server) + frontend `/var/www/developer-sales-os` (tanpa `generated-media`/`card-samples`)
 - Alasan/keputusan: fokus internal, Hermes (Google Flow di `hades`) jalur tunggal. Server memang tidak punya key OpenRouter, jadi sudah Hermes-only. Barrier lama tetap: 1 job global, jeda 12-18 dtk, cooldown 60 dtk antar slot, busy-window, fail-fast "aktivitas tidak biasa", rotasi akun.
@@ -189,11 +266,12 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - KOREKSI: `hermes_poster_pro_closing.jpg` atapnya juga pelana asimetris (entri di atas salah menyebut benar). `tsc --noEmit` bawaan tidak memeriksa `server/`. Bug tile lama terulang di job `0b3f7dba1a8e` (file API salah; gambar benar ditarik manual).
 - Hook+logo+POV: `visual-bible.ts` satu gaya hook (lead-in, hook ultra-bold 2 baris `splitHook`, kapsul payoff), `SKY_RULE` tanpa gradasi (`pickTreatment`/treatment dihapus), POV frontal +-9 m, atap dijelaskan segitiga siku, plakat kosong penahan zona logo; `poster-composer.py` `place_logo` = plakat emerald-emas + logo asli (wajib, error bila file hilang); `content-media-worker.ts` buang arg `slideIdx/seed`. Uji: job `a7b53798e29f` (`hermes_hook_final_2.png`: atap/POV benar, judul tertutup logo) dan `5b80412f8d88` (`hermes_hook_final_3.png`: hook/logo rapi, unit dicermin + jendela 2 tingkat). Larangan mirror ditambah, belum diuji.
 - Atap sejajar + baris tak habis: `visual-bible.ts` (atap segitiga siku searah, unit salinan bukan cermin, 3 rumah utuh + tetangga terpotong di kedua tepi). Uji: `8c99e6502bee` (`hermes_hook4_final.png`, GAGAL: pelana; kalimat '/ / /' + 'A B C D E' dibuang) dan `5a52e35f7859` (`hermes_hook5_final.png`, SESUAI permintaan, file API = tile baru). Prompt 7.968/8.000. Baru 1 sampel lolos; belum deploy, belum tersambung kalender.
-- Engine Hermes (live, backup `flow_engine.py.bak3.20261124`/`app.py.bak3.20261124`): `POST /v1/generate` terima `reference` (nama aset yang SUDAH ada di project Flow; tidak upload/menyetujui apa pun); `new_tile_srcs` hanya menerima tile di atas tile lama; jalur ukir JPEG cache dihapus; gagal-aman (BUSY/AMBIGUOUS/REFERENCE_*). Aset `ref-fasad-baris.jpg` (`public/brand/`, dari poster Nagoya/Osaka/Tokyo user) diunggah di acc1 atas izin user; acc2/acc3 BELUM punya, rotasi akun akan gagal `REFERENCE_MISSING`.
+- Engine Hermes (live, backup `flow_engine.py.bak3.20261124`/`app.py.bak3.20261124`): `POST /v1/generate` terima `reference` (nama aset yang SUDAH ada di project Flow; tidak upload/menyetujui apa pun); `new_tile_srcs` hanya menerima tile di atas tile lama; jalur ukir JPEG cache dihapus; gagal-aman (BUSY/AMBIGUOUS/REFERENCE\_\*). Aset `ref-fasad-baris.jpg` (`public/brand/`, dari poster Nagoya/Osaka/Tokyo user) diunggah di acc1 atas izin user; acc2/acc3 BELUM punya, rotasi akun akan gagal `REFERENCE_MISSING`.
 - Prompt final: `visual-bible.ts` langit/cahaya megah, 2 rumah besar + tetangga terpotong, hook gading+emas, pil hanya harga, footer netral, `isHarshHook` dipakai `checkDeckCoherence`, batas 8000 dicek di kode. `BUILDING_BIBLE` merujuk gambar terlampir: pemanggil WAJIB kirim `reference`. `poster-composer.py` `ai_plaque_box` menutup plakat AI. Uji: job `d73b01f9f65d` -> `public/card-samples/hermes_megah6_final_v2.png` (1 generate, atap searah). Belum: kalender kirim model/reference + tempel logo, deploy backend.
 - Catatan: perubahan P-062/P-063 + ini belum di-commit. Rollback backend: `cp dist-server.mjs.pre-<ts> dist-server.mjs && pm2 restart developer-sales-os-api`.
 
 ## P-063 | 2026-11-24 | Teks digambar AI (Recraft via 9router) + verifikasi OCR + gaya gradasi emerald
+
 - Status: sebagian (slide 1 teruji; layout content/denah/closing belum diuji dengan pipeline baru)
 - Ubah: `server/visual-bible.ts` (buildPosterPrompt: tipografi dikutip persis, gradasi emerald atas memudar ke foto, daun framing, tanpa orang, cahaya lebih hidup), `server/content-media-worker.ts` (requestPosterImage via 9router `/v1/images/generations` size "3:4", fallback key OpenRouter langsung; verifyPosterText = OCR vision + banding kata di kode + cek atap pelana; renderLocalQueueItem retry s.d. 3x; blok poller duplikat dijadikan satu), `server/poster-composer.py` (tulis ulang: hanya logo, bersihkan zona logo, pudarkan tepi hijau keras, panel denah asli)
 - Alasan/keputusan: koreksi P-062, teks HARUS digambar AI (bukan Pillow). Teks slide dibuat ringkas (headline 3-5 kata, bullets maks 9 kata) agar minim typo. 9router merotasi 3 akun OpenRouter, kuota key tunggal tidak lagi jadi hambatan.
@@ -203,6 +281,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Update: art director gaya teks (`pickTreatment`: TOP_FADE / SKY_CLEAN / BOTTOM_FADE; cover/penutup/denah selalu TOP_FADE, slide isi bergantian per shot). Gradasi kini pekat hanya 8% teratas lalu memudar sampai ±48%. Composer mendeteksi hasil nyata (zona hijau atau langit terang) untuk logo. Verifikasi vision ditambah cek kontras. Validator menolak kicker yang hanya mengulang headline. Uji: slide 3 raka d24 (STREET_LIFE, SKY_CLEAN) sukses.
 
 ## P-062 | 2026-11-24 | Visual Bible + teks ditempel server + story spine carousel
+
 - Status: sebagian (kode & tes visual selesai; belum dites end-to-end lewat scheduler/DB)
 - Ubah: `server/visual-bible.ts` (baru: BUILDING_BIBLE, SHOT_LIBRARY, LIGHT_RECIPE, denah, resolveShotSequence), `server/poster-composer.py` (tulis ulang: cover/content/denah/closing, teks 0 typo), `server/content-media-worker.ts` (prompt LLM story spine + shotId, validator `checkDeckCoherence` + retry 1x, fallback TOFU Nagoya/Osaka/Tokyo dibuat nyambung, prompt Recraft tanpa teks, `composeSlideFromQueue` dipakai kedua jalur poller), `public/brand/denah/` (6 denah asli dari data_train)
 - Alasan/keputusan: akar "tidak nyambung" = deck fallback hard-coded (cover 3 cluster, slide 2 rumah second). Teks tidak lagi digambar Recraft; arsitektur dikunci prompt baku; denah asli ditempel, bukan digambar AI.
@@ -212,54 +291,55 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Update 2026-11-24: backend di-restart (`bun server/index.ts`), slot raka d24 diregenerasi (deck AI nyambung + CLUSTER_FACTS terkunci, timeout LLM 45s->150s). Render: slide 1-2 sukses, slide 3-6 FAILED 429 `free-models-per-day` OpenRouter. Brief slot d24 milik dina ikut terganti tanpa sengaja (gambar tidak disentuh).
 
 ## P-061 | 2026-11-24 | Perbaikan Input Rekening Developer & Ketahanan Offline
+
 - Status: selesai
 - Ubah: `src/components/company/CompanyBankAccountsModal.tsx`
 - Alasan/keputusan: Menyediakan fallback persistensi `localStorage` saat backend API (`http://127.0.0.1:3040`) sedang offline atau tidak aktif di lingkungan dev lokal Vite, sehingga penambahan/pengeditan rekening resmi perusahaan tidak lagi memicu error `Terjadi kesalahan saat menyimpan rekening.`.
 - Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (sukses).
 - Berikutnya: -
 
-
 ## P-060 | 2026-11-24 | Penerapan Unslop pada Home Page & Seluruh Dashboard Pengguna
+
 - Status: selesai
 - Ubah: `src/components/v3/ChapterIntroAndCaseV3.tsx`, `src/components/v3/RailNavV3.tsx`, `src/components/superadmin/ItCommandCenterDashboard.tsx`, `src/components/superadmin/PlatformExecutiveDashboard.tsx`, `src/App.tsx`
 - Alasan/keputusan: Menghapus AI visual slop (highlighter neon lime `#C6F432`, blurred blobs `blur-3xl`, jargon gamer "God Mode", kode klausul `§7.1`/`§S18`, `animate-pulse`/`animate-ping` pada status statis, dan over-pill). Menerapkan tipografi tenang (font-bold/semibold), nested radius 8-16px, dan hairline borders.
 - Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (sukses).
 - Berikutnya: -
 
-
 ## P-059 | 2026-11-24 | Pemasangan Skill Unslop (UI Craft & Anti-Slop)
+
 - Status: selesai
 - Ubah: `~/.gemini/config/skills/unslop/` (global Antigravity), `.agents/skills/unslop/` (workspace)
 - Alasan/keputusan: Instalasi skill `unslop` dari https://github.com/heydamir/unslop.git untuk pembersihan visual AI slop (spacing 4px grid, neutral tint, tipografi, zero emoji slop, craft direction).
 - Verifikasi: File `SKILL.md`, references, dan scripts terpasang dan diverifikasi integritasnya di kedua path.
 - Berikutnya: -
 
-
 ## P-058 | 2026-11-24 | Regenerasi Laporan Harian IT DOCX dengan Tangkapan Layar 16:9 Full Monitor
+
 - Status: selesai
 - Ubah: `docs/laporan-harian/2026-11-24/IT-LH-24-NOV-2026.md`, `scripts/generate_daily_report_docx.ts`, folder bukti (10 tangkapan layar 1920x1080)
 - Alasan/keputusan: Pengambilan ulang 10 tangkapan layar antarmuka desktop standar monitor 16:9 penuh (1920x1080) pada Lingkungan A (http://localhost:5173) dan Lingkungan B (https://developerproperti.giivepro.com) mencakup seluruh 8 peran akun, serta kompilasi dokumen Word baru bebas pemotongan visual.
 - Verifikasi: Berkas DOCX 5,00 MB terbit di `D:\Laporan Andara Rejo Makmur\Harian\Laporan_Harian_Divisi_IT_24_November_2026_v2.docx`.
 - Berikutnya: -
 
-
 ## P-057 | 2026-11-24 | Pembaruan Nomor Kontak IT Internal Developer Sales OS
+
 - Status: selesai
 - Ubah: `src/data.ts` (nomor WhatsApp Tim IT Internal / SUPERADMIN_IT diperbarui ke +6288980961427)
 - Alasan/keputusan: Permintaan penggantian nomor WhatsApp kontak resmi Tim IT Internal Developer Sales OS menjadi 088980961427.
 - Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (sukses).
 - Berikutnya: -
 
-
 ## P-056 | 2026-11-24 | Penerapan MFA Seluruh Akun & Penyusunan Dokumen Laporan Harian IT DOCX
+
 - Status: selesai
 - Ubah: `src/lib/auth/dummy-accounts.ts`, `src/components/LoginModal.tsx`, `tests/auth-dummy.test.ts`, `scripts/generate_daily_report_docx.ts`, `docs/laporan-harian/2026-11-24/`
 - Alasan/keputusan: Implementasi MFA 2 langkah (OTP 6-digit WhatsApp) untuk seluruh 9 akun peran, serta penyusunan dokumen laporan harian resmi format `.docx` (1,95 MB, 15 bagian lengkap + 7 bukti screenshot embedded) disimpan ke `D:\Laporan Andara Rejo Makmur\Harian\Laporan_Harian_Divisi_IT_24_November_2026.docx`.
 - Verifikasi: `bun test` (136 pass, 0 fail), verifikasi file DOCX 1.948.499 bytes.
 - Berikutnya: -
 
-
 ## P-055 | 2026-11-24 | Standardisasi Bahasa Bebas Kode Teknis & Penghapusan Emoticon UI
+
 - Status: selesai (lokal saja, tidak di-push sesuai instruksi pengguna)
 - Ubah: `src/components/PipelinePage.tsx`, `src/components/company/CompanyAuditLogsModal.tsx`, `src/components/FieldOpsModal.tsx`, `src/components/field/GpsLiveRadarMap.tsx`, `src/components/content/ContentSlotOverviewPage.tsx`, `src/components/superadmin/PlatformExecutiveDashboard.tsx`, `src/components/SuperadminPanel.tsx`
 - Alasan/keputusan: Mengganti label "Karantina DEV-26" menjadi "Penyaringan Spam" yang profesional dan mudah dimengerti orang awam, serta menghapus seluruh emoticon/emoji di antarmuka pengguna agar bersih dan berstandar enterprise.
@@ -267,6 +347,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Berikutnya: -
 
 ## P-054 | 2026-11-24 | Uji Isolasi Multi-Tenant Komprehensif (Tenant Baru, 100 Pengguna & 100 Data Dummy)
+
 - Status: selesai (lokal saja, tidak di-push sesuai instruksi pengguna)
 - Ubah: `server/index.ts`, `tests/multi-tenant-leakage-isolation.test.ts`
 - Alasan/keputusan: Menutup celah kebocoran data antar developer (Multi-Tenant Scoping) pada endpoint rekening bank, audit logs, pipeline leads, lead pool claim/reassign/release, update & delete leads, serta memverifikasi zero data leakage dengan 100 pengguna dan 100 data dummy.
@@ -274,6 +355,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Berikutnya: -
 
 ## P-054 | 2026-11-24 | Uji Isolasi Multi-Tenant Komprehensif (Tenant Baru, 100 Pengguna & 100 Data Dummy)
+
 - Status: selesai (lokal saja, tidak di-push sesuai instruksi pengguna)
 - Ubah: `server/index.ts`, `tests/multi-tenant-leakage-isolation.test.ts`
 - Alasan/keputusan: Menutup celah kebocoran data antar developer (Multi-Tenant Scoping) pada endpoint rekening bank, audit logs, pipeline leads, lead pool claim/reassign/release, update & delete leads, serta memverifikasi zero data leakage dengan 100 pengguna dan 100 data dummy.
@@ -281,6 +363,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Berikutnya: -
 
 ## P-053 | 2026-11-24 | Pembersihan Label Kode Teknis UI Menjadi Bahasa Bisnis Awam
+
 - Status: selesai (lokal saja, tidak di-push sesuai instruksi pengguna)
 - Ubah: `src/components/company/CompanyBankAccountsModal.tsx`, `src/components/company/CompanyAuditLogsModal.tsx`, `src/App.tsx`, `src/components/FieldOpsModal.tsx`, `src/components/PipelinePage.tsx`, `src/components/JalurProyek.tsx`, `src/components/PricingTable.tsx`, `server/ai-engine.ts`
 - Alasan/keputusan: Menghapus/mengganti kode modul dan istilah audit internal ("(Modul Q1 & S21)", "(Temuan T2)", "Whitelist AI F93", "F100 Copilot", "Log CRUD", "Karantina DEV-26") dengan bahasa bisnis yang mudah dipahami pengguna awam.
@@ -288,6 +371,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Berikutnya: -
 
 ## P-053 | 2026-11-24 | Pembersihan Label Kode Teknis UI Menjadi Bahasa Bisnis Awam
+
 - Status: selesai (lokal saja, tidak di-push sesuai instruksi pengguna)
 - Ubah: `src/components/company/CompanyBankAccountsModal.tsx`, `src/components/company/CompanyAuditLogsModal.tsx`, `src/App.tsx`, `src/components/FieldOpsModal.tsx`, `src/components/PipelinePage.tsx`, `src/components/JalurProyek.tsx`, `src/components/PricingTable.tsx`, `server/ai-engine.ts`
 - Alasan/keputusan: Menghapus/mengganti kode modul dan istilah audit internal ("(Modul Q1 & S21)", "(Temuan T2)", "Whitelist AI F93", "F100 Copilot", "Log CRUD", "Karantina DEV-26") dengan bahasa bisnis yang mudah dipahami pengguna awam.
@@ -295,6 +379,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Berikutnya: -
 
 ## P-052 | 2026-11-24 | Rekonsiliasi Metrik Direksi (T1), Privasi WA UU PDP (T3), FinOps AIC Metering (T7) & F100 Copilot
+
 - Status: selesai (lokal saja, tidak di-push sesuai instruksi pengguna)
 - Ubah: `src/App.tsx`, `server/ai-engine.ts`, `server/index.ts`, `server/wa-baileys.ts`, `src/components/FieldOpsModal.tsx`, `src/components/PipelinePage.tsx`, `tests/audit-findings-remediation.test.ts`
 - Alasan/keputusan: Menutup Temuan T1 (rekonsiliasi akumulasi Net Sales & Omzet real portofolio + glosarium metrik tunggal), Temuan T3 (kepatuhan UU PDP No. 27/2022 via auto-suppression list saat opt-out STOP & disclaimer draf), Temuan T7 (FinOps AIC metering ledger, budget cap throttle saat saldo 0), dan Modul M17 F100 (interactive AI activity copilot checklist + debet 5 AIC).
@@ -302,6 +387,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Berikutnya: -
 
 ## P-051 | 2026-11-24 | Rekening Resmi Perusahaan, Audit Trail CRUD Global, Lead Ownership, Lead Pool & AI Screening DEV-26
+
 - Status: selesai (lokal saja, tidak di-push sesuai instruksi pengguna)
 - Ubah: `src/components/PipelinePage.tsx`, `src/components/company/CompanyBankAccountsModal.tsx`, `src/components/company/CompanyAuditLogsModal.tsx`, `src/lib/leads/dev26-screening.ts`, `server/index.ts`, `server/ai-engine.ts`, `src/App.tsx`, `tests/dev26-and-company-accounts.test.ts`
 - Alasan/keputusan: Menutup Temuan T2 (fraud rekening) dengan master data whitelist rekening resmi (CRUD oleh SM/Admin), Temuan T4 (audit data) dengan pencatatan & viewer log CRUD global, Temuan T5 (kualitas lead) dengan screening DEV-26, serta permintaan kepemilikan lead ("Milik SE Siapa") dan Lead Pool (claim SE & assign SM/Admin).
@@ -309,6 +395,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Berikutnya: -
 
 ## P-050 | 2026-11-24 | Presensi Mandiri SM & Admin, Multi-Marker Live Radar SE, dan Pelacakan GPS Persisten Antar-Halaman
+
 - Status: selesai (lokal, siap uji coba, tidak di-push sesuai instruksi pengguna)
 - Ubah: `src/components/FieldOpsModal.tsx`, `src/components/field/GpsLiveRadarMap.tsx`
 - Alasan/keputusan: SM & Admin sebelumnya tidak dapat melakukan presensi mandiri (karena ter-bypass ke tabel monitoring), SM & Admin belum dapat melihat peta live multi-marker tim SE di tab Absen & GPS, dan radar lokasi SE mati otomatis saat berpindah tab akibat unmount lokal `watchPosition`.
@@ -316,6 +403,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Berikutnya: -
 
 ## P-049 | 2026-11-24 | Proporsionalitas Panjang Balasan WA & Persona Voice Guide di AI Lead Engine
+
 - Status: selesai (live di `hades` & pushed ke GitHub)
 - Ubah: `server/ai-engine.ts`, `tests/playbook-v1-2-pipeline.test.ts`
 - Alasan/keputusan: Balasan WA AI sebelumnya selalu dipaksa 3–4 paragraf + bullet fitur brosur meski client hanya membalas singkat/apresiasi, dan gaya bahasa belum dibedakan per persona.
@@ -323,15 +411,17 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Berikutnya: -
 
 ## P-048 | 2026-11-23 | Fix AI Pipeline Analysis & Rekomendasi Follow-Up Berulang (Tail-Context, Anti-Repetition & Auto-Recovery)
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `server/ai-engine.ts`, `server/wa-baileys.ts`, `server/index.ts`, `src/components/PipelinePage.tsx`
 - Detail Perubahan:
-  - **Root Cause & Fix Truncation `sales_notes` (`.slice(-650)` vs `.slice(0, 350)`):** Memperbaiki `server/ai-engine.ts` dan `server/wa-baileys.ts` yang sebelumnya memotong bagian *awal* `sales_notes` (`.slice(0, 350)`) sehingga giliran chat terbaru di bagian *akhir* terpotong dan AI terus membaca konteks obrolan lama (candaan kopi/survei lama). Kini AI selalu membaca ekor percakapan terbaru (`.slice(-650)`).
+  - **Root Cause & Fix Truncation `sales_notes` (`.slice(-650)` vs `.slice(0, 350)`):** Memperbaiki `server/ai-engine.ts` dan `server/wa-baileys.ts` yang sebelumnya memotong bagian _awal_ `sales_notes` (`.slice(0, 350)`) sehingga giliran chat terbaru di bagian _akhir_ terpotong dan AI terus membaca konteks obrolan lama (candaan kopi/survei lama). Kini AI selalu membaca ekor percakapan terbaru (`.slice(-650)`).
   - **Anti-Repetition Context (`previousAnalysis`) & Stage-Aware Guidance:** Menyertakan ringkasan analisis, saran taktis, dan draf pesan sebelumnya ke prompt AI dengan instruksi eksplisit melarang pengulangan, menyesuaikan suhu model (`0.65` saat Analisis Ulang), serta mengaktifkan re-analisis otomatis saat `stage`, `unitInterest`, `paymentScheme`, `personaCode`, atau `BANT` berubah di `PATCH /api/pipeline/leads/:id`.
   - **Fix Regex Ekstraksi Nama WA (`extractIntroducedNameFromText`) & Startup Recovery:** Mencegah frasa `"saya rasa setelah survey saya mau..."` menimpa nama prospek (`Alexander III`), memperbaiki cache draf `customDrafts` di `PipelinePage.tsx` agar terkunci per `analysis.id` (`${lead.id}_${analysis.id}`), dan menambahkan auto-recovery `wa_inbound_temp_buffer` saat server restart.
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` & verifikasi row `lead_ai_analyses` terbaru untuk `Alexander III`.
 
 ## P-047 | 2026-11-23 | Kartu Notifikasi Berwarna Sesuai Urgensi, Kalender Tanggal Asli WIB & Fix FlowClient.ev
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/components/se/SeNotificationCenter.tsx`, `src/App.tsx`, `src/lib/content-calendar/calendar-generator.ts`, `src/components/ContentCalendarViewer.tsx`, `server/content-media-worker.ts`, `server/index.ts`, `/opt/flow-service/flow_engine.py` (di `hades`)
 - Detail Perubahan:
@@ -343,6 +433,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), `flow-api.service` `ok: true`, deploy frontend & backend ke `hades` (`HTTP 200` + PM2 `online`).
 
 ## P-046 | 2026-11-23 | Clean Light Card Design untuk Developer Assistant & Modal Detail Notifikasi (Zero Brown Header)
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/App.tsx`, `src/components/se/SeNotificationCenter.tsx`
 - Detail Perubahan:
@@ -351,6 +442,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
 
 ## P-045 | 2026-11-23 | Arsitektur 4-Lapis Mobile Laporan Harian SE, Developer Assistant Login Onboarding & 3-Card Row Dashboard
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/components/mobile/SeMobileViews.tsx`, `src/components/se/SeNotificationCenter.tsx`, `src/App.tsx`
 - Detail Perubahan:
@@ -360,6 +452,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
 
 ## P-044 | 2026-11-23 | Redesign Mobile Scorecard Bulanan (Visual KPI Progress) & Laporan Harian SE (On-Demand Notes + Quick Chips)
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/components/mobile/SeMobileViews.tsx`, `src/App.tsx`
 - Detail Perubahan:
@@ -368,6 +461,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
 
 ## P-043 | 2026-11-23 | Portal Z-Index Notifikasi (Tutupi Bottom Bar), Modal Detail Tengah & Daftar Tugas SE Lengkap
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/components/mobile/MobileBottomNav.tsx`, `src/components/se/SeNotificationCenter.tsx`, `src/App.tsx`
 - Detail Perubahan:
@@ -377,6 +471,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
 
 ## P-042 | 2026-11-23 | Custom Dropdown + Opsi Lainnya Kalkulator KPR & Notifikasi Header Real-Time (H-5 Menit)
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/components/KnowledgeBaseViewer.tsx`, `src/components/se/SeNotificationCenter.tsx` (baru), `src/components/se/SeGuidedTour.tsx`, `src/App.tsx`
 - Detail Perubahan:
@@ -386,6 +481,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
 
 ## P-041 | 2026-11-23 | Header Desktop Ringkas & Mobile-First Knowledge Base (2 Tab Horizontal + Expandable Facts)
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/App.tsx`, `src/components/KnowledgeBaseViewer.tsx`
 - Detail Perubahan:
@@ -396,6 +492,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
 
 ## P-040 | 2026-11-23 | Hapus Badge Sudah Upload, Custom Stage Picker Pipeline & Mobile-First Absen/GPS
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/components/content/ContentSlotOverviewPage.tsx`, `src/components/PipelinePage.tsx`, `src/components/FieldOpsModal.tsx`
 - Detail Perubahan:
@@ -405,6 +502,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
 
 ## P-039 | 2026-11-23 | Link Postingan Spesifik Zernio, Filter Desktop-Only & Reflow Mobile Pipeline
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `server/zernio-client.ts`, `server/index.ts`, `src/components/content/ContentSlotOverviewPage.tsx`, `src/components/ContentCalendarViewer.tsx`, `src/components/PipelinePage.tsx`
 - Detail Perubahan:
@@ -415,6 +513,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200` + PM2 `online`).
 
 ## P-038 | 2026-11-23 | Auto-Fill Link Hasil Posting + Tombol Akses Link & Polish Mobile-First SE
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `src/components/content/ContentSlotOverviewPage.tsx`, `src/components/ContentCalendarViewer.tsx`, `src/components/mobile/MobileMoreSheet.tsx`
 - Detail Perubahan:
@@ -425,6 +524,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy ke `hades` (`HTTP 200`).
 
 ## P-037 | 2026-11-23 | Same-User Single-Slot Lock, Strict Cross-User FIFO & Cooldown Minimal 1 Menit Antar Slot
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `server/content-media-worker.ts`, `server/index.ts`, `src/components/content/ContentSlotOverviewPage.tsx`
 - Detail Perubahan:
@@ -434,15 +534,17 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), live deploy `hades` + cek endpoint `/api/se/content-slots/status`.
 
 ## P-036 | 2026-11-23 | Global Sequential Render Queue (1-per-1 + Cooldown), Busy-Window Guard & Fail-Fast Hermes
+
 - Status: selesai (live di `https://developerproperti.giivepro.com` & `hades`)
 - Ubah: `server/content-media-worker.ts`, `server/index.ts`, `src/components/content/ContentSlotOverviewPage.tsx`, `/opt/flow-service/flow_engine.py` (di `hades`)
 - Detail Perubahan:
   - **Global Sequential Queue (`sales_os.media_render_queue`):** Seluruh permintaan render foto/carousel/video dari semua SE dan scheduler kini masuk ke 1 antrean global PostgreSQL. Worker memproses **tepat 1 item (`PROCESSING`)** pada satu waktu, menunggu selesai, lalu memberi **jeda cooldown aman 12–18 detik** sebelum mengirim item berikutnya (menghilangkan burst 5 job sekaligus).
   - **Busy-Window Guard (30 Menit Sebelum Jadwal):** Mengunci generate manual pada **`08:30–09:00 WIB`** (buka `09:01`), **`13:30–14:00 WIB`** (buka `14:01`), dan **`19:00–19:30 WIB`** (buka `19:31`) agar scheduler terjadwal untuk semua SE selesai tepat waktu tanpa bentrok. UI otomatis menampilkan banner waktu sibuk & jumlah antrean global.
-  - **Fail-Fast Hermes (`flow_engine.py`):** Menambahkan deteksi dini pesan *"aktivitas yang tidak biasa"* / *"unusual activity"* pada Google Flow (backup aman di `flow_engine.py.bak.20261123b`) sehingga job langsung berhenti dalam hitungan detik alih-alih menunggu timeout 160 detik, dan worker otomatis membatalkan sisa slide `PENDING` slot yang terkena limit.
+  - **Fail-Fast Hermes (`flow_engine.py`):** Menambahkan deteksi dini pesan _"aktivitas yang tidak biasa"_ / _"unusual activity"_ pada Google Flow (backup aman di `flow_engine.py.bak.20261123b`) sehingga job langsung berhenti dalam hitungan detik alih-alih menunggu timeout 160 detik, dan worker otomatis membatalkan sisa slide `PENDING` slot yang terkena limit.
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), `flow-api.service` & PM2 `developer-sales-os-api` `online`.
 
 ## P-035 | 2026-11-23 | Playbook Khusus SE & Validasi Foto + GPS Rute Harian Canvassing
+
 - Status: selesai (`e488e54`, live di `https://developerproperti.giivepro.com`)
 - Ubah: `src/components/PlaybookViewer.tsx`, `src/components/DailyRouteViewer.tsx`, `src/App.tsx`
 - Detail Perubahan:
@@ -453,6 +555,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), live `HTTP 200` (`last-modified: Mon, 23 Nov 2026 13:50:46 GMT`).
 
 ## P-034 | 2026-11-23 | Pembersihan Tampilan Brief Konten SE & Tombol Perbarui Brief AI
+
 - Status: selesai (`5d452ab`, live)
 - Ubah: `src/components/content/ContentSlotOverviewPage.tsx`, `server/index.ts`
 - Detail Perubahan:
@@ -463,6 +566,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), PM2 `developer-sales-os-api` `online`.
 
 ## P-033 | 2026-11-23 | Monitoring Absensi & GPS Tracking Sisi Sales Manager (SM)
+
 - Status: selesai (`840828d`, live)
 - Ubah: `src/components/field/SmFieldMonitoringView.tsx` (baru), `src/components/FieldOpsModal.tsx`, `server/index.ts`
 - Detail Perubahan:
@@ -472,6 +576,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), live deploy sukses.
 
 ## P-032 | 2026-11-23 | Export Laporan (PDF/Excel), Pipeline Tab "Perlu Ditangani", & Guided Tour SE
+
 - Status: selesai (`3df5b64`, live)
 - Ubah: `src/lib/exporters/daily-report-exporter.ts` (baru), `src/components/se/SeGuidedTour.tsx` (baru), `src/components/PipelinePage.tsx`, `src/components/mobile/SeMobileViews.tsx`, `src/App.tsx`, `server/index.ts`
 - Detail Perubahan:
@@ -481,6 +586,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), live `/api/health` OK.
 
 ## P-031 | 2026-11-23 | Integrasi Zernio Social Media (4 Akun/SE, 8 Platform) & Pre-Generate Scheduler
+
 - Status: selesai (`41a4bb6`, `b292b95`, live)
 - Ubah: `server/zernio-client.ts` (baru), `src/components/content/SocialConnectModal.tsx` (baru), `server/index.ts`, `server/content-media-worker.ts`, `src/components/ContentCalendarViewer.tsx`, `src/components/content/ContentSlotOverviewPage.tsx`
 - Detail Perubahan:
@@ -492,15 +598,17 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `GET /api/se/social/connect?platform=instagram` live mengembalikan `HTTP 200` dengan `authUrl` resmi Instagram.
 
 ## P-030 | 2026-11-23 | Sinkronisasi Lokal SE + `origin/IT-kantor` ke `main`, Penguatan Hook TOFU/MOFU/BOFU & Dashboard SE
+
 - Status: selesai (`ec338dd`, `ccc7a1a`, `c0187d8`, live)
 - Ubah: `src/App.tsx`, `src/components/ContentCalendarViewer.tsx`, `src/components/FieldOpsModal.tsx`, `src/components/PlaybookViewer.tsx`, `src/components/KnowledgeBaseViewer.tsx`, `src/components/mobile/MobileMoreSheet.tsx`, `server/content-media-worker.ts`, `server/index.ts`
 - Detail Perubahan:
   - Mengamankan seluruh pekerjaan lokal SE (`PROJECT.md`, Hermes Studio, GPS Radar, Rute Harian, KPR KB) di branch `feat/se-ops-local`, lalu menggabungkan `origin/IT-kantor` (multi-proyek, Superadmin/IT dashboards, impersonasi) ke `main` dengan tetap mempertahankan 100% isolasi & fitur `SE`.
   - Memperketat prompt AI TOFU/MOFU/BOFU di `content-media-worker.ts` dengan field `hook` eksplisit per stage dan skrip Reels 3-tahap (`0-3d Hook | 4-11d Bukti | 12-Nd CTA`).
-  - Memperbaiki Dashboard SE: menambah *debounce* 500ms pada input catatan laporan, counter `Target Hit` dinamis, dan `quickStatus` di `/api/se/dashboard`.
+  - Memperbaiki Dashboard SE: menambah _debounce_ 500ms pada input catatan laporan, counter `Target Hit` dinamis, dan `quickStatus` di `/api/se/dashboard`.
 - Verifikasi: `npm run build` (0 error), `bun test` (111 pass, 0 fail), deploy perdana ke `https://developerproperti.giivepro.com` (`HTTP 200`).
 
 ## P-029 | 2026-11-23 | Pembuatan & Push Branch Terisolasi IT-kantor ke Remote
+
 - Status: selesai
 - Ubah: Branch Git `IT-kantor`
 - Alasan/keputusan: Menyimpan dan mengunggah seluruh pekerjaan (auth multi-tenant, dashboard superadmin eksekutif & IT, impersonasi sesi, dan pembersihan login) ke branch terisolasi `IT-kantor` di GitHub (`origin/IT-kantor`) tanpa menyentuh branch `main` milik tim.

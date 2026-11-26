@@ -22,6 +22,7 @@ import {
   createMfaChallenge,
   type MfaChallenge,
 } from "../lib/auth/dummy-accounts";
+import { saveOnboardingProfile } from "../lib/auth/se-management";
 import type { RoleKey } from "../data";
 
 interface LoginModalProps {
@@ -44,13 +45,21 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // Signup form state
+  // Signup form state (Pendaftar Karyawan Developer & Kuisioner Tim)
+  const [applicantRole, setApplicantRole] = useState<'SM' | 'ADMIN' | 'IT' | 'DIREKSI'>('SM');
+  const [directorName, setDirectorName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [picName, setPicName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPhone, setSignupPhone] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [showSignupPassword, setShowSignupPassword] = useState(false);
+
+  // Kuesioner struktur developer
+  const [hasInternalSales, setHasInternalSales] = useState(true);
+  const [seCountEstimate, setSeCountEstimate] = useState(5);
+  const [useExternalBrokers, setUseExternalBrokers] = useState(true);
+  const [activeProjectsCount, setActiveProjectsCount] = useState(1);
 
   // MFA form state
   const [mfaChallenge, setMfaChallenge] = useState<MfaChallenge | null>(null);
@@ -87,12 +96,31 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+
+    // Simpan profil kuesioner developer
+    saveOnboardingProfile({
+      companyName,
+      applicantName: picName,
+      applicantRole,
+      directorName: directorName.trim() || 'Direktur Utama',
+      email: signupEmail,
+      phone: signupPhone,
+      hasInternalSales,
+      seCountEstimate,
+      hasMarketingTeam: true,
+      useExternalBrokers,
+      activeProjectsCount,
+      selectedPlan: 'GROWTH',
+      registeredAt: new Date().toISOString(),
+    });
+
     const result = await registerWithServer({
       companyName,
       name: picName,
       email: signupEmail,
       phone: signupPhone,
       password: signupPassword,
+      role: applicantRole,
     });
 
     if (!result.ok) {
@@ -135,7 +163,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-espresso/70 backdrop-blur-xs">
-      <div className="w-full max-w-md bg-white border border-warmborder rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 max-h-[92vh] flex flex-col">
+      <div className={`w-full ${mode === "signup" ? "max-w-xl" : "max-w-md"} bg-white border border-warmborder rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 max-h-[92vh] flex flex-col`}>
         {/* Header Clean dengan Tab Switcher */}
         <div className="p-5 border-b border-warmborder bg-sandstone/40 shrink-0">
           <div className="flex items-center justify-between mb-3">
@@ -151,7 +179,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 {mode === "login"
                   ? "Akses dashboard penjualan & operasional proyek"
                   : mode === "signup"
-                  ? "Registrasi mandiri untuk memulai demo sistem"
+                  ? "Pendaftaran mandiri oleh staf/manajer operasional & kuesioner tim"
                   : "Keamanan ganda terenkripsi untuk seluruh akun"}
               </p>
             </div>
@@ -417,51 +445,109 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               </div>
             </form>
           ) : (
-            <form onSubmit={handleSignupSubmit} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-espresso mb-1">
-                  Nama Perusahaan / PT Developer *
-                </label>
-                <div className="relative">
-                  <Building2 className="size-4 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    required
-                    value={companyName}
-                    onChange={(e) => {
-                      setCompanyName(e.target.value);
-                      if (errorMsg) setErrorMsg(null);
-                    }}
-                    placeholder="Contoh: PT Graha Sentosa Mandiri"
-                    className="w-full h-10 pl-9 pr-3 rounded-xl border border-warmborder text-xs focus:border-terracotta focus:outline-none bg-sandstone/30"
-                  />
-                </div>
-              </div>
+            <form onSubmit={handleSignupSubmit} className="space-y-4">
+              {/* Box Info: PIC Pendaftar Karyawan */}
+              <div className="p-3 rounded-2xl bg-sandstone/60 border border-warmborder space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-terracotta block">
+                  1. Identitas PIC Pendaftar &amp; Akun Login Anda
+                </span>
+                <p className="text-[11px] text-warmmuted leading-snug">
+                  Direksi tidak perlu mengoperasikan aplikasi sehari-hari. Pilihlah jabatan Anda agar sistem membuka dashboard operasional yang sesuai.
+                </p>
 
-              <div>
-                <label className="block text-xs font-bold text-espresso mb-1">
-                  Nama Pemilik / Direktur *
-                </label>
-                <div className="relative">
-                  <User className="size-4 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    required
-                    value={picName}
-                    onChange={(e) => {
-                      setPicName(e.target.value);
-                      if (errorMsg) setErrorMsg(null);
-                    }}
-                    placeholder="Contoh: Bpk. Bambang Soedirjo"
-                    className="w-full h-10 pl-9 pr-3 rounded-xl border border-warmborder text-xs focus:border-terracotta focus:outline-none bg-sandstone/30"
-                  />
+                <div>
+                  <label className="block text-[11px] font-bold text-espresso mb-1.5">
+                    Jabatan Anda di Perusahaan *
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
+                    {[
+                      { key: 'SM' as const, label: 'Sales Manager (SM)', sub: 'Rekomendasi' },
+                      { key: 'ADMIN' as const, label: 'Admin Sales', sub: 'Pemberkasan KPR' },
+                      { key: 'IT' as const, label: 'Tim IT / Sistem', sub: 'Setup & Integrasi' },
+                      { key: 'DIREKSI' as const, label: 'Owner / Direksi', sub: 'Laporan Eksekutif' },
+                    ].map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setApplicantRole(item.key)}
+                        className={`p-2 rounded-xl border text-left cursor-pointer transition-all ${
+                          applicantRole === item.key
+                            ? 'bg-espresso text-white border-espresso shadow-xs'
+                            : 'bg-white text-espresso border-warmborder hover:bg-sandstone'
+                        }`}
+                      >
+                        <span className="font-bold block text-[11px]">{item.label}</span>
+                        <span className={`text-[9px] block ${applicantRole === item.key ? 'text-amber-300' : 'text-warmmuted'}`}>
+                          {item.sub}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-espresso mb-1">
-                    Email Bisnis *
+                    Nama Perusahaan / PT Developer *
+                  </label>
+                  <div className="relative">
+                    <Building2 className="size-4 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      required
+                      value={companyName}
+                      onChange={(e) => {
+                        setCompanyName(e.target.value);
+                        if (errorMsg) setErrorMsg(null);
+                      }}
+                      placeholder="Contoh: PT Graha Sentosa Mandiri"
+                      className="w-full h-10 pl-9 pr-3 rounded-xl border border-warmborder text-xs focus:border-terracotta focus:outline-none bg-sandstone/30"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-espresso mb-1">
+                    Nama Direktur Utama / Pemilik PT
+                  </label>
+                  <div className="relative">
+                    <User className="size-4 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={directorName}
+                      onChange={(e) => setDirectorName(e.target.value)}
+                      placeholder="Contoh: Bpk. Bambang Soedirjo"
+                      className="w-full h-10 pl-9 pr-3 rounded-xl border border-warmborder text-xs focus:border-terracotta focus:outline-none bg-sandstone/30"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-espresso mb-1">
+                    Nama Lengkap Anda (PIC Pendaftar) *
+                  </label>
+                  <div className="relative">
+                    <User className="size-4 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      required
+                      value={picName}
+                      onChange={(e) => {
+                        setPicName(e.target.value);
+                        if (errorMsg) setErrorMsg(null);
+                      }}
+                      placeholder="Contoh: Ferry Kurniawan"
+                      className="w-full h-10 pl-9 pr-3 rounded-xl border border-warmborder text-xs focus:border-terracotta focus:outline-none bg-sandstone/30"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-espresso mb-1">
+                    Email Bisnis Login Anda *
                   </label>
                   <div className="relative">
                     <Mail className="size-4 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
@@ -473,15 +559,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                         setSignupEmail(e.target.value);
                         if (errorMsg) setErrorMsg(null);
                       }}
-                      placeholder="owner@developer.com"
+                      placeholder="ferry.sm@developer.com"
                       className="w-full h-10 pl-9 pr-3 rounded-xl border border-warmborder text-xs focus:border-terracotta focus:outline-none bg-sandstone/30"
                     />
                   </div>
                 </div>
+              </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-espresso mb-1">
-                    No. WhatsApp *
+                    No. WhatsApp Anda (untuk OTP MFA) *
                   </label>
                   <div className="relative">
                     <Phone className="size-4 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
@@ -498,42 +586,143 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     />
                   </div>
                 </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-espresso mb-1">
+                    Kata Sandi Baru *
+                  </label>
+                  <div className="relative">
+                    <Lock className="size-4 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type={showSignupPassword ? "text" : "password"}
+                      required
+                      minLength={6}
+                      value={signupPassword}
+                      onChange={(e) => {
+                        setSignupPassword(e.target.value);
+                        if (errorMsg) setErrorMsg(null);
+                      }}
+                      placeholder="Minimal 6 karakter"
+                      className="w-full h-10 pl-9 pr-9 rounded-xl border border-warmborder text-xs focus:border-terracotta focus:outline-none bg-sandstone/30"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSignupPassword((prev) => !prev)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-warmmuted hover:text-espresso p-1 cursor-pointer"
+                      aria-label={
+                        showSignupPassword
+                          ? "Sembunyikan kata sandi"
+                          : "Lihat kata sandi"
+                      }
+                    >
+                      {showSignupPassword ? (
+                        <EyeOff className="size-4" />
+                      ) : (
+                        <Eye className="size-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-espresso mb-1">
-                  Kata Sandi Baru *
-                </label>
-                <div className="relative">
-                  <Lock className="size-4 text-warmmuted absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type={showSignupPassword ? "text" : "password"}
-                    required
-                    minLength={6}
-                    value={signupPassword}
-                    onChange={(e) => {
-                      setSignupPassword(e.target.value);
-                      if (errorMsg) setErrorMsg(null);
-                    }}
-                    placeholder="Minimal 6 karakter"
-                    className="w-full h-10 pl-9 pr-9 rounded-xl border border-warmborder text-xs focus:border-terracotta focus:outline-none bg-sandstone/30"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSignupPassword((prev) => !prev)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-warmmuted hover:text-espresso p-1 cursor-pointer"
-                    aria-label={
-                      showSignupPassword
-                        ? "Sembunyikan kata sandi"
-                        : "Lihat kata sandi"
-                    }
-                  >
-                    {showSignupPassword ? (
-                      <EyeOff className="size-4" />
-                    ) : (
-                      <Eye className="size-4" />
-                    )}
-                  </button>
+              {/* Box Kuesioner Struktur Tim & Kebutuhan Developer */}
+              <div className="p-3.5 rounded-2xl bg-sandstone/50 border border-warmborder space-y-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-olive block">
+                  2. Kuesioner Struktur Tim &amp; Kebutuhan Operasional
+                </span>
+
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <label className="block font-semibold text-espresso mb-1">
+                      Apakah developer memiliki tim Sales Executive (SE) In-house sendiri?
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setHasInternalSales(true)}
+                        className={`flex-1 py-1.5 px-3 rounded-lg border text-xs font-medium cursor-pointer ${
+                          hasInternalSales
+                            ? 'bg-olive text-white border-olive font-bold'
+                            : 'bg-white text-espresso border-warmborder hover:bg-sandstone'
+                        }`}
+                      >
+                        ✓ Ya, Punya Tim In-House
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setHasInternalSales(false)}
+                        className={`flex-1 py-1.5 px-3 rounded-lg border text-xs font-medium cursor-pointer ${
+                          !hasInternalSales
+                            ? 'bg-olive text-white border-olive font-bold'
+                            : 'bg-white text-espresso border-warmborder hover:bg-sandstone'
+                        }`}
+                      >
+                        Hanya Agen Eksternal
+                      </button>
+                    </div>
+                  </div>
+
+                  {hasInternalSales && (
+                    <div>
+                      <label className="block font-semibold text-espresso mb-1">
+                        Perkiraan jumlah Sales Executive (SE) in-house saat ini:
+                      </label>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[
+                          { count: 3, label: '1 - 5 Orang SE' },
+                          { count: 10, label: '6 - 15 Orang SE' },
+                          { count: 20, label: '> 15 Orang SE' },
+                        ].map((tier) => (
+                          <button
+                            key={tier.count}
+                            type="button"
+                            onClick={() => setSeCountEstimate(tier.count)}
+                            className={`py-1.5 px-2 rounded-lg border text-center text-[11px] cursor-pointer ${
+                              seCountEstimate === tier.count
+                                ? 'bg-terracotta text-white border-terracotta font-bold'
+                                : 'bg-white text-espresso border-warmborder hover:bg-sandstone'
+                            }`}
+                          >
+                            {tier.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    <div>
+                      <label className="block font-semibold text-espresso mb-1">
+                        Bermitra dengan Agen / Broker Properti Luar?
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setUseExternalBrokers(!useExternalBrokers)}
+                        className={`w-full py-1.5 px-3 rounded-lg border text-left text-[11px] cursor-pointer flex items-center justify-between ${
+                          useExternalBrokers
+                            ? 'bg-amber-50 border-amber-300 text-espresso font-semibold'
+                            : 'bg-white border-warmborder text-warmmuted'
+                        }`}
+                      >
+                        <span>{useExternalBrokers ? '✓ Ya, Aktifkan Portal Agen' : '✗ Tidak, Hanya In-house'}</span>
+                      </button>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-espresso mb-1">
+                        Jumlah Proyek Aktif yang Dipasarkan:
+                      </label>
+                      <select
+                        value={activeProjectsCount}
+                        onChange={(e) => setActiveProjectsCount(Number(e.target.value))}
+                        className="w-full h-8 px-2 rounded-lg border border-warmborder bg-white text-xs font-semibold text-espresso focus:border-terracotta focus:outline-none"
+                      >
+                        <option value={1}>1 Proyek Utama</option>
+                        <option value={3}>2 - 4 Proyek</option>
+                        <option value={6}>&gt; 5 Proyek Portofolio</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -542,7 +731,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 className="w-full h-11 rounded-xl bg-terracotta text-white font-bold text-xs hover:bg-terracotta/90 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs mt-3"
               >
                 <UserPlus className="size-4" />
-                <span>Daftar &amp; Masuk Dashboard</span>
+                <span>
+                  Daftarkan Developer &amp; Masuk Dashboard {applicantRole === 'SM' ? 'Sales Manager' : applicantRole === 'ADMIN' ? 'Admin' : applicantRole}
+                </span>
               </button>
 
               <div className="text-center pt-2">

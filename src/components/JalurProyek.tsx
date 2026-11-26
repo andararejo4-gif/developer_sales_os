@@ -3,7 +3,7 @@
 // Visual sequential roadmap & permission-guarded stage controller
 // ============================================================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 import {
   FileText,
   Compass,
@@ -23,9 +23,19 @@ import {
   Download,
   Layers,
   Plus,
-} from 'lucide-react';
-import { loadPersistedState, savePersistedState } from '../lib/navigation/router';
-import type { CompanyProject } from '../lib/projects/projects-data';
+  ExternalLink,
+  Copy,
+} from "lucide-react";
+import {
+  loadPersistedState,
+  savePersistedState,
+} from "../lib/navigation/router";
+import {
+  type CompanyProject,
+  getProjectCoordinates,
+  type ProjectGpsLocation,
+} from "../lib/projects/projects-data";
+import { ManageClusterCoordsModal } from "./projects/ManageClusterCoordsModal";
 
 export interface ProjectStageItem {
   key: string;
@@ -34,97 +44,104 @@ export interface ProjectStageItem {
   description: string;
   isFree: boolean;
   phase: string;
-  status: 'COMPLETED' | 'READY' | 'LOCKED';
+  status: "COMPLETED" | "READY" | "LOCKED";
   version: number;
   icon: typeof FileText;
 }
 
 export const PIPELINE_STAGES: ProjectStageItem[] = [
   {
-    key: 'input',
+    key: "input",
     order: 1,
-    title: 'Input Dokumen Proyek',
-    description: 'Brosur/katalog, pricelist harga bertahap, koordinat GPS cluster, fasilitas.',
+    title: "Input Dokumen Proyek",
+    description:
+      "Brosur/katalog, pricelist harga bertahap, koordinat GPS cluster, fasilitas.",
     isFree: true,
-    phase: 'Fase 1',
-    status: 'COMPLETED',
+    phase: "Fase 1",
+    status: "COMPLETED",
     version: 1,
     icon: UploadCloud,
   },
   {
-    key: 'surat_cinta_99',
+    key: "surat_cinta_99",
     order: 2,
-    title: 'Surat Cinta 99 Keunggulan',
-    description: 'Narasi editorial emosional & 99 poin faktual terkurasi (Gratis selamanya).',
+    title: "Surat Cinta 99 Keunggulan",
+    description:
+      "Narasi editorial emosional & 99 poin faktual terkurasi (Gratis selamanya).",
     isFree: true,
-    phase: 'Fase 1',
-    status: 'COMPLETED',
+    phase: "Fase 1",
+    status: "COMPLETED",
     version: 1,
     icon: FileText,
   },
   {
-    key: 'riset_pasar',
+    key: "riset_pasar",
     order: 3,
-    title: 'Riset Pasar & Analisis Kompetitor',
-    description: '5 Persona target, fasilitas publik & kompetitor cincin radius 500m - 25km.',
+    title: "Riset Pasar & Analisis Kompetitor",
+    description:
+      "5 Persona target, fasilitas publik & kompetitor cincin radius 500m - 25km.",
     isFree: false,
-    phase: 'Fase 2',
-    status: 'COMPLETED',
+    phase: "Fase 2",
+    status: "COMPLETED",
     version: 1,
     icon: Compass,
   },
   {
-    key: 'target_penjualan',
+    key: "target_penjualan",
     order: 4,
-    title: 'Target Penjualan 100% Sold Out',
-    description: 'Skenario kecepatan jual, reverse funnel leads, dan pembagian kuota per SE.',
+    title: "Target Penjualan 100% Sold Out",
+    description:
+      "Skenario kecepatan jual, reverse funnel leads, dan pembagian kuota per SE.",
     isFree: false,
-    phase: 'Fase 2',
-    status: 'COMPLETED',
+    phase: "Fase 2",
+    status: "COMPLETED",
     version: 1,
     icon: TrendingUp,
   },
   {
-    key: 'kalender_konten',
+    key: "kalender_konten",
     order: 5,
-    title: 'Kalender Konten Media Sosial (30 Hari)',
-    description: 'Slot TOFU/MOFU/BOFU harian multi-platform untuk akun proyek & sales.',
+    title: "Kalender Konten Media Sosial (30 Hari)",
+    description:
+      "Slot TOFU/MOFU/BOFU harian multi-platform untuk akun proyek & sales.",
     isFree: false,
-    phase: 'Fase 3',
-    status: 'READY',
+    phase: "Fase 3",
+    status: "READY",
     version: 1,
     icon: Calendar,
   },
   {
-    key: 'playbook',
+    key: "playbook",
     order: 6,
-    title: 'Playbook Sales (SE, TL, SM)',
-    description: 'SOP closing, penanganan keberatan, skrip follow-up, dan aturan eskalasi.',
+    title: "Playbook Sales (SE, TL, SM)",
+    description:
+      "SOP closing, penanganan keberatan, skrip follow-up, dan aturan eskalasi.",
     isFree: false,
-    phase: 'Fase 4',
-    status: 'READY',
+    phase: "Fase 4",
+    status: "READY",
     version: 1,
     icon: BookOpen,
   },
   {
-    key: 'rute_harian',
+    key: "rute_harian",
     order: 7,
-    title: 'Rute Harian & Kanvasing SE',
-    description: 'Pemetaan rute harian kanvasing B2B & titik keramaian per SE.',
+    title: "Rute Harian & Kanvasing SE",
+    description: "Pemetaan rute harian kanvasing B2B & titik keramaian per SE.",
     isFree: false,
-    phase: 'Fase 4',
-    status: 'READY',
+    phase: "Fase 4",
+    status: "READY",
     version: 1,
     icon: MapPin,
   },
   {
-    key: 'website_landing',
+    key: "website_landing",
     order: 8,
-    title: 'Website Landing Page Proyek',
-    description: 'Landing page berkonversi tinggi dengan formulir lead terintegrasi CRM.',
+    title: "Website Landing Page Proyek",
+    description:
+      "Landing page berkonversi tinggi dengan formulir lead terintegrasi CRM.",
     isFree: false,
-    phase: 'Fase 5',
-    status: 'READY',
+    phase: "Fase 5",
+    status: "READY",
     version: 1,
     icon: Globe,
   },
@@ -135,54 +152,70 @@ interface JalurProyekProps {
   project?: CompanyProject;
   userRole?: string;
   isDemoMode?: boolean;
-  variant?: 'modal' | 'page';
+  variant?: "modal" | "page";
   onOpenStage?: (stageKey: string) => void;
   onOpenNewProject?: () => void;
   onClose?: () => void;
 }
 
 export function JalurProyek({
-  projectName = 'The Park Townhouse Sukoharjo',
+  projectName = "The Park Townhouse Sukoharjo",
   project,
-  userRole = 'DIREKSI',
+  userRole = "DIREKSI",
   isDemoMode = false,
-  variant = 'modal',
+  variant = "modal",
   onOpenStage,
   onClose,
 }: JalurProyekProps) {
-  const projectId = project?.id || 'the-park-sukoharjo';
+  const projectId = project?.id || "the-park-sukoharjo";
 
   // Periksa apakah proyek memiliki data jalur proyek
   // Hanya The Park Sukoharjo yang memiliki jalur proyek awal terisi lengkap secara bawaan
-  const isPark = projectId === 'the-park-sukoharjo' || projectId === 'proj-the-park-01';
+  const isPark =
+    projectId === "the-park-sukoharjo" || projectId === "proj-the-park-01";
   const [stages, setStages] = useState<ProjectStageItem[]>(() => {
     return loadPersistedState<ProjectStageItem[]>(
       `devos_jalur_stages_${projectId}`,
-      isPark ? PIPELINE_STAGES : []
+      isPark ? PIPELINE_STAGES : [],
     );
   });
 
   useEffect(() => {
     const loaded = loadPersistedState<ProjectStageItem[]>(
       `devos_jalur_stages_${projectId}`,
-      isPark ? PIPELINE_STAGES : []
+      isPark ? PIPELINE_STAGES : [],
     );
     setStages(loaded);
   }, [projectId, isPark]);
 
   const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [isClusterCoordsModalOpen, setIsClusterCoordsModalOpen] =
+    useState(false);
+  const [projectCoords, setProjectCoords] = useState<ProjectGpsLocation[]>(() =>
+    getProjectCoordinates(project),
+  );
+
+  useEffect(() => {
+    setProjectCoords(getProjectCoordinates(project));
+  }, [project]);
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Role capability permissions check:
   // proyek.buat, proyek.unggah, proyek.generate are ONLY permitted for OWNER, DIREKSI, SM
-  const canManageProject = ['DEVELOPER_OWNER', 'DIREKSI', 'SALES_MANAGER', 'SM'].includes(userRole);
+  const canManageProject = [
+    "DEVELOPER_OWNER",
+    "DIREKSI",
+    "SALES_MANAGER",
+    "SM",
+  ].includes(userRole);
 
   const handleStageClick = (stage: ProjectStageItem) => {
-    if (stage.status === 'LOCKED') {
-      setToastMessage('Tahap ini masih terkunci.');
+    if (stage.status === "LOCKED") {
+      setToastMessage("Tahap ini masih terkunci.");
       return;
     }
-    if (stage.key === 'input') {
+    if (stage.key === "input") {
       setShowDocumentModal(true);
       return;
     }
@@ -195,12 +228,19 @@ export function JalurProyek({
 
   const handleInisialisasiJalur = () => {
     if (!canManageProject) {
-      setToastMessage('Akses ditolak: Hanya Direksi dan Sales Manager yang dapat menginisialisasi jalur proyek.');
+      setToastMessage(
+        "Akses ditolak: Hanya Direksi dan Sales Manager yang dapat menginisialisasi jalur proyek.",
+      );
       return;
     }
     const initialStages = PIPELINE_STAGES.map((s, idx) => ({
       ...s,
-      status: idx < 4 ? ('COMPLETED' as const) : idx < 6 ? ('READY' as const) : ('LOCKED' as const),
+      status:
+        idx < 4
+          ? ("COMPLETED" as const)
+          : idx < 6
+            ? ("READY" as const)
+            : ("LOCKED" as const),
     }));
     setStages(initialStages);
     savePersistedState(`devos_jalur_stages_${projectId}`, initialStages);
@@ -210,12 +250,18 @@ export function JalurProyek({
   const handleRegenerateStage = (stageKey: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!canManageProject) {
-      setToastMessage('Akses ditolak: Hanya Direksi dan Sales Manager yang dapat me-regenerate tahap proyek.');
+      setToastMessage(
+        "Akses ditolak: Hanya Direksi dan Sales Manager yang dapat me-regenerate tahap proyek.",
+      );
       return;
     }
 
     setStages((prev) => {
-      const next = prev.map((s) => (s.key === stageKey ? { ...s, version: s.version + 1, status: 'COMPLETED' as const } : s));
+      const next = prev.map((s) =>
+        s.key === stageKey
+          ? { ...s, version: s.version + 1, status: "COMPLETED" as const }
+          : s,
+      );
       savePersistedState(`devos_jalur_stages_${projectId}`, next);
       return next;
     });
@@ -223,13 +269,13 @@ export function JalurProyek({
   };
 
   const outerClass =
-    variant === 'page'
-      ? 'w-full'
-      : 'fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200';
+    variant === "page"
+      ? "w-full"
+      : "fixed inset-0 z-50 overflow-y-auto bg-espresso/70 backdrop-blur-sm flex justify-center p-3 md:p-6 animate-in fade-in duration-200";
   const cardClass =
-    variant === 'page'
-      ? 'bg-white rounded-2xl border border-warmborder w-full flex flex-col overflow-hidden shadow-xs'
-      : 'bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden';
+    variant === "page"
+      ? "bg-white rounded-2xl border border-warmborder w-full flex flex-col overflow-hidden shadow-xs"
+      : "bg-white rounded-3xl shadow-2xl border border-warmborder w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden";
 
   return (
     <div className={outerClass}>
@@ -252,10 +298,11 @@ export function JalurProyek({
                 )}
               </div>
               <p className="text-xs text-warmmuted mt-1 leading-relaxed">
-                Alur berurutan 8 tahap pemasaran &amp; penjualan. Tiap tahap menjadi masukan tahap berikutnya.
+                Alur berurutan 8 tahap pemasaran &amp; penjualan. Tiap tahap
+                menjadi masukan tahap berikutnya.
               </p>
             </div>
-            {variant === 'modal' && onClose && (
+            {variant === "modal" && onClose && (
               <button
                 onClick={onClose}
                 aria-label="Tutup Jalur Proyek"
@@ -267,7 +314,7 @@ export function JalurProyek({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {variant === 'modal' && onClose && (
+            {variant === "modal" && onClose && (
               <button
                 onClick={onClose}
                 aria-label="Tutup Jalur Proyek"
@@ -284,7 +331,9 @@ export function JalurProyek({
           <div className="bg-amber-50 px-6 py-2.5 border-b border-amber-200 flex items-center gap-2 text-xs text-amber-900 shrink-0">
             <AlertCircle className="size-4 text-amber-700 shrink-0" />
             <span>
-              Mode Read-Only ({userRole}): Anda dapat melihat hasil tahap proyek yang ditugaskan. Pembuatan dan regenerasi proyek dikelola oleh Direksi & Sales Manager.
+              Mode Read-Only ({userRole}): Anda dapat melihat hasil tahap proyek
+              yang ditugaskan. Pembuatan dan regenerasi proyek dikelola oleh
+              Direksi & Sales Manager.
             </span>
           </div>
         )}
@@ -297,36 +346,56 @@ export function JalurProyek({
                 Gerbang Kesiapan Operasional (Readiness Gates)
               </span>
               <span className="text-[11px] text-warmmuted">
-                Keluaran sebelum gerbang lulus berstatus <strong className="text-espresso">draf &amp; simulasi internal</strong>.
+                Keluaran sebelum gerbang lulus berstatus{" "}
+                <strong className="text-espresso">
+                  draf &amp; simulasi internal
+                </strong>
+                .
               </span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
                 <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                 <div>
-                  <p className="font-bold text-xs text-espresso">G0 · Draft-ready</p>
-                  <p className="text-[10px] text-emerald-700 font-medium">Lolos (6 Draf Aktif)</p>
+                  <p className="font-bold text-xs text-espresso">
+                    G0 · Draft-ready
+                  </p>
+                  <p className="text-[10px] text-emerald-700 font-medium">
+                    Lolos (6 Draf Aktif)
+                  </p>
                 </div>
               </div>
               <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
                 <span className="size-2 rounded-full bg-amber-400 shrink-0" />
                 <div>
-                  <p className="font-bold text-xs text-espresso">G1 · Publish-ready</p>
-                  <p className="text-[10px] text-warmmuted">Perlu PIC Approval</p>
+                  <p className="font-bold text-xs text-espresso">
+                    G1 · Publish-ready
+                  </p>
+                  <p className="text-[10px] text-warmmuted">
+                    Perlu PIC Approval
+                  </p>
                 </div>
               </div>
               <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
                 <span className="size-2 rounded-full bg-slate-300 shrink-0" />
                 <div>
-                  <p className="font-bold text-xs text-espresso">G2 · Demand-ready</p>
-                  <p className="text-[10px] text-warmmuted">Iklan &amp; WA Mandat</p>
+                  <p className="font-bold text-xs text-espresso">
+                    G2 · Demand-ready
+                  </p>
+                  <p className="text-[10px] text-warmmuted">
+                    Iklan &amp; WA Mandat
+                  </p>
                 </div>
               </div>
               <div className="p-2 rounded-lg bg-surface border border-warmborder flex items-center gap-2">
                 <span className="size-2 rounded-full bg-slate-300 shrink-0" />
                 <div>
-                  <p className="font-bold text-xs text-espresso">G3 · Transaction</p>
-                  <p className="text-[10px] text-warmmuted">Rekening Resmi Sah</p>
+                  <p className="font-bold text-xs text-espresso">
+                    G3 · Transaction
+                  </p>
+                  <p className="text-[10px] text-warmmuted">
+                    Rekening Resmi Sah
+                  </p>
                 </div>
               </div>
             </div>
@@ -341,9 +410,12 @@ export function JalurProyek({
                 <Layers className="size-8 text-warmmuted" />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-espresso">Belum ada jalur proyek</h3>
+                <h3 className="text-base font-extrabold text-espresso">
+                  Belum ada jalur proyek
+                </h3>
                 <p className="text-xs text-warmmuted mt-1 max-w-md mx-auto leading-relaxed">
-                  Jalur 8 tahap kesiapan pemasaran &amp; penjualan belum dibuat untuk <strong>{projectName}</strong>.
+                  Jalur 8 tahap kesiapan pemasaran &amp; penjualan belum dibuat
+                  untuk <strong>{projectName}</strong>.
                 </p>
               </div>
               {canManageProject && (
@@ -360,8 +432,8 @@ export function JalurProyek({
             <div className="grid grid-cols-1 gap-3.5">
               {stages.map((stage) => {
                 const Icon = stage.icon;
-                const isCompleted = stage.status === 'COMPLETED';
-                const isReady = stage.status === 'READY';
+                const isCompleted = stage.status === "COMPLETED";
+                const isReady = stage.status === "READY";
 
                 return (
                   <div
@@ -369,20 +441,20 @@ export function JalurProyek({
                     onClick={() => handleStageClick(stage)}
                     className={`p-4 md:p-5 rounded-2xl border transition-all cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4 ${
                       isCompleted
-                        ? 'bg-white border-warmborder hover:border-terracotta/60 shadow-sm'
+                        ? "bg-white border-warmborder hover:border-terracotta/60 shadow-sm"
                         : isReady
-                        ? 'bg-white/80 border-dashed border-warmborder hover:bg-white'
-                        : 'bg-sandstone/30 border-warmborder/40 opacity-60 cursor-not-allowed'
+                          ? "bg-white/80 border-dashed border-warmborder hover:bg-white"
+                          : "bg-sandstone/30 border-warmborder/40 opacity-60 cursor-not-allowed"
                     }`}
                   >
                     <div className="flex items-start gap-4">
                       <div
                         className={`size-11 rounded-2xl flex items-center justify-center shrink-0 font-extrabold text-sm ${
                           isCompleted
-                            ? 'bg-terracotta text-white shadow-sm'
+                            ? "bg-terracotta text-white shadow-sm"
                             : isReady
-                            ? 'bg-sandstone text-espresso border border-warmborder'
-                            : 'bg-warmborder text-warmmuted'
+                              ? "bg-sandstone text-espresso border border-warmborder"
+                              : "bg-warmborder text-warmmuted"
                         }`}
                       >
                         <Icon className="size-5" />
@@ -441,9 +513,7 @@ export function JalurProyek({
                         </button>
                       )}
 
-                      <button
-                        className="px-3 py-2 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-                      >
+                      <button className="px-3 py-2 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm">
                         <Eye className="size-3.5" />
                         <span>Buka</span>
                       </button>
@@ -465,7 +535,9 @@ export function JalurProyek({
                     <UploadCloud className="size-5" />
                   </span>
                   <div>
-                    <h3 className="text-base sm:text-lg font-extrabold text-espresso">Dokumen &amp; Parameter Proyek</h3>
+                    <h3 className="text-base sm:text-lg font-extrabold text-espresso">
+                      Dokumen &amp; Parameter Proyek
+                    </h3>
                     <p className="text-[11px] text-warmmuted">
                       {project?.nama || projectName}
                     </p>
@@ -495,15 +567,20 @@ export function JalurProyek({
                   <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-warmborder">
                     <div className="min-w-0 pr-2">
                       <p className="font-bold text-espresso truncate font-mono text-[11px]">
-                        {project?.katalogFile || 'e-katalog_resmi.pdf'}
+                        {project?.katalogFile || "e-katalog_resmi.pdf"}
                       </p>
                       <p className="text-[10px] text-warmmuted mt-0.5">
-                        Denah arsitektur, visual fasad 3D, dan spesifikasi material
+                        Denah arsitektur, visual fasad 3D, dan spesifikasi
+                        material
                       </p>
                     </div>
                     <button
                       type="button"
-                      onClick={() => setToastMessage(`Mengunduh berkas ${project?.katalogFile || 'katalog'}...`)}
+                      onClick={() =>
+                        setToastMessage(
+                          `Mengunduh berkas ${project?.katalogFile || "katalog"}...`,
+                        )
+                      }
                       className="px-2.5 py-1.5 rounded-lg bg-sandstone hover:bg-warmborder text-espresso font-bold text-[10px] flex items-center gap-1 shrink-0 cursor-pointer"
                     >
                       <Download className="size-3" /> Unduh
@@ -519,21 +596,28 @@ export function JalurProyek({
                       <span>Pricelist &amp; Skema Bertahap</span>
                     </span>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-lime-100 text-olive flex items-center gap-1">
-                      <ShieldCheck className="size-3" /> {project?.totalUnit || 30} Unit Terdaftar
+                      <ShieldCheck className="size-3" />{" "}
+                      {project?.totalUnit || 30} Unit Terdaftar
                     </span>
                   </div>
                   <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-warmborder">
                     <div className="min-w-0 pr-2">
                       <p className="font-bold text-espresso truncate font-mono text-[11px]">
-                        {project?.pricelistFile || 'pricelist_skema_bertahap.xlsx'}
+                        {project?.pricelistFile ||
+                          "pricelist_skema_bertahap.xlsx"}
                       </p>
                       <p className="text-[10px] text-warmmuted mt-0.5">
-                        Harga: {project?.kisaranHarga || 'Rp 450 Jt - Rp 1 M'} (Cash Keras, Tempo 6/12/24 Bulan)
+                        Harga: {project?.kisaranHarga || "Rp 450 Jt - Rp 1 M"}{" "}
+                        (Cash Keras, Tempo 6/12/24 Bulan)
                       </p>
                     </div>
                     <button
                       type="button"
-                      onClick={() => setToastMessage(`Mengunduh berkas ${project?.pricelistFile || 'pricelist'}...`)}
+                      onClick={() =>
+                        setToastMessage(
+                          `Mengunduh berkas ${project?.pricelistFile || "pricelist"}...`,
+                        )
+                      }
                       className="px-2.5 py-1.5 rounded-lg bg-sandstone hover:bg-warmborder text-espresso font-bold text-[10px] flex items-center gap-1 shrink-0 cursor-pointer"
                     >
                       <Download className="size-3" /> Unduh
@@ -541,35 +625,109 @@ export function JalurProyek({
                   </div>
                 </div>
 
-                {/* 3. Parameter Geospatial & Akses */}
-                <div className="p-3.5 rounded-2xl bg-sandstone/50 border border-warmborder space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-extrabold text-espresso flex items-center gap-1.5">
+                {/* 3. Parameter Geospatial & Akses Multi-Cluster */}
+                <div className="p-3.5 rounded-2xl bg-sandstone/50 border border-warmborder space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-extrabold text-espresso flex items-center gap-1.5 text-xs">
                       <MapPin className="size-4 text-terracotta" />
-                      <span>Titik Koordinat GPS &amp; Radius Spasial</span>
+                      <span>
+                        Titik Koordinat GPS Multi-Cluster (
+                        {projectCoords.length} Titik)
+                      </span>
                     </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-terracotta">
-                      Radius {project?.radiusKm || 25} km
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-terracotta">
+                        Radius {project?.radiusKm || 25} km
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsClusterCoordsModalOpen(true)}
+                        className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-terracotta text-white hover:bg-terracotta/90 cursor-pointer shadow-2xs flex items-center gap-1 transition-colors"
+                      >
+                        <Plus className="size-3" />
+                        <span>Kelola Multi Titik Cluster</span>
+                      </button>
+                    </div>
                   </div>
-                  <div className="p-2.5 bg-white rounded-xl border border-warmborder space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-warmmuted text-[11px]">Koordinat Gerbang:</span>
-                      <span className="font-mono font-bold text-espresso text-[11px]">
-                        {project?.koordinatGps || '-7.673872, 110.843978'}
-                      </span>
+
+                  <div className="space-y-1.5">
+                    {projectCoords.map((loc, idx) => {
+                      const mapsUrl = `https://www.google.com/maps?q=${encodeURIComponent(loc.koordinat)}`;
+                      return (
+                        <div
+                          key={loc.id || idx}
+                          className="p-2.5 bg-white rounded-xl border border-warmborder flex items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="size-5 rounded-full bg-sandstone text-espresso text-[9px] font-bold flex items-center justify-center shrink-0">
+                              {idx + 1}
+                            </span>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-espresso text-[11px]">
+                                  {loc.namaCluster}
+                                </span>
+                                {loc.isPrimary && (
+                                  <span className="text-[8px] font-black uppercase px-1.5 py-0.2 rounded bg-terracotta text-white">
+                                    Utama
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 font-mono text-[10px] text-warmmuted">
+                                <span>{loc.koordinat}</span>
+                                {loc.keterangan && (
+                                  <>
+                                    <span>&middot;</span>
+                                    <span className="font-sans text-[10px] text-espresso italic">
+                                      {loc.keterangan}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(loc.koordinat);
+                                setToastMessage(
+                                  `Koordinat ${loc.namaCluster} disalin!`,
+                                );
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-sandstone text-warmmuted hover:text-espresso cursor-pointer transition-colors"
+                              title="Salin Koordinat"
+                            >
+                              <Copy className="size-3" />
+                            </button>
+                            <a
+                              href={mapsUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="p-1.5 rounded-lg hover:bg-sandstone text-terracotta cursor-pointer transition-colors"
+                              title="Buka di Google Maps"
+                            >
+                              <ExternalLink className="size-3" />
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="p-2.5 bg-white rounded-xl border border-warmborder flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                    <div>
+                      <span className="text-warmmuted">Lokasi Wilayah: </span>
+                      <strong className="text-espresso">
+                        {project?.lokasi || "Sukoharjo, Jawa Tengah"}
+                      </strong>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-warmmuted text-[11px]">Lokasi Wilayah:</span>
-                      <span className="font-bold text-espresso text-[11px]">
-                        {project?.lokasi || 'Sukoharjo, Jawa Tengah'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-warmmuted text-[11px]">Tipe Hunian:</span>
-                      <span className="font-bold text-terracotta text-[11px]">
-                        {project?.tipe || 'Mewah'}
-                      </span>
+                    <div>
+                      <span className="text-warmmuted">Tipe Hunian: </span>
+                      <strong className="text-terracotta">
+                        {project?.tipe || "Mewah"}
+                      </strong>
                     </div>
                   </div>
                 </div>
@@ -578,7 +736,10 @@ export function JalurProyek({
                 <div className="p-3 rounded-xl bg-lime-50 border border-lime-200 text-olive flex items-start gap-2 text-[11px]">
                   <CheckCircle2 className="size-4 shrink-0 mt-0.5" />
                   <span>
-                    Seluruh dokumen proyek telah memenuhi <strong>Gerbang G0 (Draft-ready)</strong> dan <strong>G1 (Publish-ready)</strong>. Siap dilanjutkan ke tahap Surat Cinta, Riset Pasar, dan Target Penjualan.
+                    Seluruh dokumen proyek telah memenuhi{" "}
+                    <strong>Gerbang G0 (Draft-ready)</strong> dan{" "}
+                    <strong>G1 (Publish-ready)</strong>. Siap dilanjutkan ke
+                    tahap Surat Cinta, Riset Pasar, dan Target Penjualan.
                   </span>
                 </div>
               </div>
@@ -596,11 +757,27 @@ export function JalurProyek({
           </div>
         )}
 
+        {/* Modal Kelola Multi Titik Koordinat Cluster */}
+        {project && (
+          <ManageClusterCoordsModal
+            isOpen={isClusterCoordsModalOpen}
+            onClose={() => setIsClusterCoordsModalOpen(false)}
+            project={project}
+            onCoordinatesUpdated={(updatedList) => {
+              setProjectCoords(updatedList);
+              setToastMessage("Titik koordinat cluster berhasil diperbarui.");
+            }}
+          />
+        )}
+
         {/* Toast */}
         {toastMessage && (
           <div className="px-6 py-2.5 bg-espresso text-white text-xs font-medium flex items-center justify-between shrink-0">
             <span>{toastMessage}</span>
-            <button onClick={() => setToastMessage(null)} className="text-amber-400 font-bold hover:underline">
+            <button
+              onClick={() => setToastMessage(null)}
+              className="text-amber-400 font-bold hover:underline"
+            >
               Tutup
             </button>
           </div>
