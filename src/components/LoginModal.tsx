@@ -114,7 +114,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       email: signupEmail,
       phone: signupPhone,
       password: signupPassword,
-      role: applicantRole,
     });
 
     if (!result.ok) {

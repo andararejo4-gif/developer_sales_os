@@ -3,25 +3,101 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-109 | 2026-11-26 | Laporan Harian SM+SE, Format PDF Eksekutif, Isolasi User Tenant & ErrorBoundary
+- Status: selesai
+- Ubah: server/index.ts (GET /api/sm/daily-report), src/components/SmDailyReportPanel.tsx, src/lib/exporters/daily-report-exporter.ts, server/auth.ts (filter SUPERADMIN/SUPERADMIN_IT di listTenantUsers), src/components/OrgUserManagementPage.tsx, src/components/AppErrorBoundary.tsx, src/main.tsx, src/lib/navigation/router.ts, src/App.tsx, src/components/ContentCalendarViewer.tsx, src/components/creator/CreatorDeskTab.tsx, src/components/PipelinePage.tsx, src/components/BankSubmissionWorkflowPage.tsx, src/components/SecureDocumentVaultPage.tsx, src/components/superadmin/ItCommandCenterDashboard.tsx
+- Alasan/keputusan: Agregasi aktivitas SM & seluruh SE (absen, GPS, call, canvassing, konten, lead, booking), format cetak PDF navy/gold, sembunyikan akun platform internal dari semua tenant, perbaikan tombol responsif, serta ErrorBoundary & guard tipe data anti-layar putih.
+- Verifikasi: bun test (191 pass, 0 fail across 37 files), tsc --noEmit && vite build exit 0, bun build server/index.ts exit 0.
+- Berikutnya: -
+
+## P-108 | 2026-11-26 | Selesaikan R0 Data/AI/QA, F11/F14/F18/F56-UI/F57-UI/F80 & UAT Lokal
+- Status: selesai
+- Ubah: db/migrations/0031_r0_data_ai_and_r2_backends.sql, server/r2-domain-services.ts, server/index.ts, src/components/pipeline/AppointmentSchedulerPanel.tsx, docs/SECURITY_QA_AND_PERSONA_PLAYBOOK.md, tests/checklist-final-local-complete.test.ts
+- Alasan/keputusan: Implementasi legal hold & DSAR delete guard, scoped knowledge search, AI cost preview/cancel + observability + creative/sales safety, POI/risk, claim ledger, comparison export pack, co-broke deals, dan UI Appointment Scheduler/Buyer Pack.
+- Verifikasi: bun test tests/checklist-final-local-complete.test.ts (5 pass, 0 fail), bun test (191 pass, 0 fail across 37 files), tsc --noEmit && vite build exit 0, bun build server/index.ts exit 0.
+- Berikutnya: -
+
+## P-107 | 2026-11-26 | Selesaikan 48 Agents Runtime, Guardrails, Billing Proration, F56 & Offline Sync (F97/F99/F100)
+- Status: selesai
+- Ubah: `db/migrations/0030_appointments_and_offline_sync.sql`, `server/runtime-governance.ts`, `server/index.ts`, `tests/checklist-k1-k2-complete.test.ts`
+- Alasan/keputusan: Menuntaskan dispatcher 48 agen, guardrails runtime (PII masking, anti-SSRF, strict JSON, prompt injection), proration/invoice/quota alert, appointment scheduler anti double-booking (`F56`), dan offline batch sync (`F97/F99/F100`).
+- Verifikasi: `bun test tests/checklist-k1-k2-complete.test.ts` (4 pass, 0 fail), `bun test` (186 pass, 0 fail across 36 files), `tsc --noEmit && vite build` exit 0, `bun build server/index.ts` exit 0.
+- Berikutnya: -
+
+## P-105 | 2026-11-26 | Selesaikan Security/Outbox/Approvals/Stale Propagation & Grounded FAQ/Nurture Guard
+- Status: selesai
+- Ubah: `db/migrations/0029_security_outbox_approvals_stale.sql`, `server/security-ops.ts`, `server/index.ts`, `docs/ARCHITECTURE_AND_CONTRACTS.md`, `tests/checklist-r0-r1-complete.test.ts`
+- Alasan/keputusan: Implementasi server/dual-approval, webhook HMAC + replay defense, durable outbox + DLQ, stale propagation, grace/export lifecycle, grounded FAQ + eskalasi manusia, dan nurture consent guard di PostgreSQL.
+- Verifikasi: `bun test` (182 pass, 0 fail across 35 files), `tsc --noEmit && vite build` exit 0, `bun build server/index.ts` exit 0.
+- Berikutnya: -
+
+## P-104 | 2026-11-26 | Implementasi & Verifikasi Consent Suppression DB
+- Status: selesai di lokal
+- Ubah: `db/migrations/0028_consent_suppression_registry.sql` (tabel `sales_os.consent_suppression_list`), `server/wa-consent.ts` (`normalizePhoneNumber`, `recordOptOutAndCancelQueue`, `assertCanSendOutreach`), `tests/checklist-r1-uat-db.test.ts`.
+- Alasan/keputusan: Opt-out UU PDP langsung membatalkan job WA `SCHEDULED` di PostgreSQL dan memblokir pengiriman baru.
+- Verifikasi: `0028` diterapkan ke `devsales-pg`, `bun test tests/checklist-r1-uat-db.test.ts` (`4 pass, 0 fail`), `bun test` (`174 pass, 0 fail`, 34 files), `bun run build`, `bun build server/index.ts`.
+- Berikutnya: Lanjut integrasi `F01/F05/F49` ke vendor API.
+
+## P-102 | 2026-11-26 | Implementasi DB Invariants (FEFO AIC Ledger, Audit Immutable, Lock Hold Unit)
+- Status: selesai di lokal
+- Ubah: `db/migrations/0027_aic_ledger_fefo_and_audit.sql` (tabel `sales_os.aic_topup_lots`, `sales_os.aic_ledger_entries`, `sales_os.business_audit_log`), `server/aic-ledger.ts` (`reserveAicAtomic`, `settleAicAtomic`, `refundAicAtomic`, `grantTopupLotAtomic` dengan FEFO & `FOR UPDATE` + `appendAuditLog`), `server/index.ts` (endpoint `/api/billing/aic/*` & `/api/audit/events`), `tests/postgres-checklist-invariants.test.ts`.
+- Alasan/keputusan: Transaksi atomik DB untuk ledger idempoten + FEFO, audit log immutable, lock hold unit, serta isolasi & konkurensi di PostgreSQL nyata.
+- Verifikasi: `0027` diterapkan ke `devsales-pg`, `bun test tests/postgres-checklist-invariants.test.ts` (`3 pass, 0 fail`), `bun test` (`170 pass, 0 fail`, 33 files), `bun run build`, `bun build server/index.ts`.
+- Berikutnya: -
+
+## P-101 | 2026-11-26 | Nama Profil Sidebar Dinamis & Migrasi State localStorage (Tahap 1 + Tahap 2) ke PostgreSQL
+- Status: selesai di lokal
+- Ubah: `src/App.tsx` (tampilkan `authSession?.name` di kartu profil sidebar bawah & badge header online, plus hidrasi state dari DB saat login/mount), `db/migrations/0026_app_state_and_core_stores.sql` (tabel `sales_os.app_state_kv`), `server/index.ts` (endpoint `GET`/`PUT /api/state`), `src/lib/db/remote-state.ts`, `src/lib/navigation/router.ts` (`savePersistedState` sinkron ke DB), `src/lib/projects/projects-data.ts`, `src/components/HookMikro.tsx`.
+- Alasan/keputusan: Kartu profil sidebar sebelumnya hardcode `USERS_BY_ROLE[role].name` (`Arya Wicaksana`) sehingga tidak mengikuti nama akun login (`Tim IT Internal (Kazuki)`). Seluruh state `devos_*` Tahap 1 dan Tahap 2 kini tersimpan ke `sales_os.app_state_kv` di PostgreSQL Docker dan dihidrasi saat sesi aktif tanpa mematahkan unit test Bun non-browser.
+- Verifikasi: `0026_app_state_and_core_stores.sql` diterapkan ke `devsales-pg`, `bun test` (`167 pass, 0 fail` across 32 files), `bun run build` (`tsc --noEmit && vite build`), `bun build server/index.ts --outfile dist-server.mjs --target node --packages=external`.
+- Berikutnya: Refresh browser (`localhost:5173`) dan lanjut commit/push jika siap.
+
+## P-100 | 2026-11-26 | Koneksi PostgreSQL Docker Lokal & Pemulihan Auth Server-Only (Hapus Fallback Dummy Offline)
+- Status: selesai di lokal
+- Ubah: `src/lib/auth/dummy-accounts.ts` (pulihkan ke versi server-only + TOTP 2FA `origin/main`, hapus jalur login/OTP offline & `mock-offline-token`), `src/lib/auth/developer-user-management.ts`, `src/lib/auth/se-management.ts` (hapus panggilan `registerDeveloperAccount`), `src/components/LoginModal.tsx` (hapus field `role` pada payload registrasi server), `src/App.tsx` (pasang kembali `<TotpSecurityBell />` di header), `tests/developer-user-management.test.ts`.
+- Alasan/keputusan: DB PostgreSQL lokal (`devsales-pg` di Docker port `5432`, database `sales_os`) sudah aktif dan KPR/Vault (`BankSubmissionWorkflowPage.tsx`, `SecureDocumentVaultPage.tsx`) sudah memakai `/api/kpr/applications` & `/api/vault/documents`; fallback login dummy offline dari `P-094 (IT-kantor)` dihapus agar tidak bentrok dengan `main` dan lolos seluruh guardrail 2FA.
+- Verifikasi: `bun test`, `bun run build` (`tsc --noEmit && vite build`), `bun build server/index.ts`, serta `/api/health` (`dbConnected: true`).
+- Berikutnya: Jalankan `git status` & review sebelum commit/push ke remote.
+
+## P-099 | 2026-11-26 | Fondasi R0 (FEFO AIC, Kalkulator Finance Deterministik, Guardrails, 48 Agent Registry, ADR-001)
+
+- Status: selesai di lokal
+- Ubah: `src/lib/aic/fefo-ledger.ts` (kalendar +3 bulan clamp `BIL-02`, ledger FEFO atomik & idempoten `BIL-04/05/07/14`, lifecycle grace 7d/export 30d `BIL-12`, capacity pass `BIL-08`), `src/lib/finance/deterministic-pricing.ts` (kalkulator CK/CT12/CT24/KPR integer-Rupiah + tolak field tak dikenal `F68-F70/DAT-03`), `src/lib/security/guardrails.ts` (masking PII `SEC-07`, anti-SSRF `SEC-08`, HMAC+replay `SEC-10`, prompt-injection & strict JSON `AI-05/09`), `src/lib/ai/agent-registry.ts` (`AG-A01..A48`), `docs/ADR-001_ARCHITECTURE_AND_DECISIONS.md` (`D01..D15`, `ARC-01..06`, `GATE-00..05`), `tests/checklist-r0-foundations.test.ts`.
+- Alasan/keputusan: Menyelesaikan seluruh fondasi R0 & dokumen keputusan arsitektur di lokal.
+- Verifikasi: `bun test tests/checklist-r0-foundations.test.ts` & `bun run build` (`tsc --noEmit && vite build`).
+- Berikutnya: -
+
+## P-098 | 2026-11-26 | Paket 1 + Paket 2 Program Kreator (Pelacakan k=/c= & Creator Desk F104 + Ledger Dua Kantong)
+
+- Status: selesai di lokal
+- Ubah: `db/migrations/0025_creator_affiliate_pilot.sql` (kolom `creator_code`/`content_code`/`persona_code` di `pipeline_leads` + tabel `creator_profiles`, `creator_content_metrics`, `creator_ledger_entries`), `server/index.ts` (capture `k`/`c`/`p` di `/api/public/leads` + endpoint `/api/creators`, `/api/creator-submissions`, `/api/creator-ledger`), `src/components/PublicProjectSitePage.tsx` (tangkap & tampilkan lencana `k=`/`c=`/`p=`), `src/lib/creator/creator-desk-store.ts`, `src/components/creator/CreatorDeskTab.tsx`, `src/components/ReferralProgramPage.tsx` (tab baru `Creator Desk`), `tests/creator-desk.test.ts`.
+- Alasan/keputusan: Mengimplementasikan Tahap 0 & lapisan pilot sesuai Adendum `ARM-DSOS-CLK-TPTH-2026-02` (1 portal mitra dengan tab `Creator Desk`, tanpa M18/M19 terpisah, F104 mode dasar berpagu, dan ledger 7 status).
+- Verifikasi: `bun test tests/creator-desk.test.ts`, `bun run build`, `bun build server/index.ts`.
+- Berikutnya: Jalankan migrasi `0025` pada PostgreSQL saat deploy ke server.
+
 ## P-096 (IT-kantor) | 2026-11-26 | Sinkronisasi Live Radar GPS SE ke Dashboard SM (Online DB + Offline Shared Store)
+
 - Status: selesai
 - Ubah: `server/index.ts` (endpoint ringan in-memory `GET`/`POST /api/se/live-location` tanpa mengotori counter `canvassing_contacts`), `src/components/FieldOpsModal.tsx` (sync live SE setiap 5 detik / 10m + polling SM setiap 4 detik + perbaiki pencocokan email SE + fallback `devos_live_radar_se_<projectId>` & `devos_offline_field_logs_<projectId>`), `src/components/field/GpsLiveRadarMap.tsx` (isolasi z-index tombol `Pusatkan ke Saya` di bawah navbar).
 - Alasan/keputusan: Sebelumnya: (1) SM tidak punya polling real-time (hanya fetch sekali saat halaman dibuka), (2) SE hanya sync per 45 detik dan menembak `POST /api/se/field-logs` yang menambah counter canvassing, (3) `Cek Titik Sekarang` tidak mem-publish posisi ke server/store bersama, (4) pencocokan email membentuk `raka.pratama@...` alih-alih `raka@...`.
 - Verifikasi: `bun run build` (`tsc --noEmit && vite build`) dan `bun build server/index.ts` lulus 100%.
 
 ## P-095 (IT-kantor) | 2026-11-26 | Hilangkan Duplikat Menu "Dokumen Vault KPR" di Sidebar SM & Admin
+
 - Status: selesai
 - Ubah: `src/App.tsx` (sembunyikan item `Dokumen Vault KPR` di bagian Manajemen Perusahaan untuk role `SM` & `ADMIN` karena sudah ada `Approve Dokumen Vault KPR` / `Verifikasi Dokumen Vault KPR` di bagian atas).
 - Alasan/keputusan: Menghilangkan duplikasi menu vault di sidebar SM & Admin.
 - Verifikasi: `bun run build` (`tsc --noEmit && vite build`) lulus.
 
 ## P-094 (IT-kantor) | 2026-11-26 | Merge main ke IT-kantor & Aktifkan Fallback Login Offline Lokal
+
 - Status: selesai di lokal
 - Ubah: `src/lib/auth/dummy-accounts.ts` (pulihkan 11 akun `DUMMY_ACCOUNTS` + akun lokal `SUPERADMIN_IT` `kazukirentarou92@gmail.com`, `ROLE_DEFAULT_PASSWORDS`, `authenticateDummyUser`, `registerDeveloperAccount`, dan fallback otomatis di `loginWithServer`/`registerWithServer`), `src/lib/auth/se-management.ts`, `src/lib/auth/developer-user-management.ts`, `tests/developer-user-management.test.ts`
 - Alasan/keputusan: Mengaktifkan pengujian lokal tanpa server backend/DB aktif selama pengembangan di branch `IT-kantor`.
 - Verifikasi: `bun run build` (`tsc --noEmit && vite build`) lulus; `bun test tests/developer-user-management.test.ts` (7 pass, 0 fail).
 
 ## P-097 | 2026-11-26 | Soft-Selling 4 Pilar pada AI Follow-Up Berkala (/pipeline?tab=FOLLOWUP)
+
 - Status: selesai di lokal
 - Ubah: `server/wa-nurture.ts` (fix baca `full_name`/`owner_se_name`/`owner_se_email`, memory antar-step anti-pengulangan, konteks persona `lead_ai_analyses` + `getCentralAiKnowledge` + deteksi `unitMentionedInChat` + adaptasi stage `VISITED`, 4 gaya soft-selling `NurtureTone`, `regenerateAllNurtureDraftsForLead`, `getRecentLeadTurnsForNurture`), `server/index.ts` (`/api/nurture/jobs` kembalikan `recentTurns`, `/api/nurture/jobs/generate` dukung `tone`, tambah `/api/nurture/jobs/regenerate-all`), `src/components/pipeline/FollowupScheduleTab.tsx` (tampilkan 1–2 bubble chat terakhir di preview WA, selector Gaya Pesan, & tombol `Regenerate Semua (H0–H14)`)
 - Alasan/keputusan: Menghilangkan kesan template kaku/robotik dan mencegah pengulangan antar-tahap H0–H14, sekaligus memudahkan SE membaca konteks chat terakhir sebelum mengirim atau mengedit draf.
@@ -30,6 +106,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Draf lama di DB bisa langsung diganti serentak lewat tombol `Regenerate Semua (H0–H14)`.
 
 ## P-096 | 2026-11-26 | Halaman Khusus Kelola User (/kelola-user) + CRUD Penuh & Reset Kata Sandi
+
 - Status: selesai di lokal
 - Ubah: `server/auth.ts` (`updateTenantUser`, `deleteTenantUser`), `server/index.ts` (`PATCH` lengkap termasuk ubah kata sandi/role/email/proyek & `DELETE /api/org/users`), `src/lib/navigation/router.ts` (rute `org_users` -> `/kelola-user`), `src/components/OrgUserManagementPage.tsx` (halaman khusus CRUD penuh + filter 6 role + reset kata sandi), `src/App.tsx` (navigasi sidebar, SM, Admin ke `/kelola-user`)
 - Alasan/keputusan: Mengganti modal sempit menjadi halaman penuh agar manajemen akun (tambah, edit profil/role/proyek, reset kata sandi, aktif/nonaktif, hapus) jauh lebih leluasa.
@@ -38,6 +115,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Akun `SUPERADMIN`/`SUPERADMIN_IT` diproteksi agar tidak bisa dihapus atau diubah role-nya oleh role operasional.
 
 ## P-095 | 2026-11-26 | Kelola User 6 Role Utama (IT, SM, SE, Owner, Admin, TL) di Sidebar & Pengelompokan Riwayat Aktivitas Tim
+
 - Status: selesai di lokal
 - Ubah: `server/auth.ts` (`BASIC_ORG_ROLES` = `IT`, `SM`, `SE`, `DIREKSI`, `ADMIN`, `TL`), `src/components/OrgUserManagementModal.tsx` (label & opsi 6 role utama), `src/App.tsx` (tambah menu `Kelola User (6 Role)` di sidebar `MANAJEMEN PERUSAHAAN`), `server/index.ts` (`/api/company/audit-logs` join `app_users` per `tenant_id` + filter `actorRole`/`actorEmail` + `teamMembers`), `src/components/company/CompanyAuditLogsModal.tsx` (auth Bearer token, filter Role & Anggota Tim, mode pengelompokan per Divisi & Anggota Tim)
 - Alasan/keputusan: Sebelumnya tombol `Kelola User (6 Role)` hanya ada di header Dashboard SM/Admin (tidak tampil di menu lain seperti Knowledge Base), daftar role masih memakai `DIGITAL_MARKETING` bukan `IT`, dan `CompanyAuditLogsModal` menampilkan log datar tanpa otentikasi Bearer maupun pengelompokan anggota tim dari `app_users`.
@@ -46,6 +124,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Semua perubahan ini masih di lokal; live `developerproperti.giivepro.com` masih menjalankan build P-093.
 
 ## P-094 | 2026-11-26 | CRUD Lengkap (Create, Read, Update, Delete) Role SE pada F74, F75, F79 & F86
+
 - Status: selesai di lokal
 - Ubah: `server/index.ts` (perluas `PATCH` & tambah `DELETE` pada `/api/vault/documents`, `/api/kpr/applications`, `/api/referrals`, `/api/complaints` dengan cek kepemilikan SE), `src/components/SecureDocumentVaultPage.tsx` (edit inline dokumen & error handling hapus), `src/components/BankSubmissionWorkflowPage.tsx` (edit nama/WA/unit/tahap KPR + tombol hapus), `src/components/ReferralProgramPage.tsx` (edit inline & tombol hapus referral), `src/components/CustomerComplaintsPage.tsx` (edit inline & tombol hapus tiket DLP)
 - Alasan/keputusan: Sebelumnya `DELETE` belum ada pada `/api/kpr/applications`, `/api/referrals`, dan `/api/complaints`, serta `PATCH` dan UI di keempat modul belum mendukung edit penuh untuk role SE.
@@ -54,6 +133,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Pengajuan KPR berstatus `LEAD_AUTO` akan tersinkronisasi ulang dari `pipeline_leads` saat `GET` jika lead masih berkategori KPR.
 
 ## P-093 | 2026-11-25 | Restrukturisasi Menu Admin Panel IT & Flow 2-Langkah Permission Fitur (6 Role Utama)
+
 - Status: selesai & live di `https://developerproperti.giivepro.com` (`hades`, commit `fb18193` di `origin/feat/totp-2fa`)
 - Ubah: `src/components/superadmin/PermissionMatrixPanel.tsx` (alur 2 langkah: default tabel daftar user dengan tab filter 6 role utama mengecualikan `SUPERADMIN` & `SUPERADMIN_IT` -> klik user masuk halaman detail atur permission CRUD + tombol kembali & opsi Global Per-Role), `src/components/superadmin/ItCommandCenterDashboard.tsx` (pisah 4 halaman: `dashboard`, `permissions`, `knowledge`, `hierarchy` + metrik real & pintasan cepat di dashboard), `src/App.tsx` (menu sidebar khusus `SUPERADMIN_IT`: Permission Fitur, Knowledge AI Terpusat, Hierarki Tenant & Support)
 - Alasan/keputusan: Sebelumnya semua modul menumpuk di satu halaman Dashboard IT dan panel permission masih memuat akun Superadmin dalam split-view. Pemisahan halaman + flow tabel user -> detail membuat navigasi lebih terstruktur dan fokus pada 6 role operasional.
@@ -62,6 +142,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Rollback backend `dist-server.mjs.pre-20261126-0000`, frontend `~/db-backup/index.html.20261126-0000`, DB `~/db-backup/sales_os-20261126-0000.dump`.
 
 ## P-092 | 2026-11-25 | Pop-up Pengingat & Notification Center Dinamis Semua Role + Auto-Load .env Backend
+
 - Status: selesai di lokal
 - Ubah: `src/components/RoleNotificationCenter.tsx` (baru: `RoleNotificationBell` & `buildRoleGreetingAndNotifications`), `src/App.tsx` (greeting `showAssistantGreeting` & header bell memakai data real `/api/dashboard/summary` per role), `server/db.ts` (auto-load `.env` via `process.loadEnvFile()` bila `DATABASE_URL` belum terset)
 - Alasan/keputusan: (1) Pop-up pengingat sebelumnya static untuk SE dan tombol notifikasi tidak membuka panel di role lain. (2) Error `404` disebabkan proses lama `server.mjs` (22:40) belum di-restart, lalu berubah jadi `500` saat `node dist-server.mjs` dijalankan tanpa `--env-file=.env` sehingga jatuh ke fallback port `5433` padahal PostgreSQL berjalan di `5435` (`.env`).
@@ -70,6 +151,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: `server/db.ts` kini otomatis membaca `.env` saat dijalankan via `node dist-server.mjs` tanpa flag tambahan.
 
 ## P-091 | 2026-11-25 | Knowledge AI Terpusat di Panel IT + Integrasi OCR Lokal & AI Engine
+
 - Status: selesai di lokal
 - Ubah: `db/migrations/0024_ai_central_knowledge.sql`, `server/truth-engine.ts` (`getCentralAiKnowledge`, `rebuildCentralKnowledgeFromDocs`, `saveCentralAiKnowledge`), `server/index.ts` (`/api/it/knowledge-ai*`), `server/ai-engine.ts` (suntik `masterMarkdown` ke `systemPrompt`), `src/components/it/ItKnowledgeAiPanel.tsx`, `src/components/superadmin/ItCommandCenterDashboard.tsx`, `src/App.tsx` (panel & navigasi Knowledge AI di role IT)
 - Alasan/keputusan: Memusatkan seluruh materi training/knowledge AI (termasuk hasil ekstrak brosur PDF/gambar via `doc-extractor.py` + `RapidOCR` lokal) ke 1 data `sales_os.ai_central_knowledge` yang dikelola Divisi IT.
@@ -78,6 +160,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Pastikan Python + `pymupdf` + `rapidocr_onnxruntime` terpasang pada lingkungan server produksi.
 
 ## P-090 | 2026-11-25 | Permission Matrix Superadmin IT + Migrasi Dashboard, Referral, DLP & Marketing ke DB
+
 - Status: selesai di lokal
 - Ubah: `db/migrations/0023_permissions_and_full_db.sql`, `server/permissions.ts` (matriks izin per-user & global-role CRUD), `server/index.ts` (`/api/permissions/me`, `/api/superadmin/permissions`, `/api/dashboard/summary`, `/api/escalations`, `/api/referrals`, `/api/partner-config`, `/api/complaints`, `/api/marketing/campaigns`, `/api/project-settings`), `src/components/superadmin/PermissionMatrixPanel.tsx`, `src/components/superadmin/ItCommandCenterDashboard.tsx`, `src/components/CustomerComplaintsPage.tsx`, `src/components/ReferralProgramPage.tsx`, `src/App.tsx`
 - Alasan/keputusan: Memberi kontrol permission CRUD granular per-user & global-role di Superadmin IT serta menyambungkan modul Referral, Keluhan DLP, Eskalasi Direksi, dan ringkasan dashboard SM/TL/Admin/IT/DM ke PostgreSQL.
@@ -86,6 +169,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Resolusi permission memprioritaskan override Per-User di atas Global Role.
 
 ## P-089 | 2026-11-25 | Vault KPR & KPR Bank DB Asli (Lead-Linked), Approval SM/Admin, & Kelola User 6 Role
+
 - Status: selesai di lokal (migrasi 0022 belum dijalankan ke DB produksi)
 - Ubah: `db/migrations/0022_vault_kpr_and_org_users.sql`, `server/auth.ts` (`BASIC_ORG_ROLES`, `listTenantUsers`, `createTenantUser`, `updateTenantUserStatus`), `server/index.ts` (`/api/org/users`, `/api/vault/documents`, `/api/kpr/applications` dengan auto-sync lead KPR), `src/components/SecureDocumentVaultPage.tsx` (pilih dari lead + input manual, multi-dokumen sekaligus, dikelompokkan per nama debitur, approval SM/Admin), `src/components/BankSubmissionWorkflowPage.tsx` (auto-sync lead KPR, pilih lead + manual, edit/majukan tahap ke DB), `src/components/OrgUserManagementModal.tsx`, `src/App.tsx` (tombol Kelola User 6 Role di SM & Admin + navigasi Vault/KPR)
 - Alasan/keputusan: Menghilangkan data dummy `localStorage` pada Vault KPR & KPR Bank, mendukung multi-dokumen per nama pengguna dari daftar lead, serta memberi Admin & SM manajemen user 6 role dasar.
@@ -94,6 +178,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: Role `SM`, `ADMIN`, dan `DIREKSI` di `App.tsx` masih memiliki beberapa ringkasan dashboard (`BOOKING_TRANSACTIONS`, `SE_TEAM_DATA`, `ESCALATION_DATA`) yang belum tersambung ke endpoint DB.
 
 ## P-088 | 2026-11-25 | Merge IT-kantor ke branch 2FA + penguatan 2FA & akses mitra
+
 - Status: selesai di lokal (branch `feat/totp-2fa`, belum push/deploy)
 - Ubah: `server/auth.ts` (batas 5 percobaan/15 menit, secret aktif tak bisa ditimpa, klaim step & recovery atomik), `server/partner-access.ts` (tolak-default mitra), `server/index.ts`, `src/App.tsx` (logout mencabut sesi server), `src/components/LoginModal.tsx` (tombol akun demo dihapus), `src/lib/auth/dummy-accounts.ts` (login/OTP offline dihapus), `tests/auth-dummy.test.ts`, `tests/totp-2fa-guardrails.test.ts`, `tests/totp-auth-flow.test.ts`
 - Alasan/keputusan: auth ikut versi TOTP, halaman & layout ikut IT-kantor; akun mitra hanya di-seed bila `DEVOS_PARTNER_SEED_PASSWORD` diset
@@ -102,6 +187,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: fallback login offline (P-072/P-081/P-084) jangan dimasukkan lagi; dijaga test guardrails. P-087 semula bernomor P-072 lokal. `JSON.stringify(..)::jsonb` terbukti tersimpan sebagai string; pola sama masih ada di `server/units-quotes.ts:346-347`.
 
 ## P-087 | 2026-11-25 | 2FA TOTP (Google Authenticator), Halaman Profil & Notifikasi Rekomendasi Semua Role
+
 - Status: selesai di local (belum push/deploy ke hades)
 - Ubah: `db/migrations/0021_totp_2fa_profiles.sql`, `server/totp.ts` (RFC 6238 murni `node:crypto`), `server/auth.ts` (default TOTP mati, login langsung jika nonaktif, wajib kode TOTP/recovery jika aktif, API profil & setup/enable/disable TOTP), `server/index.ts` (`/api/profile*`), `src/components/ProfilePage.tsx`, `src/components/TotpSecurityBell.tsx`, `src/components/LoginModal.tsx`, `src/components/se/SeNotificationCenter.tsx`, `src/components/se/SeGuidedTour.tsx`, `src/lib/navigation/router.ts`, `src/lib/auth/dummy-accounts.ts`, `src/App.tsx`
 - Alasan/keputusan: TOTP gratis (Rp0) untuk semua role dengan default mati; saat belum aktif tidak ada verify WA saat login dan muncul notifikasi rekomendasi di ikon lonceng; kartu profil di sidebar dapat diklik menuju `/profil` untuk aktivasi QR TOTP + 6 recovery codes.
@@ -110,24 +196,28 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Catatan: setelah TOTP diaktifkan pada sebuah akun, login berikutnya wajib memasukkan 6-digit kode Google Authenticator atau salah satu dari 6 recovery codes.
 
 ## P-092 (IT-kantor) | 2026-11-25 | Dukungan Multi Titik Koordinat GPS per Proyek (Multi-Cluster)
+
 - Status: selesai
 - Ubah: `src/lib/projects/projects-data.ts`, `src/components/projects/ManageClusterCoordsModal.tsx`, `src/components/JalurProyek.tsx`, `src/App.tsx`, `tests/projects-data.test.ts`.
 - Alasan/keputusan: Mengakomodasi 1 proyek yang memiliki beberapa titik lokasi/cluster (misal Gerbang Utama, Cluster Nagoya, Cluster Osaka) dengan mempertahankan backward compatibility `koordinatGps` primer.
 - Verifikasi: `bun test` (151 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
 
 ## P-091 (IT-kantor) | 2026-11-25 | Manajemen Akun Internal Developer oleh IT Developer (SE s.d. Direksi) dengan Isolasi Tenant
+
 - Status: selesai
 - Ubah: `src/lib/auth/developer-user-management.ts`, `src/components/it/AddDeveloperUserModal.tsx`, `src/App.tsx`, `tests/developer-user-management.test.ts`.
 - Alasan/keputusan: Memberikan otoritas kepada role IT Developer (`IT`) untuk menambah dan mengelola akun seluruh hierarki tim internal dengan batasan isolasi tenant.
 - Verifikasi: `bun test` (150 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
 
 ## P-090 (IT-kantor) | 2026-11-25 | Fitur Override Paket Langganan (Gold, Platinum, Diamond) per Developer untuk IT Internal
+
 - Status: selesai
 - Ubah: `src/lib/plans/plan-override.ts`, `src/components/superadmin/ItCommandCenterDashboard.tsx`, `src/components/SuperadminPanel.tsx`, `src/App.tsx`, `tests/plan-override.test.ts`.
 - Alasan/keputusan: Menambahkan kemampuan bagi Tim IT Internal (`SUPERADMIN_IT`) untuk meng-override paket langganan per developer/tenant.
 - Verifikasi: `bun test` (143 pass, 0 fail), `bun run build` (`tsc --noEmit && vite build`) lulus 100%.
 
 ## P-089 (IT-kantor) | 2026-11-25 | Fitur Tambah Akun SE Inhouse (SM & Admin) & Kuesioner Struktur Tim Pendaftar
+
 - Status: selesai
 - Ubah: `src/App.tsx`, `src/components/AddSeModal.tsx`, `src/lib/auth/se-management.ts`, `src/components/LoginModal.tsx`.
 - Alasan/keputusan: Memberikan hak tambah akun SE in-house kepada SM dan Admin serta menyediakan kuesioner struktur developer saat registrasi.
@@ -390,14 +480,6 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: File `SKILL.md`, references, dan scripts terpasang dan diverifikasi integritasnya di kedua path.
 - Berikutnya: -
 
-## P-058 | 2026-11-24 | Regenerasi Laporan Harian IT DOCX dengan Tangkapan Layar 16:9 Full Monitor
-
-- Status: selesai
-- Ubah: `docs/laporan-harian/2026-11-24/IT-LH-24-NOV-2026.md`, `scripts/generate_daily_report_docx.ts`, folder bukti (10 tangkapan layar 1920x1080)
-- Alasan/keputusan: Pengambilan ulang 10 tangkapan layar antarmuka desktop standar monitor 16:9 penuh (1920x1080) pada Lingkungan A (http://localhost:5173) dan Lingkungan B (https://developerproperti.giivepro.com) mencakup seluruh 8 peran akun, serta kompilasi dokumen Word baru bebas pemotongan visual.
-- Verifikasi: Berkas DOCX 5,00 MB terbit di `D:\Laporan Andara Rejo Makmur\Harian\Laporan_Harian_Divisi_IT_24_November_2026_v2.docx`.
-- Berikutnya: -
-
 ## P-057 | 2026-11-24 | Pembaruan Nomor Kontak IT Internal Developer Sales OS
 
 - Status: selesai
@@ -406,12 +488,12 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `bun test` (136 pass, 0 fail), `bun run build` (sukses).
 - Berikutnya: -
 
-## P-056 | 2026-11-24 | Penerapan MFA Seluruh Akun & Penyusunan Dokumen Laporan Harian IT DOCX
+## P-056 | 2026-11-24 | Penerapan MFA Seluruh Akun
 
 - Status: selesai
-- Ubah: `src/lib/auth/dummy-accounts.ts`, `src/components/LoginModal.tsx`, `tests/auth-dummy.test.ts`, `scripts/generate_daily_report_docx.ts`, `docs/laporan-harian/2026-11-24/`
-- Alasan/keputusan: Implementasi MFA 2 langkah (OTP 6-digit WhatsApp) untuk seluruh 9 akun peran, serta penyusunan dokumen laporan harian resmi format `.docx` (1,95 MB, 15 bagian lengkap + 7 bukti screenshot embedded) disimpan ke `D:\Laporan Andara Rejo Makmur\Harian\Laporan_Harian_Divisi_IT_24_November_2026.docx`.
-- Verifikasi: `bun test` (136 pass, 0 fail), verifikasi file DOCX 1.948.499 bytes.
+- Ubah: `src/lib/auth/dummy-accounts.ts`, `src/components/LoginModal.tsx`, `tests/auth-dummy.test.ts`
+- Alasan/keputusan: Implementasi MFA 2 langkah (OTP 6-digit WhatsApp) untuk seluruh 9 akun peran.
+- Verifikasi: `bun test` (136 pass, 0 fail).
 - Berikutnya: -
 
 ## P-055 | 2026-11-24 | Standardisasi Bahasa Bebas Kode Teknis & Penghapusan Emoticon UI

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Sparkles, X, ArrowRight } from 'lucide-react';
+import { saveRemoteState } from '../lib/db/remote-state';
 
 export interface HookMikroProps {
   id: string;
@@ -53,7 +54,9 @@ export const HookMikro: React.FC<HookMikroProps> = ({
     setIsVisible(false);
     // Simpan cooldown 14 hari bila memilih "Nanti saja"
     const cooldownMs = cooldownDays * 24 * 60 * 60 * 1000;
-    localStorage.setItem(`${STORAGE_COOLDOWN_PREFIX}${id}`, (Date.now() + cooldownMs).toString());
+    const cooldownUntil = (Date.now() + cooldownMs).toString();
+    localStorage.setItem(`${STORAGE_COOLDOWN_PREFIX}${id}`, cooldownUntil);
+    void saveRemoteState(`${STORAGE_COOLDOWN_PREFIX}${id}`, cooldownUntil);
   };
 
   if (!isVisible) return null;

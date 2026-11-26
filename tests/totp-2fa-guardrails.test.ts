@@ -64,7 +64,8 @@ describe('Penjaga agar 2FA tidak tertimpa saat merge', () => {
     expect(read('src/lib/navigation/router.ts')).toContain("profile: '/profil'");
     const app = read('src/App.tsx');
     expect(app).toContain('<ProfilePage');
-    expect(app).toContain('<TotpSecurityBell');
+    expect(app).toContain('<RoleNotificationBell');
+    expect(app).toContain('totpEnabled={Boolean(authSession?.totpEnabled)}');
     const api = read('server/index.ts');
     for (const step of ['setup', 'enable', 'disable']) expect(api).toContain(`/api/profile/totp/${step}`);
   });

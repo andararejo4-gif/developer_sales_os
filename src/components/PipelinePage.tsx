@@ -1887,7 +1887,7 @@ export const PipelinePage: React.FC<PipelinePageProps> = ({
                     Template Persona: {formPersonaCode} ·{' '}
                     {formPersonaCode === 'LAINNYA'
                       ? formPersonaProfile.customLabel || 'Lainnya (Kustom)'
-                      : PLAYBOOK_BUYER_PERSONAS[formPersonaCode].archetype}
+                      : PLAYBOOK_BUYER_PERSONAS[formPersonaCode]?.archetype || 'Umum'}
                   </span>
                 </div>
                 <button

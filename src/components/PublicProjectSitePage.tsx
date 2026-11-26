@@ -44,7 +44,38 @@ export function PublicProjectSitePage({ slug }: { slug: string }) {
 
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const seRef = searchParams?.get('se') || '';
-  const utmSource = searchParams?.get('utm_source') || `Website Publik (${slug})`;
+
+  // Paket 1: tangkap parameter k (kode mitra/kreator), c (kode konten), dan p (persona) + simpan di sessionStorage
+  const creatorAttr = (() => {
+    const kUrl = (searchParams?.get('k') || '').trim().toUpperCase();
+    const cUrl = (searchParams?.get('c') || '').trim();
+    const pUrl = (searchParams?.get('p') || '').trim();
+    const storageKey = `devos_creator_attr_${slug}`;
+    if (typeof window === 'undefined') return { k: kUrl, c: cUrl, p: pUrl };
+    try {
+      if (kUrl || cUrl || pUrl) {
+        const next = { k: kUrl, c: cUrl, p: pUrl };
+        window.sessionStorage.setItem(storageKey, JSON.stringify(next));
+        return next;
+      }
+      const raw = window.sessionStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          k: String(parsed?.k || ''),
+          c: String(parsed?.c || ''),
+          p: String(parsed?.p || ''),
+        };
+      }
+    } catch {
+      /* abaikan storage error */
+    }
+    return { k: kUrl, c: cUrl, p: pUrl };
+  })();
+
+  const utmSource =
+    searchParams?.get('utm_source') ||
+    (creatorAttr.k ? `Kreator ${creatorAttr.k}` : `Website Publik (${slug})`);
 
   useEffect(() => {
     let active = true;
@@ -96,6 +127,9 @@ export function PublicProjectSitePage({ slug }: { slug: string }) {
           unitCode: selectedUnitCode || activeUnit?.unitCode || 'Unit The Park',
           utmSource,
           seRef,
+          creatorCode: creatorAttr.k,
+          contentCode: creatorAttr.c,
+          personaCode: creatorAttr.p,
           consentAccepted,
           consentVersion: 'v1.0',
           website_hp: websiteHp,
@@ -279,6 +313,12 @@ export function PublicProjectSitePage({ slug }: { slug: string }) {
               <ShieldCheck className="h-5 w-5 text-[#1E4D3B]" />
               Minta Brosur, Pricelist & Jadwal Survei
             </h3>
+            {creatorAttr.k && (
+              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-[11px] font-semibold text-amber-900">
+                <span>Sumber Mitra Resmi: {creatorAttr.k}</span>
+                {creatorAttr.c && <span className="text-amber-700">· Konten: {creatorAttr.c}</span>}
+              </div>
+            )}
             <div className="mt-4 space-y-3 text-sm">
               {/* Honeypot anti-bot */}
               <input

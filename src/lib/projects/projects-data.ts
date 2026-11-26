@@ -1,4 +1,5 @@
 import { INITIAL_UNITS, type UnitProperty } from "../../data";
+import { saveRemoteState } from "../db/remote-state";
 
 // Master Data Proyek Perusahaan PT Andara Rejo Makmur
 // Multi-Project Architecture untuk Seluruh Roles (SE, TL, SM, DM, ADMIN, DIREKSI, IT)
@@ -258,6 +259,7 @@ export function saveProjectCoordinates(
   } catch {
     /* ignore */
   }
+  void saveRemoteState(ALL_PROJECTS_STORAGE_KEY, updated);
 
   return locations;
 }
@@ -353,6 +355,7 @@ export function saveNewProject(data: {
   } catch {
     /* ignore */
   }
+  void saveRemoteState(ALL_PROJECTS_STORAGE_KEY, updated);
 
   // Buat default unit untuk proyek baru
   const units: UnitProperty[] = [];
@@ -404,11 +407,13 @@ export function loadSavedProjectId(): string {
 export function saveSelectedProjectId(projectId: string): void {
   inMemoryProjectId = projectId;
   try {
-    if (typeof localStorage === "undefined") return;
-    localStorage.setItem(PROJECT_STORAGE_KEY, projectId);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(PROJECT_STORAGE_KEY, projectId);
+    }
   } catch {
     /* ignore */
   }
+  void saveRemoteState(PROJECT_STORAGE_KEY, projectId);
 }
 
 // Master Unit Generator per Proyek
@@ -567,4 +572,5 @@ export function saveUnitsForProject(
   } catch {
     /* ignore */
   }
+  void saveRemoteState(storageKey, units);
 }

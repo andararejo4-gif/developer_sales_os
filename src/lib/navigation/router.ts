@@ -93,12 +93,35 @@ export function setQueryParam(key: string, value: string): void {
   window.history.replaceState(window.history.state, '', url.toString());
 }
 
+import { saveRemoteState } from '../db/remote-state';
+
 export function loadPersistedState<T>(key: string, fallback: T): T {
   try {
     if (typeof localStorage === 'undefined') return fallback;
     const raw = localStorage.getItem(key);
     if (!raw) return fallback;
-    return JSON.parse(raw) as T;
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed === null || parsed === undefined) {
+      return fallback;
+    }
+    if (Array.isArray(fallback) && !Array.isArray(parsed)) {
+      return fallback;
+    }
+    if (
+      typeof fallback === 'object' &&
+      fallback !== null &&
+      !Array.isArray(fallback) &&
+      (typeof parsed !== 'object' || Array.isArray(parsed))
+    ) {
+      return fallback;
+    }
+    if (
+      (typeof fallback === 'string' || typeof fallback === 'number' || typeof fallback === 'boolean') &&
+      typeof parsed !== typeof fallback
+    ) {
+      return fallback;
+    }
+    return parsed as T;
   } catch {
     return fallback;
   }
@@ -106,9 +129,13 @@ export function loadPersistedState<T>(key: string, fallback: T): T {
 
 export function savePersistedState<T>(key: string, value: T): void {
   try {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.setItem(key, JSON.stringify(value));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
   } catch {
     /* abaikan jika storage penuh atau tidak tersedia */
+  }
+  if (key.startsWith('devos_') && key !== 'devos_auth_session_v1') {
+    void saveRemoteState(key, value);
   }
 }

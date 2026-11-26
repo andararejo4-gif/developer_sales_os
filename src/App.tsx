@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { hydrateAllRemoteState } from './lib/db/remote-state';
 import { PublicHomepageV3 } from './components/v3/PublicHomepageV3';
 import { AddSeModal } from './components/AddSeModal';
 import { loadSeTeamList } from './lib/auth/se-management';
@@ -60,6 +61,7 @@ import {
   exportDailyReportExcel,
   exportDailyReportPdf,
 } from './lib/exporters/daily-report-exporter';
+import { SmDailyReportPanel } from './components/SmDailyReportPanel';
 import {
   loadAuthSession,
   logoutFromServer,
@@ -202,6 +204,15 @@ export default function App() {
   const [role, setRole] = useState<RoleKey>(() => loadAuthSession()?.role ?? 'SE');
   const user = USERS_BY_ROLE[role];
   const isPlatformSuperadmin = role === 'SUPERADMIN' || role === 'SUPERADMIN_IT';
+  const displayName = authSession?.name?.trim() || user.name;
+  const displayAvatarText = authSession?.name?.trim()
+    ? authSession.name
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((w) => w[0]?.toUpperCase() ?? '')
+        .join('') || user.avatarText
+    : user.avatarText;
 
   // Multi-Project State (Universal untuk seluruh role: SE, TL, SM, DM, ADMIN, DIREKSI, IT)
   const [projects, setProjects] = useState<CompanyProject[]>(() => loadAllProjects());
@@ -219,6 +230,23 @@ export default function App() {
       loadPersistedState<ScenarioType>(`devos_target_scenario_${activeProjectId}`, 'realistis')
     );
   }, [activeProjectId]);
+
+  useEffect(() => {
+    if (!authSession?.token) return;
+    let cancelled = false;
+    void hydrateAllRemoteState().then((items) => {
+      if (cancelled || !items || Object.keys(items).length === 0) return;
+      setProjects(loadAllProjects());
+      const nextProjectId = loadSavedProjectId();
+      setActiveProjectId(nextProjectId);
+      setActiveScenario(
+        loadPersistedState<ScenarioType>(`devos_target_scenario_${nextProjectId}`, 'realistis')
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession?.token]);
 
   // Target reverse-funnel dinamis yang dihitung dari skenario SM
   const currentTargetPlan = useMemo(() => {
@@ -374,9 +402,10 @@ export default function App() {
   const [filter, setFilter] = useState<'all' | Category>(() =>
     loadPersistedState<'all' | Category>('devos_se_filter', 'all')
   );
-  const [period, setPeriod] = useState<PeriodKey>(() =>
-    loadPersistedState<PeriodKey>('devos_se_period', 'harian')
-  );
+  const [period, setPeriod] = useState<PeriodKey>(() => {
+    const saved = loadPersistedState<PeriodKey>('devos_se_period', 'harian');
+    return saved in PERIODS ? saved : 'harian';
+  });
 
   // SM States (CRUD Units & SE monitoring)
   const [units, setUnits] = useState<UnitProperty[]>(() =>
@@ -575,7 +604,7 @@ export default function App() {
     seRealData?.scorecard?.category ?? 'Belum Ada Aktivitas Tercatat (0.0 Poin)';
 
   const activePeriodData = seRealData?.periods?.[period] ?? {
-    title: PERIODS[period].label,
+    title: (PERIODS[period] ?? PERIODS.harian).label,
     leadCardTitle:
       period === 'harian'
         ? 'Lead Aktif & Baru Hari Ini'
@@ -1984,10 +2013,10 @@ export default function App() {
               title="Buka Pengaturan Profil & 2FA TOTP"
             >
               <div className="size-8 rounded-lg bg-espresso text-white grid place-items-center text-xs font-bold shrink-0">
-                {user.avatarText}
+                {displayAvatarText}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-espresso truncate">{user.name}</p>
+                <p className="text-xs font-bold text-espresso truncate">{displayName}</p>
                 <p className="text-[10px] text-warmmuted truncate">{user.roleLabel} · Profil &amp; 2FA</p>
               </div>
             </button>
@@ -2148,7 +2177,7 @@ export default function App() {
             <div className="hidden lg:flex items-center gap-2 bg-sandstone px-3 py-1.5 rounded-xl border border-warmborder text-xs shrink-0">
               <span className="size-2 rounded-full bg-olive shrink-0"></span>
               <span className="font-semibold text-espresso">Online</span>
-              <span className="text-warmmuted text-[11px] hidden xl:inline">({user.name})</span>
+              <span className="text-warmmuted text-[11px] hidden xl:inline">({displayName})</span>
             </div>
           </div>
         </header>
@@ -2830,8 +2859,8 @@ export default function App() {
           {activeView === 'dashboard' && role === 'TL' && (
             <div className="space-y-6">
               {/* AI Morning Huddle Banner */}
-              <div className="bg-espresso text-white rounded-2xl p-6 border border-white/10 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
-                <div className="space-y-2">
+              <div className="bg-espresso text-white rounded-2xl p-5 sm:p-6 border border-white/10 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                <div className="space-y-2 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="size-2 rounded-full bg-amber-400"></span>
                     <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">
@@ -3014,6 +3043,9 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Laporan Harian Terpadu SM + Seluruh SE Binaan */}
+              <SmDailyReportPanel projectName={activeProject.nama} />
+
               {/* KPI Cards Ringkasan Eksekutif SM */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white border border-warmborder rounded-2xl p-5 shadow-sm">
@@ -3100,9 +3132,9 @@ export default function App() {
           {activeView === 'unit_park' && (
             <div className="space-y-6">
               {/* Header Halaman */}
-              <div className="bg-white border border-warmborder rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
+              <div className="bg-white border border-warmborder rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-bold px-2 py-0.5 rounded bg-terracotta text-white">
                       Inventori Proyek
                     </span>
@@ -3117,7 +3149,7 @@ export default function App() {
                     setEditingUnit(null);
                     setShowUnitModal(true);
                   }}
-                  className="px-4 py-2.5 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center gap-2 hover:bg-espresso/90 cursor-pointer shrink-0 shadow-sm"
+                  className="px-4 py-2.5 rounded-xl bg-espresso text-white text-xs font-semibold flex items-center gap-2 hover:bg-espresso/90 cursor-pointer shrink-0 self-start lg:self-center shadow-sm whitespace-nowrap"
                 >
                   <Plus className="size-4 text-amber-400" /> Tambah Unit Properti
                 </button>

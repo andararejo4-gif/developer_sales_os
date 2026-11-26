@@ -6,7 +6,6 @@
 
 import type { RoleKey } from '../../data';
 import { loadPersistedState, savePersistedState } from '../navigation/router';
-import { registerDeveloperAccount } from './dummy-accounts';
 
 export interface DeveloperTeamUser {
   id: string;
@@ -258,15 +257,6 @@ export function addDeveloperUser(params: AddDeveloperUserParams): {
 
   const updatedList = [newUser, ...existingUsers];
   saveDeveloperUsers(company, updatedList);
-
-  registerDeveloperAccount({
-    companyName: company,
-    name: normName,
-    email: normEmail,
-    password: params.password || `Andara${params.role}#2026`,
-    phone: normPhone,
-    role: params.role,
-  });
 
   return { ok: true, user: newUser };
 }
