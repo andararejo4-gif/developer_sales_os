@@ -3,6 +3,22 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-097 | 2026-11-26 | Soft-Selling 4 Pilar pada AI Follow-Up Berkala (/pipeline?tab=FOLLOWUP)
+- Status: selesai di lokal
+- Ubah: `server/wa-nurture.ts` (fix baca `full_name`/`owner_se_name`/`owner_se_email`, memory antar-step anti-pengulangan, konteks persona `lead_ai_analyses` + `getCentralAiKnowledge` + deteksi `unitMentionedInChat` + adaptasi stage `VISITED`, 4 gaya soft-selling `NurtureTone`, `regenerateAllNurtureDraftsForLead`, `getRecentLeadTurnsForNurture`), `server/index.ts` (`/api/nurture/jobs` kembalikan `recentTurns`, `/api/nurture/jobs/generate` dukung `tone`, tambah `/api/nurture/jobs/regenerate-all`), `src/components/pipeline/FollowupScheduleTab.tsx` (tampilkan 1–2 bubble chat terakhir di preview WA, selector Gaya Pesan, & tombol `Regenerate Semua (H0–H14)`)
+- Alasan/keputusan: Menghilangkan kesan template kaku/robotik dan mencegah pengulangan antar-tahap H0–H14, sekaligus memudahkan SE membaca konteks chat terakhir sebelum mengirim atau mengedit draf.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`) & `bun build server/index.ts`
+- Berikutnya: Push ke GitHub & deploy ke `hades`, lalu uji `Regenerate Semua (H0–H14)` di `/pipeline?tab=FOLLOWUP`.
+- Catatan: Draf lama di DB bisa langsung diganti serentak lewat tombol `Regenerate Semua (H0–H14)`.
+
+## P-096 | 2026-11-26 | Halaman Khusus Kelola User (/kelola-user) + CRUD Penuh & Reset Kata Sandi
+- Status: selesai di lokal
+- Ubah: `server/auth.ts` (`updateTenantUser`, `deleteTenantUser`), `server/index.ts` (`PATCH` lengkap termasuk ubah kata sandi/role/email/proyek & `DELETE /api/org/users`), `src/lib/navigation/router.ts` (rute `org_users` -> `/kelola-user`), `src/components/OrgUserManagementPage.tsx` (halaman khusus CRUD penuh + filter 6 role + reset kata sandi), `src/App.tsx` (navigasi sidebar, SM, Admin ke `/kelola-user`)
+- Alasan/keputusan: Mengganti modal sempit menjadi halaman penuh agar manajemen akun (tambah, edit profil/role/proyek, reset kata sandi, aktif/nonaktif, hapus) jauh lebih leluasa.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`) & `bun build server/index.ts`
+- Berikutnya: Push ke GitHub & deploy ke `hades` bila user siap.
+- Catatan: Akun `SUPERADMIN`/`SUPERADMIN_IT` diproteksi agar tidak bisa dihapus atau diubah role-nya oleh role operasional.
+
 ## P-095 | 2026-11-26 | Kelola User 6 Role Utama (IT, SM, SE, Owner, Admin, TL) di Sidebar & Pengelompokan Riwayat Aktivitas Tim
 - Status: selesai di lokal
 - Ubah: `server/auth.ts` (`BASIC_ORG_ROLES` = `IT`, `SM`, `SE`, `DIREKSI`, `ADMIN`, `TL`), `src/components/OrgUserManagementModal.tsx` (label & opsi 6 role utama), `src/App.tsx` (tambah menu `Kelola User (6 Role)` di sidebar `MANAJEMEN PERUSAHAAN`), `server/index.ts` (`/api/company/audit-logs` join `app_users` per `tenant_id` + filter `actorRole`/`actorEmail` + `teamMembers`), `src/components/company/CompanyAuditLogsModal.tsx` (auth Bearer token, filter Role & Anggota Tim, mode pengelompokan per Divisi & Anggota Tim)

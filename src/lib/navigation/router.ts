@@ -20,7 +20,8 @@ export type DashboardView =
   | 'referral'
   | 'garansi'
   | 'kpr_bank'
-  | 'control_tower';
+  | 'control_tower'
+  | 'org_users';
 
 export const VIEW_PATHS: Record<DashboardView, string> = {
   dashboard: '/dashboard',
@@ -45,6 +46,7 @@ export const VIEW_PATHS: Record<DashboardView, string> = {
   garansi: '/keluhan-garansi',
   kpr_bank: '/alur-kpr-bank',
   control_tower: '/control-tower',
+  org_users: '/kelola-user',
 };
 
 const PATH_TO_VIEW: Record<string, DashboardView> = Object.entries(VIEW_PATHS).reduce(

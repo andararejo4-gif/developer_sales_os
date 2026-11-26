@@ -120,6 +120,7 @@ import { ReferralProgramPage } from './components/ReferralProgramPage';
 import { CustomerComplaintsPage } from './components/CustomerComplaintsPage';
 import { BankSubmissionWorkflowPage } from './components/BankSubmissionWorkflowPage';
 import { OrgUserManagementModal } from './components/OrgUserManagementModal';
+import { OrgUserManagementPage } from './components/OrgUserManagementPage';
 import { ItKnowledgeAiPanel } from './components/it/ItKnowledgeAiPanel';
 import { ExecutiveControlTowerPage } from './components/ExecutiveControlTowerPage';
 import {
@@ -1322,8 +1323,12 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => handleItemClick(() => setIsUserMgmtModalOpen(true))}
-              className="w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-warmmuted hover:bg-sandstone hover:text-espresso text-left cursor-pointer"
+              onClick={() => handleItemClick(() => openView('org_users'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs font-medium text-left cursor-pointer ${
+                activeView === 'org_users'
+                  ? 'bg-espresso text-white font-semibold shadow-sm'
+                  : 'text-warmmuted hover:bg-sandstone hover:text-espresso'
+              }`}
             >
               <Users className="size-4 shrink-0 text-terracotta" />
               <span>Kelola User (6 Role)</span>
@@ -2310,6 +2315,13 @@ export default function App() {
             />
           )}
 
+          {activeView === 'org_users' && (
+            <OrgUserManagementPage
+              projectId={activeProject.id}
+              projectName={activeProject.nama}
+            />
+          )}
+
           {/* ========================================================================= */}
           {/* ROLE: REFERRAL PARTNER & SALES PARTNER DASHBOARD VIEW */}
           {/* ========================================================================= */}
@@ -2883,7 +2895,7 @@ export default function App() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
-                    onClick={() => setIsUserMgmtModalOpen(true)}
+                    onClick={() => openView('org_users')}
                     className="px-3.5 py-2.5 rounded-xl bg-terracotta text-white hover:bg-terracotta/90 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shrink-0 shadow-2xs"
                   >
                     <Users className="size-4" /> Kelola User (6 Role)
@@ -3531,7 +3543,7 @@ export default function App() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
-                      onClick={() => setIsUserMgmtModalOpen(true)}
+                      onClick={() => openView('org_users')}
                       className="px-3.5 py-2 rounded-xl bg-terracotta hover:bg-terracotta/90 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
                     >
                       <Users className="size-3.5" /> Kelola User (6 Role)

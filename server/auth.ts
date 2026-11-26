@@ -731,21 +731,143 @@ export async function updateTenantUserStatus(
   targetUserId: string,
   isActive: boolean
 ) {
-  if (!['ADMIN', 'SM', 'DIREKSI', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(actor.role)) {
-    return { ok: false as const, error: 'Tidak memiliki akses mengubah status user.' };
+  return updateTenantUser(actor, targetUserId, { isActive });
+}
+
+export async function updateTenantUser(
+  actor: AuthenticatedUser,
+  targetUserId: string,
+  params: {
+    name?: string;
+    email?: string;
+    phone?: string | null;
+    role?: string;
+    projectId?: string;
+    isActive?: boolean;
+    password?: string;
   }
-  if (actor.userId && actor.userId === targetUserId && !isActive) {
+) {
+  if (!['ADMIN', 'SM', 'DIREKSI', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(actor.role)) {
+    return { ok: false as const, error: 'Tidak memiliki akses mengubah data user.' };
+  }
+  if (actor.userId && actor.userId === targetUserId && params.isActive === false) {
     return { ok: false as const, error: 'Tidak dapat menonaktifkan akun Anda sendiri.' };
   }
+
+  const existingRows = await sql`
+    SELECT id, email, role
+    FROM sales_os.app_users
+    WHERE id = ${targetUserId}::uuid AND tenant_id = ${actor.tenantId}
+    LIMIT 1
+  `;
+  if (existingRows.length === 0) {
+    return { ok: false as const, error: 'User tidak ditemukan pada organisasi Anda.' };
+  }
+  const targetRoleExisting = String(existingRows[0].role || '');
+  if (['SUPERADMIN', 'SUPERADMIN_IT'].includes(targetRoleExisting) && !['SUPERADMIN', 'SUPERADMIN_IT'].includes(actor.role)) {
+    return { ok: false as const, error: 'Akun Superadmin platform tidak dapat diubah oleh role ini.' };
+  }
+
+  let nextRole: string | null = null;
+  if (params.role !== undefined && params.role.trim() !== '') {
+    const candidateRole = params.role.trim().toUpperCase();
+    if (!BASIC_ORG_ROLES.includes(candidateRole as BasicOrgRole)) {
+      return {
+        ok: false as const,
+        error: `Role harus salah satu dari 6 role dasar: ${BASIC_ORG_ROLES.join(', ')}.`,
+      };
+    }
+    nextRole = candidateRole;
+  }
+
+  let nextEmail: string | null = null;
+  if (params.email !== undefined && params.email.trim() !== '') {
+    const candidateEmail = params.email.trim().toLowerCase();
+    if (!candidateEmail.includes('@')) {
+      return { ok: false as const, error: 'Format email tidak valid.' };
+    }
+    if (candidateEmail !== String(existingRows[0].email).toLowerCase()) {
+      const dup = await sql`SELECT id FROM sales_os.app_users WHERE email = ${candidateEmail} AND id <> ${targetUserId}::uuid LIMIT 1`;
+      if (dup.length > 0) {
+        return { ok: false as const, error: 'Email tersebut sudah digunakan akun lain.' };
+      }
+    }
+    nextEmail = candidateEmail;
+  }
+
+  let nextPasswordHash: string | null = null;
+  if (params.password !== undefined && params.password !== '') {
+    if (params.password.length < 8) {
+      return { ok: false as const, error: 'Kata sandi baru minimal 8 karakter.' };
+    }
+    nextPasswordHash = hashPassword(params.password);
+  }
+
+  const nextName = params.name !== undefined && params.name.trim() !== '' ? params.name.trim() : null;
+  const nextPhone = params.phone !== undefined ? (params.phone?.trim() || null) : undefined;
+  const nextProjectId = params.projectId !== undefined && params.projectId.trim() !== '' ? params.projectId.trim() : null;
+  const nextIsActive = params.isActive !== undefined ? Boolean(params.isActive) : null;
+
   const updated = await sql`
     UPDATE sales_os.app_users
-    SET is_active = ${isActive}, updated_at = NOW()
+    SET
+      name = COALESCE(${nextName}, name),
+      email = COALESCE(${nextEmail}, email),
+      phone = ${nextPhone === undefined ? sql`phone` : nextPhone},
+      role = COALESCE(${nextRole}, role),
+      project_id = COALESCE(${nextProjectId}, project_id),
+      is_active = COALESCE(${nextIsActive}, is_active),
+      password_hash = COALESCE(${nextPasswordHash}, password_hash),
+      updated_at = NOW()
     WHERE id = ${targetUserId}::uuid
       AND tenant_id = ${actor.tenantId}
-    RETURNING id, is_active
+    RETURNING id, email, name, role, tenant_id, project_id, phone, is_active, totp_enabled, created_at
   `;
+
   if (updated.length === 0) {
     return { ok: false as const, error: 'User tidak ditemukan pada organisasi Anda.' };
   }
-  return { ok: true as const, id: String(updated[0].id), isActive: Boolean(updated[0].is_active) };
+  const row = updated[0];
+  return {
+    ok: true as const,
+    id: String(row.id),
+    isActive: Boolean(row.is_active),
+    user: {
+      id: String(row.id),
+      email: String(row.email),
+      name: String(row.name),
+      role: String(row.role),
+      tenantId: String(row.tenant_id),
+      projectId: String(row.project_id),
+      phone: row.phone ? String(row.phone) : null,
+      isActive: Boolean(row.is_active),
+      totpEnabled: Boolean(row.totp_enabled),
+      createdAt: row.created_at,
+    },
+  };
+}
+
+export async function deleteTenantUser(actor: AuthenticatedUser, targetUserId: string) {
+  if (!['ADMIN', 'SM', 'DIREKSI', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(actor.role)) {
+    return { ok: false as const, error: 'Tidak memiliki akses menghapus user.' };
+  }
+  if (actor.userId && actor.userId === targetUserId) {
+    return { ok: false as const, error: 'Tidak dapat menghapus akun Anda sendiri.' };
+  }
+  const existingRows = await sql`
+    SELECT id, role FROM sales_os.app_users
+    WHERE id = ${targetUserId}::uuid AND tenant_id = ${actor.tenantId}
+    LIMIT 1
+  `;
+  if (existingRows.length === 0) {
+    return { ok: false as const, error: 'User tidak ditemukan pada organisasi Anda.' };
+  }
+  if (['SUPERADMIN', 'SUPERADMIN_IT'].includes(String(existingRows[0].role || ''))) {
+    return { ok: false as const, error: 'Akun Superadmin platform tidak dapat dihapus.' };
+  }
+  await sql`
+    DELETE FROM sales_os.app_users
+    WHERE id = ${targetUserId}::uuid AND tenant_id = ${actor.tenantId}
+  `;
+  return { ok: true as const, id: targetUserId };
 }

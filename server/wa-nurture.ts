@@ -1,51 +1,84 @@
 import { sql } from './db';
 import { getTurns } from './wa-conversation';
 import { sendOutboundWaMessageForSe, normalizePhoneWa } from './wa-baileys';
+import { getCentralAiKnowledge } from './truth-engine';
+
+export type NurtureTone = 'santai' | 'value' | 'finansial' | 'singkat';
+
+const TONE_GUIDES: Record<NurtureTone, string> = {
+  santai: 'Gaya: Hangat, akrab, santai seperti chat teman/kenalan baik. Ringan, empatik, nol tekanan.',
+  value: 'Gaya: Storytelling ringan & edukatif. Angkat 1 keunggulan nyata (lokasi belakang Alun-alun Sukoharjo, privat 30 unit, atau tata ruang nyaman) tanpa seperti brosur.',
+  finansial: 'Gaya: Konsultatif & menenangkan soal pembayaran. Tawarkan simulasi santai (Cash mulai Rp650 jt / Cash Tempo / KPR mulai Rp683 jt) sesuai kenyamanan budget mereka.',
+  singkat: 'Gaya: Super ringkas (1–2 kalimat saja, maks 35 kata). Langsung ke inti yang hangat dan 1 pertanyaan pendek yang mudah dijawab.',
+};
 
 const DEFAULT_CADENCE_STEPS = [
   {
     stepCode: 'H0',
     stepOrder: 1,
-    stepLabel: 'H0 · Sapaan Awal',
+    stepLabel: 'H0 · Sapaan Hangat & Discovery',
     delayHours: 0.15,
-    stepGoal: 'Sapa ramah dengan nama panggilan, konfirmasi minat tipe unit/rencana bayar (Cash/KPR), dan tawarkan bantuan info brosur/pricelist.',
+    stepGoal: 'Bangun kedekatan awal yang hangat, sebut nama panggilan, bantu arahkan sesuai minat unitnya, dan tutup dengan 1 pertanyaan ringan yang nyaman dibalas.',
   },
   {
     stepCode: 'H1',
     stepOrder: 2,
-    stepLabel: 'H+1 · Keunggulan & Opsi Unit',
+    stepLabel: 'H+1 · Keunggulan Lokasi & Unit Pas',
     delayHours: 24,
-    stepGoal: 'Bagikan 2-3 keunggulan utama lokasi The Park Townhouse Sukoharjo (belakang Alun-alun) dan rekomendasikan 2 unit tersedia sesuai kebutuhan.',
+    stepGoal: 'Ceritakan nilai hidup nyaman di belakang Alun-alun Sukoharjo (hanya 30 unit eksklusif + clubhouse) dan rekomendasikan 1-2 unit yang paling cocok tanpa memaksa.',
   },
   {
     stepCode: 'H3',
     stepOrder: 3,
-    stepLabel: 'H+3 · Simulasi & Skema Bayar',
+    stepLabel: 'H+3 · Solusi Skema Bayar Fleksibel',
     delayHours: 72,
-    stepGoal: 'Jelaskan opsi skema bayar (Cash Keras mulai Rp650 jt, Cash Tempo, atau KPR mulai Rp683 jt dengan estimasi cicilan wajar tanpa menjanjikan ACC bank).',
+    stepGoal: 'Bantu prospek merasa tenang soal pembayaran dengan opsi Cash Keras mulai Rp650 jt, Cash Tempo, atau KPR mulai Rp683 jt, lalu tawarkan hitung-hitungan santai.',
   },
   {
     stepCode: 'H7',
     stepOrder: 4,
-    stepLabel: 'H+7 · Undangan Survei Lokasi',
+    stepLabel: 'H+7 · Ajakan Santai Cek Lokasi / Video Tour',
     delayHours: 168,
-    stepGoal: 'Ajak santai jadwalkan survei lokasi privat atau video-call tur unit di akhir pekan/hari kerja sesuai waktu luang pembeli.',
+    stepGoal: 'Ajak merasakan langsung suasana unit lewat private viewing atau video tour singkat dengan 2 opsi waktu santai tanpa tekanan.',
   },
   {
     stepCode: 'H14',
     stepOrder: 5,
-    stepLabel: 'H+14 · Check-in Terakhir',
+    stepLabel: 'H+14 · Check-in Elegan & Berkelas',
     delayHours: 336,
-    stepGoal: 'Tanyakan dengan sopan apakah masih mempertimbangkan hunian di Sukoharjo dan beri tahu bisa membalas jika ingin berhenti dikirimi info.',
+    stepGoal: 'Sapa kembali dengan elegan tanpa memaksa, beri update ketersediaan singkat, dan beri ruang nyaman jika saat ini belum menjadi prioritas.',
   },
 ];
 
-const FORBIDDEN_CLAIMS_RE = /\b(pasti\s+untung|pasti\s+naik|bebas\s+banjir|pasti\s+disetujui|pasti\s+acc|garansi\s+kpr)\b/gi;
+const STEP_SOFT_SELLING_ANGLES: Record<string, string> = {
+  H0: 'Fokus: Bangun rasa nyaman dulu, JANGAN langsung jualan keras. Tawarkan bantuan ringan sesuai unit yang diminati dan tanya 1 hal personal yang mudah dijawab (mis. rencana untuk hunian keluarga atau investasi).',
+  H1: 'Fokus: Story & lifestyle value. Bayangkan tinggal selangkah dari Alun-alun Sukoharjo dalam klaster privat 30 unit saja (tidak padat, ada clubhouse). Sebutkan 1-2 unit paling relevan secara santai, bukan daftar harga kaku.',
+  H3: 'Fokus: Hilangkan beban/kekhawatiran finansial. Beri gambaran ringan bahwa skema bisa disesuaikan (Cash mulai Rp650 jt, Cash Tempo, atau KPR mulai Rp683 jt), lalu tawarkan dibuatkan simulasi santai sesuai budget nyaman mereka.',
+  H7: 'Fokus: Experience over pitch. Ajak mampir sebentar lihat feel lingkungannya (atau video call 5 menit kalau sibuk/di luar kota). Berikan 2 opsi waktu ringan (mis. Sabtu pagi atau sore) agar gampang dibalas.',
+  H14: 'Fokus: Elegan & zero-pressure break-up. Sampaikan kalau masih mempertimbangkan hunian di pusat Sukoharjo, kabari saja jika butuh update unit terbaru; kalau sudah dapat atau lagi jeda dulu juga tidak apa-apa.',
+};
+
+const FORBIDDEN_CLAIMS_RE = /\b(pasti\s+untung|pasti\s+naik|bebas\s+banjir|pasti\s+disetujui|pasti\s+acc|garansi\s+kpr|dijamin\s+lolos|passive\s+income|capital\s+gain)\b/gi;
 
 export function sanitizeNurtureText(text: string): string {
   return text
+    .replace(/^["'“”]+|["'“”]+$/g, '')
+    .replace(/\bKak\s+Bapak\/Ibu\b/gi, 'Bapak/Ibu')
     .replace(FORBIDDEN_CLAIMS_RE, 'sesuai ketentuan yang berlaku')
     .trim();
+}
+
+export async function getRecentLeadTurnsForNurture(leadId: string, limit = 3) {
+  try {
+    const turns = await getTurns(leadId, limit);
+    return turns.map((t: any) => ({
+      direction: String(t.direction || 'IN'),
+      body: String(t.body || ''),
+      createdAt: t.created_at || t.createdAt || null,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -165,68 +198,137 @@ export async function generateNurtureDraftWithAi(params: {
   stepCode: string;
   stepLabel: string;
   stepGoal: string;
+  tone?: NurtureTone;
+  previousDrafts?: Array<{ stepCode: string; draft: string }>;
 }): Promise<{ text: string; model: string }> {
   const apiKey = process.env.AI_ROUTER_API_KEY;
   const apiUrl = (process.env.AI_ROUTER_URL || 'https://9router.giivepro.com/v1').replace(/\/$/, '');
   const model = process.env.AI_ROUTER_MODEL || 'andararejomakmurjosjis';
+  const tone: NurtureTone = params.tone && params.tone in TONE_GUIDES ? params.tone : 'santai';
 
-  const buyerName = String(params.lead.buyer_name || 'Bapak/Ibu').split(' ')[0];
+  const rawName = String(params.lead.full_name || params.lead.buyer_name || '').trim();
+  const honorificMatch = rawName.match(/^(bapak|ibu|pak|bu|mas|mbak|kak)\s+(.+)/i);
+  const honorific = honorificMatch ? honorificMatch[1] : 'Kak';
+  const cleanFirst = (honorificMatch ? honorificMatch[2] : rawName).split(' ')[0] || '';
+  const greetingName = cleanFirst ? `${honorific} ${cleanFirst}` : 'Kak';
   const unitInterest = String(params.lead.unit_interest || 'The Park Townhouse Sukoharjo');
-  const stage = String(params.lead.stage || 'LEAD_MASUK');
+  const clusterInterest = String(params.lead.cluster_interest || '');
+  const paymentScheme = String(params.lead.payment_scheme || 'Fleksibel (Cash / KPR)');
+  const domicile = String(params.lead.domicile || '');
+  const stage = String(params.lead.stage || 'LEAD_MASUK').toUpperCase();
+  const isVisited = ['VISITED', 'SURVEY_DONE', 'HOT_NEGOTIATION', 'BOOKING', 'DP_KPR_PROCESS'].includes(stage);
   const notes = String(params.lead.notes || '');
+  const seName = String(params.lead.owner_se_name || 'Tim The Park').split(' ')[0];
+  const tenantId = String(params.lead.tenant_id || 'andara_rejo_makmur');
+  const projectId = String(params.lead.project_id || 'the-park-sukoharjo');
 
-  const units = await sql`
-    SELECT unit_code, cluster, price_cash, price_kpr, status
-    FROM sales_os.project_units
-    WHERE tenant_id = ${params.lead.tenant_id || 'andara_rejo_makmur'} AND status = 'available'
-    ORDER BY price_cash ASC
-    LIMIT 4
-  `;
+  const [units, analysisRows, centralKb] = await Promise.all([
+    sql`
+      SELECT unit_code, cluster, price_cash, price_kpr, status
+      FROM sales_os.project_units
+      WHERE tenant_id = ${tenantId} AND status = 'available'
+      ORDER BY price_cash ASC
+      LIMIT 4
+    `,
+    sql`
+      SELECT recommended_persona, ringkas, poin_lemah
+      FROM sales_os.lead_ai_analyses
+      WHERE lead_id = ${params.lead.id}::uuid
+      ORDER BY created_at DESC
+      LIMIT 1
+    `.catch(() => []),
+    getCentralAiKnowledge(tenantId, projectId).catch(() => null),
+  ]);
+
   const unitsText = units
     .map((u: any) => `- ${u.unit_code} (${u.cluster}): Cash Rp${Math.round(Number(u.price_cash) / 1e6)} jt / KPR Rp${Math.round(Number(u.price_kpr) / 1e6)} jt`)
     .join('\n');
 
+  const latestAnalysis = analysisRows[0] as any;
+  const personaText = latestAnalysis?.recommended_persona ? String(latestAnalysis.recommended_persona) : 'Umum';
+  const analysisSummary = latestAnalysis?.ringkas ? String(latestAnalysis.ringkas) : '-';
+  const kbExcerpt = centralKb?.masterMarkdown
+    ? String(centralKb.masterMarkdown).slice(0, 700)
+    : '';
+
   let historyText = 'Belum ada riwayat chat.';
+  let unitMentionedInChat = false;
   try {
     const turns = await getTurns(String(params.lead.id), 6);
     if (turns.length > 0) {
       historyText = turns
         .map((t: any) => `${t.direction === 'IN' ? 'Pembeli' : 'SE'}: ${t.body}`)
         .join('\n');
+      const allChat = turns.map((t: any) => String(t.body || '')).join(' ').toLowerCase();
+      unitMentionedInChat = Boolean(
+        unitInterest && allChat.includes(unitInterest.toLowerCase().split(' ')[0])
+      );
     }
   } catch {
     /* abaikan jika tabel turns belum ada */
   }
 
-  const fallbackMsg = `Halo Kak ${buyerName}, saya dari tim konsultan The Park Townhouse Sukoharjo (PT Andara Rejo Makmur). Izin menindaklanjuti minat Kakak terkait ${unitInterest}. Jika berkenan, saya bisa kirimkan estimasi skema bayar terbaru atau bantu aturkan jadwal survei lokasi. Kabari saja ya Kak, terima kasih.`;
+  const prevDraftsText =
+    params.previousDrafts && params.previousDrafts.length > 0
+      ? params.previousDrafts
+          .filter((p) => p.draft && p.draft.trim())
+          .map((p) => `[${p.stepCode}]: ${p.draft.trim()}`)
+          .join('\n')
+      : 'Belum ada draf tahap sebelumnya.';
+
+  const fallbackByStep: Record<string, string> = {
+    H0: `Halo ${greetingName}, salam kenal saya ${seName} dari The Park Townhouse Sukoharjo. Kalau boleh tahu, rencana cari rumah di area Sukoharjo lebih untuk ditinggali keluarga atau buat investasi nih? Biar saya bisa bantu pilihkan info yang paling pas.`,
+    H1: `Halo ${greetingName}, sekadar berbagi info santai—di The Park Townhouse (tepat di belakang Alun-alun Sukoharjo) unitnya memang dibuat terbatas 30 unit supaya tetap tenang dan privat. ${greetingName} biasanya lebih nyaman model 1 lantai atau 2 lantai ya?`,
+    H3: `Selamat siang ${greetingName}, biar lebih kebayang tanpa pusing, di sini skema bayarnya cukup fleksibel—bisa Cash mulai Rp650 jt, Cash Tempo, atau KPR mulai Rp683 jt. Mau saya bantu buatkan simulasi ringan sesuai budget nyaman ${greetingName}?`,
+    H7: `Halo ${greetingName}, kalau akhir pekan ini lagi santai di sekitar Sukoharjo, mampir yuk lihat langsung feel lingkungannya di The Park Townhouse—atau kalau lagi sibuk bisa video tour 5 menit aja. Lebih pas Sabtu pagi atau Minggu sore ya?`,
+    H14: `Halo ${greetingName}, semoga sehat selalu ya. Sekadar menyapa aja, kalau dalam waktu dekat masih cari hunian nyaman dekat Alun-alun Sukoharjo kabari saya ya. Kalau saat ini belum prioritas juga santai kok, tidak usah sungkan.`,
+  };
+  const fallbackMsg = fallbackByStep[params.stepCode] || fallbackByStep.H0;
 
   if (!apiKey) {
     return { text: fallbackMsg, model: 'fallback-no-key' };
   }
 
-  const prompt = `Kamu adalah asisten penulis pesan follow-up WhatsApp untuk Sales Executive (SE) properti "The Park Townhouse Sukoharjo" (PT Andara Rejo Makmur).
-Buatkan 1 pesan WhatsApp follow-up yang hangat, sopan, natural (seperti manusia mengetik WA, BUKAN template kaku), maksimal 3 paragraf pendek (maks 75 kata).
+  const softAngle = isVisited
+    ? 'Lead SUDAH PERNAH SURVEI/LANJUT: jangan ulang perkenalan dasar. Fokus tanyakan kesan pasangan/keluarga, bantu jawab hal yang masih mengganjal, atau tawarkan rincian tertulis secara ringan.'
+    : STEP_SOFT_SELLING_ANGLES[params.stepCode] || STEP_SOFT_SELLING_ANGLES.H0;
+
+  const prompt = `Kamu adalah ${seName}, Sales Executive senior yang hangat, tulus, dan jago soft-selling properti premium "The Park Townhouse Sukoharjo" (tepat di belakang Alun-alun Sukoharjo, eksklusif 30 unit dengan clubhouse).
+Tugasmu: tulis 1 pesan WhatsApp follow-up yang TERASA SEPERTI MANUSIA ASLI mengetik ke kenalan baik—hangat, persuasif halus (soft selling), membangkitkan minat, dan ENAK DIBACA DARI KEDUA BELAH PIHAK.
 
 Data Prospek:
-- Nama panggilan: ${buyerName}
-- Minat unit: ${unitInterest}
-- Tahap pipeline: ${stage}
-- Catatan: ${notes || '-'}
+- Sapaan personal: ${greetingName}
+- Status unit: ${unitMentionedInChat ? `Sudah membahas ${unitInterest}` : `Minat CRM: ${unitInterest}${clusterInterest ? ` (${clusterInterest})` : ''} (BELUM tentu dibahas di chat—jangan mengklaim pembeli sudah memilih unit ini, cukup jadikan referensi rekomendasi santai)`}
+- Rencana bayar: ${paymentScheme}
+- Domisili: ${domicile || '-'}
+- Tahap pipeline: ${stage} (${isVisited ? 'Sudah survei/lanjut' : 'Belum survei'})
+- Persona AI: ${personaText} · Ringkasan: ${analysisSummary}
+- Catatan khusus: ${notes || '-'}
 
 Riwayat Chat Terakhir:
 ${historyText}
 
+Draf Tahap Sebelumnya (JANGAN ULANG pembuka, poin, atau pertanyaan yang sama!):
+${prevDraftsText}
+
 Unit Tersedia Saat Ini (Data Resmi Live):
 ${unitsText || '- Mulai Rp650 juta (Cash) / Rp683 juta (KPR)'}
-
+${kbExcerpt ? `\nFakta Resmi Knowledge Base:\n${kbExcerpt}\n` : ''}
 Tahap Follow-Up: ${params.stepLabel}
-Tujuan Pesan Ini: ${params.stepGoal}
+Tujuan Tahap: ${params.stepGoal}
+Strategi Tahap Ini: ${softAngle}
+${TONE_GUIDES[tone]}
+
+Formula 3 Bagian WA Soft-Selling (WAJIB):
+1. Hook personal 1 kalimat (nyambung dengan konteks, nol basa-basi korporat).
+2. 1 Micro-Value spesifik yang relevan dengan kebutuhan pembeli (jangan tumpahkan semua spesifikasi seperti brosur).
+3. Akhiri dengan 1 pertanyaan ringan atau pilihan sederhana (A/B) yang gampang dijawab 1 baris di WA (maksimal SATU tanda tanya).
 
 Aturan Keras:
-1. DILARANG menulis klaim: bebas banjir, pasti untung, pasti naik, pasti ACC/disetujui KPR.
-2. Harga wajib mengacu data resmi di atas (tidak boleh di bawah Rp650 juta).
-3. Jangan beri salam pembuka bertele-tele jika di riwayat chat sudah pernah mengobrol.
-4. Balas HANYA teks pesan WhatsApp siap kirim (tanpa tanda kutip atau penjelasan tambahan).`;
+- DILARANG frasa klise/robot: "izin menindaklanjuti", "tim konsultan", "PT Andara Rejo Makmur", "apakah masih berminat", "jangan ragu menghubungi", "terima kasih telah menghubungi", atau "Kak Bapak/Ibu".
+- Panjang ideal: ${tone === 'singkat' ? '1–2 kalimat (25–38 kata)' : '2–3 paragraf pendek (45–65 kata)'}, tanpa bullet list kaku, maksimal 1 emoji natural (boleh tanpa emoji).
+- DILARANG klaim: bebas banjir, pasti untung, pasti naik, pasti ACC/disetujui KPR. Harga wajib mengacu data resmi di atas (tidak di bawah Rp650 jt).
+- Balas HANYA teks pesan WhatsApp siap kirim (tanpa tanda kutip atau penjelasan).`;
 
   try {
     const resp = await fetch(`${apiUrl}/chat/completions`, {
@@ -237,7 +339,7 @@ Aturan Keras:
       },
       body: JSON.stringify({
         model,
-        temperature: 0.5,
+        temperature: 0.75,
         messages: [{ role: 'user', content: prompt }],
       }),
     });
@@ -300,7 +402,7 @@ export async function scheduleNurtureForLead(params: {
       aiModel = gen.model;
     }
 
-    const seEmail = String(lead.se_email || lead.owner_email || lead.assigned_se_email || 'raka@andararejomakmur.co.id');
+    const seEmail = String(lead.owner_se_email || lead.se_email || lead.owner_email || lead.assigned_se_email || 'raka@andararejomakmur.co.id');
     const projectId = String(tpl.project_id || 'the-park-sukoharjo');
 
     await sql`
@@ -337,12 +439,16 @@ export async function getNurtureJobsForLead(leadId: string, tenantId: string, au
       `;
       if (leadRows.length > 0) {
         const lead = leadRows[0];
+        const prevDrafts: Array<{ stepCode: string; draft: string }> = jobs
+          .filter((j: any) => j.draft_message)
+          .map((j: any) => ({ stepCode: String(j.step_code), draft: String(j.draft_message) }));
         for (const m of missing) {
           const gen = await generateNurtureDraftWithAi({
             lead,
             stepCode: String(m.step_code),
             stepLabel: String(m.step_label || m.step_code),
             stepGoal: String(m.step_goal || 'Follow up prospek'),
+            previousDrafts: prevDrafts,
           });
           await sql`
             UPDATE sales_os.wa_nurture_jobs
@@ -351,6 +457,7 @@ export async function getNurtureJobsForLead(leadId: string, tenantId: string, au
           `;
           m.draft_message = gen.text;
           m.ai_model = gen.model;
+          prevDrafts.push({ stepCode: String(m.step_code), draft: gen.text });
         }
       }
     }
@@ -429,7 +536,12 @@ export async function updateNurtureJob(params: {
   return { ok: true as const, job: updated[0] };
 }
 
-export async function regenerateNurtureJobDraft(jobId: string, tenantId: string, force = false) {
+export async function regenerateNurtureJobDraft(
+  jobId: string,
+  tenantId: string,
+  force = false,
+  tone?: NurtureTone
+) {
   const rows = await sql`
     SELECT j.*, t.step_label, t.step_goal
     FROM sales_os.wa_nurture_jobs j
@@ -444,16 +556,28 @@ export async function regenerateNurtureJobDraft(jobId: string, tenantId: string,
     return { ok: false as const, error: 'Draf sudah diedit oleh SE. Gunakan Regenerate manual untuk menimpa.' };
   }
 
-  const leadRows = await sql`
-    SELECT * FROM sales_os.pipeline_leads WHERE id = ${job.lead_id}::uuid LIMIT 1
-  `;
+  const [leadRows, siblingRows] = await Promise.all([
+    sql`SELECT * FROM sales_os.pipeline_leads WHERE id = ${job.lead_id}::uuid LIMIT 1`,
+    sql`
+      SELECT step_code, draft_message
+      FROM sales_os.wa_nurture_jobs
+      WHERE lead_id = ${job.lead_id}::uuid AND tenant_id = ${tenantId} AND step_order < ${job.step_order}
+      ORDER BY step_order ASC
+    `,
+  ]);
   if (leadRows.length === 0) return { ok: false as const, error: 'Lead tidak ditemukan.' };
+
+  const previousDrafts = siblingRows
+    .filter((r: any) => r.draft_message)
+    .map((r: any) => ({ stepCode: String(r.step_code), draft: String(r.draft_message) }));
 
   const gen = await generateNurtureDraftWithAi({
     lead: leadRows[0],
     stepCode: String(job.step_code),
     stepLabel: String(job.step_label || job.step_code),
     stepGoal: String(job.step_goal || 'Follow up prospek secara ramah'),
+    tone,
+    previousDrafts,
   });
 
   const updated = await sql`
@@ -466,6 +590,54 @@ export async function regenerateNurtureJobDraft(jobId: string, tenantId: string,
     RETURNING *
   `;
   return { ok: true as const, job: updated[0] };
+}
+
+export async function regenerateAllNurtureDraftsForLead(
+  leadId: string,
+  tenantId: string,
+  tone?: NurtureTone
+) {
+  const leadRows = await sql`
+    SELECT * FROM sales_os.pipeline_leads
+    WHERE id = ${leadId}::uuid AND tenant_id = ${tenantId}
+    LIMIT 1
+  `;
+  if (leadRows.length === 0) return { ok: false as const, error: 'Lead tidak ditemukan.' };
+  const lead = leadRows[0];
+
+  const jobs = await getNurtureJobsForLead(leadId, tenantId, false);
+  const previousDrafts: Array<{ stepCode: string; draft: string }> = [];
+
+  for (const job of jobs) {
+    if (job.status === 'SENT') {
+      if (job.draft_message) {
+        previousDrafts.push({ stepCode: String(job.step_code), draft: String(job.draft_message) });
+      }
+      continue;
+    }
+    const gen = await generateNurtureDraftWithAi({
+      lead,
+      stepCode: String(job.step_code),
+      stepLabel: String(job.step_label || job.step_code),
+      stepGoal: String(job.step_goal || 'Follow up prospek secara ramah'),
+      tone,
+      previousDrafts,
+    });
+    await sql`
+      UPDATE sales_os.wa_nurture_jobs
+      SET draft_message = ${gen.text},
+          ai_model = ${gen.model},
+          is_edited_by_se = FALSE,
+          updated_at = NOW()
+      WHERE id = ${job.id}::uuid
+    `;
+    job.draft_message = gen.text;
+    job.ai_model = gen.model;
+    job.is_edited_by_se = false;
+    previousDrafts.push({ stepCode: String(job.step_code), draft: gen.text });
+  }
+
+  return { ok: true as const, data: jobs };
 }
 
 export async function executeNurtureJobSend(jobId: string, tenantId: string, seName = 'Sales Executive') {

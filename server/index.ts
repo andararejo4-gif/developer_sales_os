@@ -15,6 +15,7 @@ import {
   buildClearSessionCookieHeader,
   buildSessionCookieHeader,
   createTenantUser,
+  deleteTenantUser,
   disableUserTotp,
   enableUserTotp,
   ensureAuthTablesAndSeeds,
@@ -24,6 +25,7 @@ import {
   revokeSession,
   setupUserTotp,
   startLogin,
+  updateTenantUser,
   updateTenantUserStatus,
   updateUserProfile,
   verifyMfaAndCreateSession,
@@ -55,13 +57,16 @@ import {
   ensureNurtureTablesAndSeeds,
   executeNurtureJobSend,
   getNurtureJobsForLead,
+  getRecentLeadTurnsForNurture,
   listCadenceTemplates,
+  regenerateAllNurtureDraftsForLead,
   regenerateNurtureJobDraft,
   rescheduleAnchorForLead,
   scheduleNurtureForLead,
   startNurtureScheduler,
   updateCadenceTemplate,
   updateNurtureJob,
+  type NurtureTone,
 } from './wa-nurture';
 import { analyzeLeadWithAi } from './ai-engine';
 import { getTurns, getTurnsForLeads } from './wa-conversation';
@@ -3778,7 +3783,8 @@ const server = http.createServer(async (req, res) => {
       if (jobs.length === 0) {
         jobs = await scheduleNurtureForLead({ leadId, tenantId: user.tenantId, generateInitialDrafts: false });
       }
-      sendJson(res, 200, { ok: true, data: jobs });
+      const recentTurns = await getRecentLeadTurnsForNurture(leadId, 3);
+      sendJson(res, 200, { ok: true, data: jobs, recentTurns });
       return;
     }
 
@@ -3789,12 +3795,30 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { ok: false, error: 'jobId wajib diisi.' });
         return;
       }
-      const result = await regenerateNurtureJobDraft(jobId, user.tenantId, Boolean(body.force ?? true));
+      const tone = body.tone ? (String(body.tone) as NurtureTone) : undefined;
+      const result = await regenerateNurtureJobDraft(jobId, user.tenantId, Boolean(body.force ?? true), tone);
       if (!result.ok) {
         sendJson(res, 400, { ok: false, error: result.error });
         return;
       }
       sendJson(res, 200, { ok: true, job: result.job });
+      return;
+    }
+
+    if (pathname === '/api/nurture/jobs/regenerate-all' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const leadId = String(body.leadId || '').trim();
+      if (!leadId) {
+        sendJson(res, 400, { ok: false, error: 'leadId wajib diisi.' });
+        return;
+      }
+      const tone = body.tone ? (String(body.tone) as NurtureTone) : undefined;
+      const result = await regenerateAllNurtureDraftsForLead(leadId, user.tenantId, tone);
+      if (!result.ok) {
+        sendJson(res, 400, { ok: false, error: result.error });
+        return;
+      }
+      sendJson(res, 200, { ok: true, data: result.data });
       return;
     }
 
@@ -3953,12 +3977,35 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/org/users' && req.method === 'PATCH') {
       const body = await readJsonBody(req);
-      const targetUserId = String(body.userId || '').trim();
+      const targetUserId = String(body.userId || body.id || '').trim();
       if (!targetUserId) {
         sendJson(res, 400, { ok: false, error: 'userId wajib diisi.' });
         return;
       }
-      const result = await updateTenantUserStatus(user, targetUserId, Boolean(body.isActive));
+      const result = await updateTenantUser(user, targetUserId, {
+        name: body.name !== undefined ? String(body.name) : undefined,
+        email: body.email !== undefined ? String(body.email) : undefined,
+        phone: body.phone !== undefined ? (body.phone ? String(body.phone) : null) : undefined,
+        role: body.role !== undefined ? String(body.role) : undefined,
+        projectId: body.projectId !== undefined ? String(body.projectId) : undefined,
+        isActive: body.isActive !== undefined ? Boolean(body.isActive) : undefined,
+        password: body.password !== undefined ? String(body.password) : undefined,
+      });
+      if (!result.ok) {
+        sendJson(res, 400, result);
+        return;
+      }
+      sendJson(res, 200, result);
+      return;
+    }
+
+    if (pathname === '/api/org/users' && req.method === 'DELETE') {
+      const targetUserId = String(parsedUrl.searchParams.get('id') || parsedUrl.searchParams.get('userId') || '').trim();
+      if (!targetUserId) {
+        sendJson(res, 400, { ok: false, error: 'ID user wajib diisi.' });
+        return;
+      }
+      const result = await deleteTenantUser(user, targetUserId);
       if (!result.ok) {
         sendJson(res, 400, result);
         return;
