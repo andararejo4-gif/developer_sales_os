@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import {
   buildCreatorSmartLink,
+  buildShortTrackLink,
   calculateKantongAAmount,
   calculatePph21Estimate,
+  maskLeadPiiForPartner,
 } from '../src/lib/creator/creator-desk-store';
 
 describe('Creator Desk (Paket 1 + Paket 2)', () => {
@@ -51,5 +53,14 @@ describe('Creator Desk (Paket 1 + Paket 2)', () => {
     const res = calculatePph21Estimate(1000000);
     expect(res.taxIdr).toBe(25000);
     expect(res.netIdr).toBe(975000);
+  });
+
+  it('membentuk shortlink /c/:code dan menjaga privasi E6 (masking nama & WA pembeli)', () => {
+    expect(buildShortTrackLink('https://developerproperti.giivepro.com/', 'tpth-k1')).toBe(
+      'https://developerproperti.giivepro.com/c/tpth-k1'
+    );
+    const masked = maskLeadPiiForPartner('Budi Hartono', '0812-9876-1122');
+    expect(masked.maskedName).toBe('Bu*** Ha***');
+    expect(masked.maskedPhone).toBe('0812-****-122');
   });
 });

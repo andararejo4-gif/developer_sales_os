@@ -3,7 +3,6 @@ import { hydrateAllRemoteState } from './lib/db/remote-state';
 import { PublicHomepageV3 } from './components/v3/PublicHomepageV3';
 import { AddSeModal } from './components/AddSeModal';
 import { loadSeTeamList } from './lib/auth/se-management';
-import { getDeveloperPlan } from './lib/plans/plan-override';
 import { AddDeveloperUserModal } from './components/it/AddDeveloperUserModal';
 import {
   loadDeveloperUsers,
@@ -135,6 +134,8 @@ import { CustomerComplaintsPage } from './components/CustomerComplaintsPage';
 import { BankSubmissionWorkflowPage } from './components/BankSubmissionWorkflowPage';
 import { OrgUserManagementModal } from './components/OrgUserManagementModal';
 import { OrgUserManagementPage } from './components/OrgUserManagementPage';
+import { R2OperationsWorkbench } from './components/operations/R2OperationsWorkbench';
+import { fetchPlanOverridesFromDb, getDeveloperPlan } from './lib/plans/plan-override';
 import { ItKnowledgeAiPanel } from './components/it/ItKnowledgeAiPanel';
 import { ExecutiveControlTowerPage } from './components/ExecutiveControlTowerPage';
 import {
@@ -203,6 +204,21 @@ export default function App() {
   );
   const [role, setRole] = useState<RoleKey>(() => loadAuthSession()?.role ?? 'SE');
   const user = USERS_BY_ROLE[role];
+  const [effectivePlanCode, setEffectivePlanCode] = useState<'gold' | 'platinum' | 'diamond'>(
+    () => getDeveloperPlan('dev-001', 'Platinum').toLowerCase() as 'gold' | 'platinum' | 'diamond'
+  );
+
+  useEffect(() => {
+    if (!authSession) return;
+    fetchPlanOverridesFromDb().then((map) => {
+      const nextPlan = (map['dev-001']?.overriddenPlan || 'Platinum').toLowerCase() as
+        | 'gold'
+        | 'platinum'
+        | 'diamond';
+      setEffectivePlanCode(nextPlan);
+    });
+  }, [authSession, role]);
+
   const isPlatformSuperadmin = role === 'SUPERADMIN' || role === 'SUPERADMIN_IT';
   const displayName = authSession?.name?.trim() || user.name;
   const displayAvatarText = authSession?.name?.trim()
@@ -218,7 +234,8 @@ export default function App() {
   const [projects, setProjects] = useState<CompanyProject[]>(() => loadAllProjects());
   const [activeProjectId, setActiveProjectId] = useState<string>(() => loadSavedProjectId());
   const [showNewProjectModal, setShowNewProjectModal] = useState<boolean>(false);
-  const activeProject = getProjectById(activeProjectId);
+  const activeProject =
+    projects.find((p) => p.id === activeProjectId) || projects[0] || getProjectById(activeProjectId);
 
   // Active Sales Target Scenario per Project (Dikendalikan oleh SM)
   const [activeScenario, setActiveScenario] = useState<ScenarioType>(() =>
@@ -234,15 +251,73 @@ export default function App() {
   useEffect(() => {
     if (!authSession?.token) return;
     let cancelled = false;
-    void hydrateAllRemoteState().then((items) => {
-      if (cancelled || !items || Object.keys(items).length === 0) return;
-      setProjects(loadAllProjects());
-      const nextProjectId = loadSavedProjectId();
-      setActiveProjectId(nextProjectId);
-      setActiveScenario(
-        loadPersistedState<ScenarioType>(`devos_target_scenario_${nextProjectId}`, 'realistis')
-      );
-    });
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${authSession.token}`,
+    };
+
+    void fetch('/api/tenant/projects', { credentials: 'include', headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (cancelled) return;
+        if (json?.ok && Array.isArray(json.projects) && json.projects.length > 0) {
+          const isDefaultAndara = json.tenantId === 'andara_rejo_makmur';
+          if (isDefaultAndara) {
+            void hydrateAllRemoteState().then((items) => {
+              if (cancelled || !items || Object.keys(items).length === 0) return;
+              setProjects(loadAllProjects());
+              const nextProjectId = loadSavedProjectId();
+              setActiveProjectId(nextProjectId);
+              setActiveScenario(
+                loadPersistedState<ScenarioType>(`devos_target_scenario_${nextProjectId}`, 'realistis')
+              );
+            });
+            return;
+          }
+          const tenantProjects: CompanyProject[] = json.projects.map((p: any) => {
+            const coordsList = Array.isArray(p.cluster_coords)
+              ? p.cluster_coords.map((c: any, idx: number) => ({
+                  id: `gps-${idx + 1}`,
+                  namaCluster: String(c.namaCluster || c.name || `Cluster ${idx + 1}`),
+                  koordinat: String(c.koordinat || `${c.lat || ''}, ${c.lng || ''}`),
+                  isPrimary: idx === 0,
+                }))
+              : [];
+            return {
+              id: String(p.project_id),
+              kode: String(p.project_id).slice(0, 6).toUpperCase(),
+              nama: String(p.project_name),
+              tipe: 'Menengah' as const,
+              lokasi: String(p.location_label || `${p.city || ''}, ${p.province || ''}`),
+              koordinatGps: coordsList[0]?.koordinat || '-6.974500, 110.363500',
+              titikKoordinatList: coordsList,
+              radiusRisetKm: 25,
+              totalUnit: Number(p.unit_count || 10),
+              terjual: Number(p.sold_count || 0),
+              tersedia: Math.max(0, Number(p.unit_count || 10) - Number(p.sold_count || 0)),
+              kisaranHarga: 'Sesuai Pricelist Resmi',
+              status: 'Aktif' as const,
+              targetBulanan: 5,
+              pencapaianBulanIni: 0,
+              deskripsi: `${p.project_name} oleh ${p.developer_name}`,
+              generatedOutputs: {
+                suratCinta: true,
+                risetPasar: true,
+                targetPenjualan: true,
+                kalenderKonten: true,
+                playbook: true,
+                website: true,
+              },
+            };
+          });
+          setProjects(tenantProjects);
+          const firstId = tenantProjects[0].id;
+          setActiveProjectId(firstId);
+          saveSelectedProjectId(firstId);
+        }
+      })
+      .catch(() => {});
+
     return () => {
       cancelled = true;
     };
@@ -358,7 +433,6 @@ export default function App() {
         koordinat: cluster3Gps,
       });
     }
-
     const radiusKm = Number(fd.get('radiusKm')) || 25;
     const totalUnit = Number(fd.get('totalUnit')) || 30;
     const kisaranHarga = (fd.get('kisaranHarga') as string)?.trim() || 'Rp 500 Jt - Rp 800 Jt';
@@ -2339,7 +2413,7 @@ export default function App() {
               userRole={role}
               userProfile={user}
               hideAiGuide={role === 'SE'}
-              planCode={getDeveloperPlan('dev-001', 'Platinum').toLowerCase() as 'gold' | 'platinum' | 'diamond'}
+              planCode={effectivePlanCode}
               onDataChanged={fetchSeRealDashboard}
               onUpgradeRequest={() => {
                 setViewMode('homepage');
@@ -2985,6 +3059,8 @@ export default function App() {
                   </div>
                 </div>
               </section>
+
+              <R2OperationsWorkbench role={role} projectId={activeProjectId} projectName={activeProject.nama} />
             </div>
           )}
 
@@ -3647,6 +3723,8 @@ export default function App() {
                   ))}
                 </div>
               </section>
+
+              <R2OperationsWorkbench role={role} projectId={activeProjectId} projectName={activeProject.nama} />
             </div>
           )}
 
@@ -4044,6 +4122,8 @@ export default function App() {
                   </table>
                 </div>
               </section>
+
+              <R2OperationsWorkbench role={role} projectId={activeProjectId} projectName={activeProject.nama} />
             </div>
           )}
 
@@ -4315,6 +4395,7 @@ export default function App() {
           )}
 
           {activeView === 'dashboard' && role === 'SUPERADMIN_IT' && (
+            <div className="space-y-6">
             <ItCommandCenterDashboard
               activeSection={
                 activeSection === 'it-permissions'
@@ -4351,6 +4432,13 @@ export default function App() {
                 setToast(`Mode Bantuan Aktif: Masuk sebagai ${u.name} (${u.roleLabel})`);
               }}
             />
+            {activeSection !== 'it-permissions' &&
+              activeSection !== 'it-knowledge' &&
+              activeSection !== 'knowledge-ai' &&
+              activeSection !== 'it-hierarchy' && (
+                <R2OperationsWorkbench role={role} projectId={activeProjectId} projectName={activeProject.nama} />
+              )}
+            </div>
           )}
         </div>
       </main>
@@ -4879,8 +4967,8 @@ export default function App() {
                 <p className="font-extrabold text-espresso uppercase tracking-wider text-[10px] text-terracotta">
                   2. Parameter Acuan (Koordinat GPS, Radius 25km, Katalog, Pricelist)
                 </p>
-                <div className="p-3 bg-sandstone/40 border border-warmborder/80 rounded-2xl space-y-3">
-                  <div className="flex items-center justify-between">
+                <div className="space-y-2.5 p-3 rounded-xl border border-warmborder bg-sandstone/40">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="font-bold text-espresso text-xs flex items-center gap-1.5">
                       <MapPin className="size-3.5 text-terracotta" />
                       <span>Titik Koordinat GPS Multi-Cluster (Bisa &gt; 1 Titik)</span>
@@ -4888,7 +4976,6 @@ export default function App() {
                     <span className="text-[10px] text-terracotta font-semibold">Mendukung Multi-Cluster</span>
                   </div>
 
-                  {/* Titik 1 (Primer) */}
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
                     <div className="sm:col-span-5">
                       <label className="text-[10px] font-bold text-espresso block mb-0.5">Nama Titik / Cluster 1 (Utama) *</label>
@@ -4896,7 +4983,7 @@ export default function App() {
                         name="cluster1Nama"
                         defaultValue="Gerbang Utama & Cluster 1"
                         placeholder="Contoh: Gerbang & Cluster A"
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder text-espresso text-xs"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder bg-white text-espresso text-xs"
                       />
                     </div>
                     <div className="sm:col-span-7">
@@ -4906,19 +4993,18 @@ export default function App() {
                         name="koordinatGps"
                         defaultValue="-7.673872, 110.843978"
                         placeholder="-7.673872, 110.843978"
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder text-espresso font-mono text-[11px]"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder bg-white text-espresso font-mono text-[11px]"
                       />
                     </div>
                   </div>
 
-                  {/* Titik 2 (Opsional) */}
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
                     <div className="sm:col-span-5">
                       <label className="text-[10px] font-medium text-warmmuted block mb-0.5">Nama Cluster 2 (Opsional)</label>
                       <input
                         name="cluster2Nama"
                         placeholder="Contoh: Cluster Osaka (Tahap 2)"
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder text-espresso text-xs"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder bg-white text-espresso text-xs"
                       />
                     </div>
                     <div className="sm:col-span-7">
@@ -4926,19 +5012,18 @@ export default function App() {
                       <input
                         name="cluster2Gps"
                         placeholder="-7.674510, 110.844230"
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder text-espresso font-mono text-[11px]"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder bg-white text-espresso font-mono text-[11px]"
                       />
                     </div>
                   </div>
 
-                  {/* Titik 3 (Opsional) */}
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
                     <div className="sm:col-span-5">
                       <label className="text-[10px] font-medium text-warmmuted block mb-0.5">Nama Cluster 3 (Opsional)</label>
                       <input
                         name="cluster3Nama"
                         placeholder="Contoh: Cluster Tokyo (Tahap 3)"
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder text-espresso text-xs"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder bg-white text-espresso text-xs"
                       />
                     </div>
                     <div className="sm:col-span-7">
@@ -4946,23 +5031,25 @@ export default function App() {
                       <input
                         name="cluster3Gps"
                         placeholder="-7.675200, 110.845100"
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder text-espresso font-mono text-[11px]"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder bg-white text-espresso font-mono text-[11px]"
                       />
                     </div>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                  <div className="sm:col-span-12">
-                    <label className="font-bold text-espresso block mb-1">Radius Riset Pasar</label>
-                    <input
-                      name="radiusKm"
-                      type="number"
-                      defaultValue={25}
-                      readOnly
-                      className="w-full px-3 py-2 rounded-xl border border-warmborder bg-sandstone/70 text-espresso font-semibold"
-                    />
-                    <span className="text-[10px] text-warmmuted">Standar cincin radius 25km dari koordinat titik acuan proyek</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 pt-1">
+                    <div className="sm:col-span-5">
+                      <label className="text-[10px] font-bold text-espresso block mb-0.5">Radius Riset Pasar (km)</label>
+                      <input
+                        name="radiusKm"
+                        type="number"
+                        defaultValue={25}
+                        readOnly
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-warmborder bg-sandstone/70 text-espresso font-semibold text-xs"
+                      />
+                    </div>
+                    <div className="sm:col-span-7 flex items-end pb-1.5">
+                      <span className="text-[10px] text-warmmuted">Standar cincin radius 25km dari koordinat titik acuan proyek</span>
+                    </div>
                   </div>
                 </div>
 

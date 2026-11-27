@@ -7,6 +7,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { URL } from 'node:url';
 import { sql } from './db';
 import {
@@ -18,6 +19,27 @@ import {
   reserveAicAtomic,
   settleAicAtomic,
 } from './aic-ledger';
+import { paymentGateway, type PaymentInvoiceType } from './payment-gateway';
+import { generateGroundedLoveLetter } from './love-letter-generator';
+import {
+  activateOnboardingWithDummyPayment,
+  CrossTenantViolationError,
+  resolveStrictTenantId,
+  resolveTenantByProjectSlug,
+  runOnboardingExtraction,
+  type OnboardingPlanCode,
+} from './tenant-guard';
+import {
+  createDisputeAndHoldCommission,
+  createWorkspaceItem,
+  deleteWorkspaceItem,
+  listWorkspaceItems,
+  pickNextRoundRobinSe,
+  propagateTruthChangeToWorkspaceAssets,
+  registerEventRsvpToLead,
+  spawnLegalMilestoneOnAkad,
+  updateWorkspaceItem,
+} from './workspace-couplings';
 import {
   answerFaqGrounded,
   approveServerRequest,
@@ -1320,6 +1342,8 @@ const server = http.createServer(async (req, res) => {
     // PUBLIC ROUTES (tidak butuh login dashboard)
     const isPublicRoute =
       pathname.startsWith('/api/public/') ||
+      pathname.startsWith('/api/onboarding/') ||
+      pathname.startsWith('/c/') ||
       pathname.startsWith('/api/se/media/') ||
       pathname === '/api/se/social/callback';
 
@@ -1354,6 +1378,19 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 2. DASHBOARD SE REAL DATA
+    if (pathname === '/api/tenant/projects' && req.method === 'GET') {
+      const rows = await sql`
+        SELECT p.*,
+          COALESCE((SELECT COUNT(*)::int FROM sales_os.project_units u WHERE u.tenant_id = p.tenant_id AND u.project_id = p.project_id), 0) AS unit_count,
+          COALESCE((SELECT COUNT(*)::int FROM sales_os.project_units u WHERE u.tenant_id = p.tenant_id AND u.project_id = p.project_id AND u.status = 'sold'), 0) AS sold_count
+        FROM sales_os.projects_registry p
+        WHERE p.tenant_id = ${user.tenantId}
+        ORDER BY p.created_at DESC
+      `;
+      sendJson(res, 200, { ok: true, tenantId: user.tenantId, projects: rows });
+      return;
+    }
+
     if (pathname === '/api/se/dashboard' && req.method === 'GET') {
       const data = await buildRealSeDashboardData(user.email, user.name);
       sendJson(res, 200, { ok: true, data });
@@ -1434,20 +1471,20 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/company/bank-accounts' && req.method === 'POST') {
-      if (!['SM', 'ADMIN', 'DIREKSI', 'IT'].includes(user.role)) {
+      if (!['SM', 'ADMIN', 'DIREKSI', 'IT', 'SUPERADMIN_IT'].includes(user.role)) {
         sendJson(res, 403, { ok: false, error: 'Hanya role SM dan Admin yang berhak menambah rekening perusahaan.' });
         return;
       }
       const body = await readJsonBody(req);
       const bankName = String(body.bankName || '').trim();
       const accountNumber = String(body.accountNumber || '').trim();
-      const accountHolder = String(body.accountHolder || 'PT Andara Rejo Makmur').trim();
-      const projectId = String(body.projectId || 'the-park-townhouse').trim();
+      const accountHolder = String(body.accountHolder || '').trim();
+      const projectId = String(body.projectId || '').trim();
       const isPrimary = Boolean(body.isPrimary);
       const notes = String(body.notes || '').trim();
 
-      if (!bankName || !accountNumber) {
-        sendJson(res, 400, { ok: false, error: 'Nama Bank dan Nomor Rekening wajib diisi.' });
+      if (!bankName || !accountNumber || !accountHolder) {
+        sendJson(res, 400, { ok: false, error: 'Nama Bank, Nomor Rekening, dan Atas Nama Rekening wajib diisi.' });
         return;
       }
 
@@ -1481,7 +1518,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/company/bank-accounts' && req.method === 'PUT') {
-      if (!['SM', 'ADMIN', 'DIREKSI', 'IT'].includes(user.role)) {
+      if (!['SM', 'ADMIN', 'DIREKSI', 'IT', 'SUPERADMIN_IT'].includes(user.role)) {
         sendJson(res, 403, { ok: false, error: 'Hanya role SM dan Admin yang berhak mengubah rekening perusahaan.' });
         return;
       }
@@ -1537,7 +1574,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/company/bank-accounts' && req.method === 'DELETE') {
-      if (!['SM', 'ADMIN', 'DIREKSI', 'IT'].includes(user.role)) {
+      if (!['SM', 'ADMIN', 'DIREKSI', 'IT', 'SUPERADMIN_IT'].includes(user.role)) {
         sendJson(res, 403, { ok: false, error: 'Hanya role SM dan Admin yang berhak menghapus rekening perusahaan.' });
         return;
       }
@@ -1694,7 +1731,11 @@ const server = http.createServer(async (req, res) => {
     // AIC FINOPS METERING & WALLET (T7 / F93 / Bab 11)
     // ==========================================
     if (pathname === '/api/aic/wallet' && req.method === 'GET') {
-      const tenantId = user.tenantId || parsedUrl.searchParams.get('tenantId') || 'andara_rejo_makmur';
+      const tenantId = resolveStrictTenantId({
+        sessionTenantId: user.tenantId,
+        actorRole: user.role,
+        requestedTenantId: parsedUrl.searchParams.get('tenantId'),
+      });
       const wallet = await getTenantAicWallet(tenantId);
       const recentTx = await sql`
         SELECT * FROM sales_os.aic_transactions
@@ -1714,7 +1755,11 @@ const server = http.createServer(async (req, res) => {
       const body = await readJsonBody(req);
       const amount = Number(body.amountAic || 1000);
       const notes = String(body.notes || 'Top-up Kuota AI');
-      const targetTenantId = user.tenantId || 'andara_rejo_makmur';
+      const targetTenantId = resolveStrictTenantId({
+        sessionTenantId: user.tenantId,
+        actorRole: user.role,
+        requestedTenantId: body.tenantId ? String(body.tenantId) : null,
+      });
       const newBalance = await topUpTenantAic({
         tenantId: targetTenantId,
         amountAic: amount,
@@ -2535,6 +2580,41 @@ const server = http.createServer(async (req, res) => {
         summary: `${user.name} (${user.role}) memperbarui data lead "${nextFullName}" (Tahap: ${nextStage}, BANT: ${nextBant.total}/12)`,
         details: { stage: nextStage, bantTotal: nextBant.total, lostReason: nextLostReason },
       });
+
+      // Otomasi Kantong B Kreator saat lead beratribusi creator_code naik tahap (idempoten per lead + entry_type)
+      const leadCreatorCode = String(updatedRows[0]?.creator_code || prev.creator_code || '').trim().toUpperCase();
+      if (stageChanged && leadCreatorCode) {
+        const pocketBMap: Record<string, { entryType: string; grossIdr: number; label: string }> = {
+          QUALIFIED: { entryType: 'QL_BONUS', grossIdr: 50000, label: 'Bonus Lead Terkualifikasi (QL)' },
+          VISITED: { entryType: 'VISIT_BONUS', grossIdr: 150000, label: 'Bonus Kunjungan Lokasi (Visit)' },
+          PPJB_AKAD: { entryType: 'SOURCE_FEE', grossIdr: 1500000, label: 'Fee Sumber Penjualan (Akad)' },
+        };
+        const rule = pocketBMap[nextStage];
+        if (rule) {
+          try {
+            const dup = await sql`
+              SELECT id FROM sales_os.creator_ledger_entries
+              WHERE tenant_id = ${user.tenantId} AND reference_id = ${leadId} AND entry_type = ${rule.entryType}
+              LIMIT 1
+            `;
+            if (dup.length === 0) {
+              const { taxIdr, netIdr } = calculatePph21Estimate(rule.grossIdr);
+              await sql`
+                INSERT INTO sales_os.creator_ledger_entries (
+                  tenant_id, project_id, creator_code, pocket, entry_type,
+                  reference_id, description, gross_amount_idr, tax_pph_idr, net_amount_idr, status
+                ) VALUES (
+                  ${user.tenantId}, ${String(prev.project_id || 'the-park-sukoharjo')}, ${leadCreatorCode}, 'B', ${rule.entryType},
+                  ${leadId}, ${`${rule.label} · ${leadCreatorCode}`},
+                  ${rule.grossIdr}, ${taxIdr}, ${netIdr}, ${nextStage === 'PPJB_AKAD' ? 'ACCRUED' : 'PENDING'}
+                )
+              `;
+            }
+          } catch (err) {
+            console.warn('[Creator Kantong B] skip insert:', err);
+          }
+        }
+      }
 
       sendJson(res, 200, {
         ok: true,
@@ -3631,19 +3711,153 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // 15. PUBLIC WEBSITE LIVE FEED & LEAD CAPTURE (F31, F32, F33)
+    // 15. PUBLIC WEBSITE LIVE FEED & LEAD CAPTURE (F31, F32, F33) + SHORTLINK REDIRECTOR (/c/:code)
+    if (pathname.startsWith('/c/') && req.method === 'GET') {
+      const shortCode = decodeURIComponent(pathname.replace('/c/', '')).trim();
+      if (!shortCode) {
+        res.writeHead(302, { Location: '/site/the-park-sukoharjo' });
+        res.end();
+        return;
+      }
+      try {
+        const rows = await sql`
+          SELECT * FROM sales_os.smart_links
+          WHERE short_code = ${shortCode}
+          LIMIT 1
+        `;
+        if (rows.length > 0) {
+          const link = rows[0];
+          const ua = String(req.headers['user-agent'] || '');
+          const uaHash = ua ? crypto.createHash('sha256').update(ua).digest('hex').slice(0, 16) : null;
+          const referrer = String(req.headers.referer || req.headers.referrer || '').slice(0, 255) || null;
+          await sql`
+            INSERT INTO sales_os.link_touches (
+              tenant_id, project_id, short_code, creator_code, content_code, touch_type, referrer, user_agent_hash
+            ) VALUES (
+              ${link.tenant_id}, ${link.project_id}, ${shortCode}, ${link.creator_code},
+              ${link.content_code || null}, 'CLICK', ${referrer}, ${uaHash}
+            )
+          `;
+          await sql`
+            UPDATE sales_os.smart_links
+            SET click_count = click_count + 1
+            WHERE id = ${link.id}
+          `;
+          res.writeHead(302, { Location: String(link.target_url || '/site/the-park-sukoharjo') });
+          res.end();
+          return;
+        }
+      } catch (err) {
+        console.warn('[SmartLink /c/:code] error:', err);
+      }
+      res.writeHead(302, { Location: `/site/the-park-sukoharjo?c=${encodeURIComponent(shortCode)}` });
+      res.end();
+      return;
+    }
+
+    // ONBOARDING OCR + AI + DUMMY PAYMENT GATEWAY (MULTI-TENANT ISOLATION)
+    if (pathname === '/api/onboarding/extract' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const selectedPlan = (['gold', 'platinum', 'diamond'].includes(String(body.selectedPlan || '').toLowerCase())
+        ? String(body.selectedPlan).toLowerCase()
+        : 'platinum') as OnboardingPlanCode;
+      const companyName = String(body.companyName || '').trim();
+      const projectName = String(body.projectName || '').trim();
+      if (!companyName || !projectName) {
+        sendJson(res, 400, { ok: false, error: 'Nama Developer/PT dan Nama Proyek wajib diisi.' });
+        return;
+      }
+      const result = await runOnboardingExtraction({
+        selectedPlan,
+        companyName,
+        projectName,
+        city: String(body.city || '').trim(),
+        province: String(body.province || '').trim(),
+        facilities: String(body.facilities || '').trim(),
+        files: Array.isArray(body.files) ? body.files : [],
+      });
+      sendJson(res, 200, { ok: true, ...result });
+      return;
+    }
+
+    if (pathname === '/api/onboarding/activate' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const sessionId = String(body.sessionId || '').trim();
+      const ownerEmail = String(body.ownerEmail || '').trim();
+      if (!sessionId || !ownerEmail) {
+        sendJson(res, 400, { ok: false, error: 'sessionId dan ownerEmail wajib diisi.' });
+        return;
+      }
+      const result = await activateOnboardingWithDummyPayment({
+        sessionId,
+        ownerEmail,
+        ownerName: String(body.ownerName || 'Admin IT Tim'),
+        ownerPassword: String(body.ownerPassword || 'Andara2026!'),
+        clusterCoords: Array.isArray(body.clusterCoords) ? body.clusterCoords : [],
+        verifiedUnits: Array.isArray(body.verifiedUnits) ? body.verifiedUnits : [],
+        loveLetterPoints: Array.isArray(body.loveLetterPoints) ? body.loveLetterPoints : [],
+      });
+      sendJson(res, result.ok ? 200 : 400, result);
+      return;
+    }
+
+    if (pathname === '/api/onboarding/generate-love-letter' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const result = await generateGroundedLoveLetter({
+        developerName: String(body.developerName || 'Pengembang Resmi'),
+        projectName: String(body.projectName || 'Proyek Hunian'),
+        city: String(body.city || 'Indonesia'),
+        province: String(body.province || ''),
+        facilities: String(body.facilities || ''),
+        clusters: Array.isArray(body.clusters) ? body.clusters : [],
+        verifiedUnits: Array.isArray(body.verifiedUnits) ? body.verifiedUnits : [],
+        extractedText: String(body.extractedText || ''),
+        useAiEditorial: body.useAiEditorial !== false,
+      });
+      sendJson(res, 200, { ok: true, ...result });
+      return;
+    }
+
+    if (pathname.startsWith('/api/public/live/') && req.method === 'GET') {
+      const slug = decodeURIComponent(pathname.replace('/api/public/live/', '')).trim().toLowerCase() || 'the-park-sukoharjo';
+      const resolved = await resolveTenantByProjectSlug(slug);
+      let sessions: any[] = [];
+      if (resolved) {
+        try {
+          sessions = await sql`
+            SELECT id, title, starts_at, ends_at, location_label, status, notes
+            FROM sales_os.appointments
+            WHERE tenant_id = ${resolved.tenantId}
+              AND project_id = ${resolved.projectId}
+              AND (title ILIKE '%live%' OR location_label ILIKE '%live%' OR notes ILIKE '%live%')
+            ORDER BY starts_at ASC
+            LIMIT 20
+          `;
+        } catch {
+          sessions = [];
+        }
+      }
+      sendJson(res, 200, { ok: true, slug, sessions });
+      return;
+    }
+
     if (pathname.startsWith('/api/public/site/') && req.method === 'GET') {
       const slug = decodeURIComponent(pathname.replace('/api/public/site/', '')).trim().toLowerCase() || 'the-park-sukoharjo';
-      const units = await listUnits('andara_rejo_makmur', 'the-park-sukoharjo');
+      const resolved = await resolveTenantByProjectSlug(slug);
+      if (!resolved) {
+        sendJson(res, 404, { ok: false, error: 'Proyek publik tidak ditemukan.' });
+        return;
+      }
+      const units = await listUnits(resolved.tenantId, resolved.projectId);
       const visibleUnits = units.filter((u: Record<string, any>) => u.status !== 'sold');
       sendJson(res, 200, {
         ok: true,
         site: {
-          slug,
-          projectId: 'the-park-sukoharjo',
-          projectName: 'The Park Townhouse Sukoharjo',
-          developer: 'PT Andara Rejo Makmur',
-          location: 'Jl. Bhayangkara, Sukoharjo (Belakang Alun-alun)',
+          slug: resolved.slug,
+          projectId: resolved.projectId,
+          projectName: resolved.projectName,
+          developer: resolved.developerName,
+          location: resolved.locationLabel || 'Indonesia',
           updatedAt: new Date().toISOString(),
           feedHealthy: true,
         },
@@ -3687,20 +3901,34 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      const slug = String(body.slug || 'the-park-sukoharjo').trim().toLowerCase();
+      const resolved = await resolveTenantByProjectSlug(slug);
+      if (!resolved) {
+        sendJson(res, 404, { ok: false, error: 'Proyek tujuan tidak ditemukan.' });
+        return;
+      }
+      const targetTenantId = resolved.tenantId;
       const seRef = String(body.seRef || '').trim().toLowerCase();
-      const assignedSe = SE_EMAILS.includes(seRef) ? seRef : SE_EMAILS[0] || 'raka@andararejomakmur.co.id';
+      const assignedSe =
+        seRef && SE_EMAILS.includes(seRef)
+          ? seRef
+          : await pickNextRoundRobinSe({
+              tenantId: targetTenantId,
+              projectId: resolved.projectId,
+              fallbackEmails: SE_EMAILS,
+            });
       const creatorCode = String(body.creatorCode || '').trim().toUpperCase().slice(0, 32);
       const contentCode = String(body.contentCode || '').trim().slice(0, 64);
       const personaCode = String(body.personaCode || '').trim().slice(0, 40);
       const utmSource = creatorCode
         ? `Kreator ${creatorCode}`
         : String(body.utmSource || 'Website Publik').trim().slice(0, 120);
-      const unitInterest = String(body.unitCode || 'Unit The Park').trim().slice(0, 80);
+      const unitInterest = String(body.unitCode || 'Unit Proyek').trim().slice(0, 80);
 
-      // Deduplikasi nomor WA di tenant aktif
+      // Deduplikasi nomor WA HANYA di dalam tenant aktif (tidak bocor lintas tenant!)
       const existing = await sql`
         SELECT id, full_name, owner_se_email FROM sales_os.pipeline_leads
-        WHERE tenant_id = 'andara_rejo_makmur' AND phone_wa = ${phoneWa}
+        WHERE tenant_id = ${targetTenantId} AND phone_wa = ${phoneWa}
         LIMIT 1
       `;
 
@@ -3721,7 +3949,7 @@ const server = http.createServer(async (req, res) => {
           unit_interest, sales_notes, wa_consent, wa_consent_updated_at, lead_quality, last_activity_at,
           creator_code, content_code, persona_code
         ) VALUES (
-          'andara_rejo_makmur', ${assignedSe}, ${ownerSeName}, ${name}, ${phoneWa}, ${utmSource}, 'NEW',
+          ${targetTenantId}, ${assignedSe}, ${ownerSeName}, ${name}, ${phoneWa}, ${utmSource}, 'NEW',
           ${unitInterest}, ${'Form Website Publik (Consent v1.0)'}, 'OPT_IN', NOW(), 'WARM', NOW(),
           ${creatorCode || null}, ${contentCode || ''}, ${personaCode || 'P1'}
         )
@@ -4491,6 +4719,16 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 404, { ok: false, error: 'Pengajuan KPR tidak ditemukan atau tidak memiliki akses ubah.' });
         return;
       }
+      if (String(updated[0].status) === 'AKAD_KREDIT') {
+        await spawnLegalMilestoneOnAkad({
+          tenantId: user.tenantId,
+          projectId: String(updated[0].project_id || 'the-park-sukoharjo'),
+          kprAppId: String(updated[0].id),
+          applicantName: String(updated[0].applicant_name || 'Pembeli'),
+          unitCode: String(updated[0].unit_code || 'Unit'),
+          actorEmail: user.email,
+        }).catch(() => {});
+      }
       sendJson(res, 200, { ok: true, application: updated[0] });
       return;
     }
@@ -4980,15 +5218,23 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/truth/propagate-stale' && req.method === 'POST') {
       const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo');
+      const reason = String(body.reason || 'Pembaruan data proyek');
       const result = await propagateStaleAssets({
         tenantId: user.tenantId,
-        projectId: String(body.projectId || ''),
+        projectId,
         triggerSource: String(body.triggerSource || 'MANUAL'),
-        reason: String(body.reason || 'Pembaruan data proyek'),
+        reason,
         actorEmail: user.email,
         assetTypes: Array.isArray(body.assetTypes) ? body.assetTypes.map(String) : undefined,
       });
-      sendJson(res, 200, { ok: true, ...result });
+      const flaggedWorkspace = await propagateTruthChangeToWorkspaceAssets({
+        tenantId: user.tenantId,
+        projectId,
+        reason,
+        actorEmail: user.email,
+      });
+      sendJson(res, 200, { ok: true, ...result, flaggedWorkspaceCount: flaggedWorkspace.length });
       return;
     }
 
@@ -5082,6 +5328,18 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (pathname === '/api/projects/poi-risk' && req.method === 'GET') {
+      const projectId = String(parsedUrl.searchParams.get('projectId') || 'the-park-sukoharjo');
+      const rows = await sql`
+        SELECT * FROM sales_os.project_poi_risks
+        WHERE tenant_id = ${user.tenantId} AND project_id = ${projectId}
+        ORDER BY distance_meters ASC, created_at DESC
+        LIMIT 100
+      `;
+      sendJson(res, 200, { ok: true, items: rows });
+      return;
+    }
+
     if (pathname === '/api/projects/poi-risk' && req.method === 'POST') {
       const body = await readJsonBody(req);
       const row = await upsertProjectPoiRisk({
@@ -5094,6 +5352,18 @@ const server = http.createServer(async (req, res) => {
         sourceCitation: body.sourceCitation ? String(body.sourceCitation) : undefined,
       });
       sendJson(res, 201, { ok: true, poiRisk: row });
+      return;
+    }
+
+    if (pathname === '/api/claims/ledger' && req.method === 'GET') {
+      const projectId = String(parsedUrl.searchParams.get('projectId') || 'the-park-sukoharjo');
+      const rows = await sql`
+        SELECT * FROM sales_os.claim_ledger_entries
+        WHERE tenant_id = ${user.tenantId} AND project_id = ${projectId}
+        ORDER BY created_at DESC
+        LIMIT 100
+      `;
+      sendJson(res, 200, { ok: true, claims: rows });
       return;
     }
 
@@ -5120,6 +5390,18 @@ const server = http.createServer(async (req, res) => {
         unitOptions: Array.isArray(body.unitOptions) ? body.unitOptions : [],
       });
       sendJson(res, 200, { ok: true, ...pack });
+      return;
+    }
+
+    if (pathname === '/api/cobroke/deals' && req.method === 'GET') {
+      const projectId = String(parsedUrl.searchParams.get('projectId') || 'the-park-sukoharjo');
+      const rows = await sql`
+        SELECT * FROM sales_os.cobroke_deals
+        WHERE tenant_id = ${user.tenantId} AND project_id = ${projectId}
+        ORDER BY created_at DESC
+        LIMIT 100
+      `;
+      sendJson(res, 200, { ok: true, deals: rows });
       return;
     }
 
@@ -5606,6 +5888,299 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // SMART LINKS (/c/:code) & TOUCH ATTRIBUTION (Tabel 20, 21, E8)
+    if (pathname === '/api/smart-links' && req.method === 'GET') {
+      const projectId = String(parsedUrl.searchParams.get('projectId') || user.projectId || 'the-park-sukoharjo');
+      const rows = await sql`
+        SELECT * FROM sales_os.smart_links
+        WHERE tenant_id = ${user.tenantId} AND project_id = ${projectId}
+        ORDER BY created_at DESC
+        LIMIT 100
+      `;
+      sendJson(res, 200, { ok: true, links: rows });
+      return;
+    }
+
+    if (pathname === '/api/smart-links' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || user.projectId || 'the-park-sukoharjo').trim();
+      const creatorCode = String(body.creatorCode || 'ANDARA-MITRA').trim().toUpperCase().slice(0, 32);
+      const contentCode = String(body.contentCode || '').trim().slice(0, 64);
+      const personaCode = String(body.personaCode || 'keluarga').trim().slice(0, 40);
+      const partnerRole = String(body.partnerRole || 'CREATOR').trim().toUpperCase().slice(0, 32);
+      const rawShortCode = String(body.shortCode || '').trim().replace(/[^a-zA-Z0-9_-]/g, '');
+      const shortCode = rawShortCode || `${creatorCode.toLowerCase()}-${Math.random().toString(36).slice(2, 6)}`;
+      const defaultTarget = `/site/${encodeURIComponent(projectId)}?p=${encodeURIComponent(personaCode)}&k=${encodeURIComponent(creatorCode)}${contentCode ? `&c=${encodeURIComponent(contentCode)}` : ''}`;
+      const targetUrl = String(body.targetUrl || defaultTarget).trim();
+
+      if (!/^(\/|https?:\/\/)/i.test(targetUrl)) {
+        sendJson(res, 400, { ok: false, error: 'URL tujuan harus diawali /, http://, atau https://' });
+        return;
+      }
+
+      const inserted = await sql`
+        INSERT INTO sales_os.smart_links (
+          tenant_id, project_id, short_code, partner_role, creator_code, content_code, persona_code, target_url, created_by
+        ) VALUES (
+          ${user.tenantId}, ${projectId}, ${shortCode}, ${partnerRole}, ${creatorCode},
+          ${contentCode || null}, ${personaCode || null}, ${targetUrl}, ${user.email}
+        )
+        ON CONFLICT (short_code) DO UPDATE SET
+          target_url = EXCLUDED.target_url,
+          content_code = EXCLUDED.content_code,
+          persona_code = EXCLUDED.persona_code
+        RETURNING *
+      `;
+      sendJson(res, 201, { ok: true, link: inserted[0] });
+      return;
+    }
+
+    // DUMMY PAYMENT GATEWAY (INT-I12, F65, F67, F77)
+    if (pathname === '/api/payments/invoices' && req.method === 'GET') {
+      const invoiceType = String(parsedUrl.searchParams.get('type') || '').trim().toUpperCase();
+      const rows = invoiceType
+        ? await sql`
+            SELECT * FROM sales_os.payment_invoices
+            WHERE tenant_id = ${user.tenantId} AND invoice_type = ${invoiceType}
+            ORDER BY created_at DESC
+            LIMIT 50
+          `
+        : await sql`
+            SELECT * FROM sales_os.payment_invoices
+            WHERE tenant_id = ${user.tenantId}
+            ORDER BY created_at DESC
+            LIMIT 50
+          `;
+      sendJson(res, 200, { ok: true, invoices: rows });
+      return;
+    }
+
+    if (pathname === '/api/payments/invoices' && req.method === 'POST') {
+      if (!['SUPERADMIN_IT', 'SUPERADMIN', 'DIREKSI', 'SM', 'ADMIN', 'SE'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak diizinkan membuat invoice pembayaran.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const invoiceType = (String(body.invoiceType || 'AIC_TOPUP').toUpperCase() === 'BOOKING_FEE'
+        ? 'BOOKING_FEE'
+        : 'AIC_TOPUP') as PaymentInvoiceType;
+      const amountIdr = Number(body.amountIdr || 0);
+      if (!Number.isFinite(amountIdr) || amountIdr < 1000) {
+        sendJson(res, 400, { ok: false, error: 'Nominal invoice minimal Rp 1.000.' });
+        return;
+      }
+      const inv = await paymentGateway.createInvoice({
+        tenantId: user.tenantId,
+        projectId: String(body.projectId || user.projectId || 'the-park-sukoharjo'),
+        invoiceType,
+        referenceCode: String(body.referenceCode || (invoiceType === 'AIC_TOPUP' ? 'AIC-TOPUP' : 'BOOKING-UNIT')),
+        description: String(body.description || (invoiceType === 'AIC_TOPUP' ? 'Top-up Saldo AIC' : 'Booking Fee Unit')),
+        amountIdr,
+        aicAmount: Number(body.aicAmount || 0),
+        unitCode: body.unitCode ? String(body.unitCode) : undefined,
+        customerName: body.customerName ? String(body.customerName) : undefined,
+        customerPhone: body.customerPhone ? String(body.customerPhone) : undefined,
+        createdBy: user.email,
+      });
+      sendJson(res, 201, { ok: true, invoice: inv });
+      return;
+    }
+
+    if (pathname === '/api/payments/dummy-settle' && req.method === 'POST') {
+      if (!['SUPERADMIN_IT', 'SUPERADMIN', 'DIREKSI', 'SM', 'ADMIN'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya IT/Admin/SM/Direksi yang dapat mensimulasikan settlement.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const invoiceNo = String(body.invoiceNo || '').trim();
+      const targetStatus = String(body.targetStatus || 'PAID').toUpperCase() as 'PAID' | 'EXPIRED' | 'REFUNDED';
+      if (!invoiceNo || !['PAID', 'EXPIRED', 'REFUNDED'].includes(targetStatus)) {
+        sendJson(res, 400, { ok: false, error: 'invoiceNo dan targetStatus (PAID/EXPIRED/REFUNDED) wajib valid.' });
+        return;
+      }
+      const settled = await paymentGateway.settleInvoice({
+        tenantId: user.tenantId,
+        invoiceNo,
+        targetStatus,
+        actorEmail: user.email,
+      });
+      sendJson(res, settled.ok ? 200 : 400, settled);
+      return;
+    }
+
+    // F44: DEDUPLIKASI & MERGE LEAD GANDA (SM / ADMIN)
+    if (pathname === '/api/leads/duplicates' && req.method === 'GET') {
+      const rows = await sql`
+        SELECT id, full_name, phone_wa, owner_se_name, owner_se_email, stage, unit_interest, created_at
+        FROM sales_os.pipeline_leads
+        WHERE tenant_id = ${user.tenantId} AND COALESCE(phone_wa, '') <> ''
+        ORDER BY created_at DESC
+        LIMIT 300
+      `;
+      const groups: Record<string, any[]> = {};
+      for (const r of rows) {
+        const norm = String(r.phone_wa).replace(/\D/g, '').replace(/^0/, '62');
+        if (!norm) continue;
+        groups[norm] = groups[norm] || [];
+        groups[norm].push(r);
+      }
+      const duplicates = Object.entries(groups)
+        .filter(([, list]) => list.length > 1)
+        .map(([phoneKey, leads]) => ({ phoneKey, leads }));
+      sendJson(res, 200, { ok: true, duplicates });
+      return;
+    }
+
+    if (pathname === '/api/leads/merge' && req.method === 'POST') {
+      if (!['SM', 'ADMIN', 'DIREKSI', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya SM/Admin yang dapat menggabungkan lead ganda.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const primaryId = String(body.primaryId || '').trim();
+      const duplicateId = String(body.duplicateId || '').trim();
+      if (!primaryId || !duplicateId || primaryId === duplicateId) {
+        sendJson(res, 400, { ok: false, error: 'primaryId dan duplicateId harus berbeda dan valid.' });
+        return;
+      }
+      await sql`
+        UPDATE sales_os.pipeline_leads
+        SET notes = COALESCE(notes, '') || ${` [Merged duplicate ${duplicateId} by ${user.email}]`},
+            updated_at = NOW()
+        WHERE id = ${primaryId} AND tenant_id = ${user.tenantId}
+      `;
+      await sql`
+        DELETE FROM sales_os.pipeline_leads
+        WHERE id = ${duplicateId} AND tenant_id = ${user.tenantId}
+      `;
+      await recordAuditLog({
+        tenantId: user.tenantId,
+        actorEmail: user.email,
+        actorName: user.name,
+        actorRole: user.role,
+        action: 'UPDATE',
+        targetEntity: 'LEAD',
+        targetId: primaryId,
+        summary: `${user.name} menggabungkan lead ganda ${duplicateId} ke ${primaryId}`,
+      });
+      sendJson(res, 200, { ok: true, primaryId, mergedOutId: duplicateId });
+      return;
+    }
+
+    // GENERIC WORKSPACE CRUD (F08-F10, F16, F22/F24, F46, F58, F65, F71, F73, F76, F81-F83) + RANTAI GANDENGAN
+    if (pathname === '/api/workspace-items' && req.method === 'GET') {
+      const projectId = String(parsedUrl.searchParams.get('projectId') || 'the-park-sukoharjo');
+      const moduleKey = String(parsedUrl.searchParams.get('moduleKey') || '').trim();
+      if (!moduleKey) {
+        sendJson(res, 400, { ok: false, error: 'moduleKey wajib diisi.' });
+        return;
+      }
+      const items = await listWorkspaceItems({ tenantId: user.tenantId, projectId, moduleKey });
+      sendJson(res, 200, { ok: true, items });
+      return;
+    }
+
+    if (pathname === '/api/workspace-items' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo');
+      const moduleKey = String(body.moduleKey || '').trim();
+      const title = String(body.title || '').trim();
+      if (!moduleKey || !title) {
+        sendJson(res, 400, { ok: false, error: 'moduleKey dan title wajib diisi.' });
+        return;
+      }
+      const item = await createWorkspaceItem({
+        tenantId: user.tenantId,
+        projectId,
+        moduleKey,
+        title,
+        status: body.status ? String(body.status) : undefined,
+        refId: body.refId ? String(body.refId) : null,
+        payload: body.payload && typeof body.payload === 'object' ? body.payload : {},
+        createdBy: user.email,
+      });
+      sendJson(res, 201, { ok: true, item });
+      return;
+    }
+
+    if (pathname === '/api/workspace-items' && req.method === 'PATCH') {
+      const body = await readJsonBody(req);
+      const id = String(body.id || '').trim();
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'id wajib diisi.' });
+        return;
+      }
+      const item = await updateWorkspaceItem({
+        tenantId: user.tenantId,
+        id,
+        title: body.title !== undefined ? String(body.title) : undefined,
+        status: body.status !== undefined ? String(body.status) : undefined,
+        payload: body.payload && typeof body.payload === 'object' ? body.payload : undefined,
+      });
+      if (!item) {
+        sendJson(res, 404, { ok: false, error: 'Item tidak ditemukan atau beda tenant.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, item });
+      return;
+    }
+
+    if (pathname === '/api/workspace-items' && req.method === 'DELETE') {
+      const id = String(parsedUrl.searchParams.get('id') || '').trim();
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'id wajib diisi.' });
+        return;
+      }
+      const deleted = await deleteWorkspaceItem({ tenantId: user.tenantId, id });
+      sendJson(res, deleted ? 200 : 404, { ok: deleted });
+      return;
+    }
+
+    if (pathname === '/api/couplings/dispute' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const creatorOrBrokerCode = String(body.creatorOrBrokerCode || '').trim().toUpperCase();
+      const reason = String(body.reason || 'Klaim sengketa komisi').trim();
+      if (!creatorOrBrokerCode) {
+        sendJson(res, 400, { ok: false, error: 'creatorOrBrokerCode wajib diisi.' });
+        return;
+      }
+      const resDispute = await createDisputeAndHoldCommission({
+        tenantId: user.tenantId,
+        projectId: String(body.projectId || 'the-park-sukoharjo'),
+        creatorOrBrokerCode,
+        reason,
+        actorEmail: user.email,
+      });
+      sendJson(res, 201, { ok: true, ...resDispute });
+      return;
+    }
+
+    if (pathname === '/api/couplings/event-rsvp' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const guestName = String(body.guestName || '').trim();
+      const guestPhone = String(body.guestPhone || '').trim();
+      if (!guestName || !guestPhone) {
+        sendJson(res, 400, { ok: false, error: 'Nama & WhatsApp peserta wajib diisi.' });
+        return;
+      }
+      const assignedSe = await pickNextRoundRobinSe({
+        tenantId: user.tenantId,
+        projectId: String(body.projectId || 'the-park-sukoharjo'),
+        fallbackEmails: SE_EMAILS,
+      });
+      const rsvp = await registerEventRsvpToLead({
+        tenantId: user.tenantId,
+        projectId: String(body.projectId || 'the-park-sukoharjo'),
+        eventId: String(body.eventId || 'open-house'),
+        eventTitle: String(body.eventTitle || 'Open House Proyek'),
+        guestName,
+        guestPhone,
+        assignedSe,
+      });
+      sendJson(res, 201, { ok: true, assignedSe, ...rsvp });
+      return;
+    }
+
     // KELUHAN & GARANSI DLP
     if (pathname === '/api/complaints' && req.method === 'GET') {
       const projectIdParam = String(parsedUrl.searchParams.get('projectId') || '').trim();
@@ -5778,6 +6353,77 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // IT PLAN OVERRIDE (GOLD / PLATINUM / DIAMOND) - DB ASLI
+    if (pathname === '/api/it/plan-overrides' && req.method === 'GET') {
+      const rows =
+        user.role === 'SUPERADMIN_IT' || user.role === 'SUPERADMIN'
+          ? await sql`SELECT * FROM sales_os.developer_plan_overrides ORDER BY updated_at DESC`
+          : await sql`
+              SELECT * FROM sales_os.developer_plan_overrides
+              WHERE tenant_id = ${user.tenantId}
+              ORDER BY updated_at DESC
+            `;
+      sendJson(res, 200, { ok: true, overrides: rows });
+      return;
+    }
+
+    if (pathname === '/api/it/plan-overrides' && req.method === 'PUT') {
+      if (!['SUPERADMIN_IT', 'SUPERADMIN'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Tim IT Internal (SUPERADMIN_IT) / Superadmin yang dapat mengubah override paket.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const developerId = String(body.developerId || '').trim();
+      const overriddenPlan = String(body.overriddenPlan || '').trim();
+      if (!developerId || !['Gold', 'Platinum', 'Diamond'].includes(overriddenPlan)) {
+        sendJson(res, 400, { ok: false, error: 'developerId dan overriddenPlan (Gold/Platinum/Diamond) wajib valid.' });
+        return;
+      }
+      const companyName = String(body.companyName || '').trim();
+      const originalPlan = String(body.originalPlan || 'Platinum').trim();
+      const reason = String(body.reason || 'Override paket oleh IT').trim();
+      const validUntil = String(body.validUntil || '30 Hari').trim();
+      const tenantId = String(body.tenantId || user.tenantId || 'andara_rejo_makmur').trim();
+      const overriddenBy = String(body.overriddenBy || `${user.name} (${user.role})`).trim();
+
+      const saved = await sql`
+        INSERT INTO sales_os.developer_plan_overrides (
+          developer_id, tenant_id, company_name, original_plan, overridden_plan,
+          overridden_by, reason, valid_until, overridden_at, updated_at
+        ) VALUES (
+          ${developerId}, ${tenantId}, ${companyName}, ${originalPlan}, ${overriddenPlan},
+          ${overriddenBy}, ${reason}, ${validUntil}, NOW(), NOW()
+        )
+        ON CONFLICT (developer_id) DO UPDATE SET
+          company_name = EXCLUDED.company_name,
+          original_plan = EXCLUDED.original_plan,
+          overridden_plan = EXCLUDED.overridden_plan,
+          overridden_by = EXCLUDED.overridden_by,
+          reason = EXCLUDED.reason,
+          valid_until = EXCLUDED.valid_until,
+          overridden_at = NOW(),
+          updated_at = NOW()
+        RETURNING *
+      `;
+      sendJson(res, 200, { ok: true, override: saved[0] });
+      return;
+    }
+
+    if (pathname === '/api/it/plan-overrides' && req.method === 'DELETE') {
+      if (!['SUPERADMIN_IT', 'SUPERADMIN'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Tim IT Internal (SUPERADMIN_IT) / Superadmin yang dapat mereset override paket.' });
+        return;
+      }
+      const developerId = String(parsedUrl.searchParams.get('developerId') || '').trim();
+      if (!developerId) {
+        sendJson(res, 400, { ok: false, error: 'developerId wajib diisi.' });
+        return;
+      }
+      await sql`DELETE FROM sales_os.developer_plan_overrides WHERE developer_id = ${developerId}`;
+      sendJson(res, 200, { ok: true, developerId });
+      return;
+    }
+
     // IT KNOWLEDGE AI TERPUSAT (1 SUMBER DATA + OCR LOKAL)
     if (pathname === '/api/it/knowledge-ai' && req.method === 'GET') {
       if (!['IT', 'SUPERADMIN_IT', 'SUPERADMIN', 'ADMIN', 'SM', 'DIREKSI'].includes(user.role)) {
@@ -5895,6 +6541,10 @@ const server = http.createServer(async (req, res) => {
 
     sendJson(res, 404, { ok: false, error: `Endpoint tidak ditemukan: ${pathname}` });
   } catch (err: unknown) {
+    if (err instanceof CrossTenantViolationError) {
+      sendJson(res, 403, { ok: false, error: err.message });
+      return;
+    }
     const message = err instanceof Error ? err.message : 'Terjadi kesalahan internal server.';
     sendJson(res, 500, { ok: false, error: message });
   }
@@ -6118,6 +6768,73 @@ async function ensureSeOpsTables(): Promise<void> {
       ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ DEFAULT NOW()
   `;
   await ensurePermissionTables();
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.payment_invoices (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id TEXT NOT NULL,
+      project_id TEXT NOT NULL DEFAULT 'the-park-sukoharjo',
+      invoice_no TEXT NOT NULL UNIQUE,
+      provider TEXT NOT NULL DEFAULT 'SANDBOX_DUMMY_PG',
+      invoice_type TEXT NOT NULL CHECK (invoice_type IN ('AIC_TOPUP', 'BOOKING_FEE')),
+      reference_code TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      amount_idr BIGINT NOT NULL CHECK (amount_idr > 0),
+      aic_amount INTEGER NOT NULL DEFAULT 0,
+      unit_code TEXT,
+      customer_name TEXT,
+      customer_phone TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PAID', 'EXPIRED', 'REFUNDED')),
+      checkout_url TEXT NOT NULL,
+      paid_at TIMESTAMPTZ,
+      created_by TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.smart_links (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      short_code TEXT NOT NULL UNIQUE,
+      partner_role TEXT NOT NULL DEFAULT 'CREATOR',
+      creator_code TEXT NOT NULL,
+      content_code TEXT,
+      persona_code TEXT,
+      target_url TEXT NOT NULL,
+      click_count INTEGER NOT NULL DEFAULT 0,
+      created_by TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.link_touches (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      short_code TEXT NOT NULL,
+      creator_code TEXT NOT NULL,
+      content_code TEXT,
+      touch_type TEXT NOT NULL DEFAULT 'CLICK',
+      referrer TEXT,
+      user_agent_hash TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_os.developer_plan_overrides (
+      developer_id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL DEFAULT 'andara_rejo_makmur',
+      company_name TEXT NOT NULL DEFAULT '',
+      original_plan TEXT NOT NULL DEFAULT 'Platinum',
+      overridden_plan TEXT NOT NULL CHECK (overridden_plan IN ('Gold', 'Platinum', 'Diamond')),
+      overridden_by TEXT NOT NULL DEFAULT 'Tim IT Internal (SUPERADMIN_IT)',
+      reason TEXT NOT NULL DEFAULT '',
+      valid_until TEXT NOT NULL DEFAULT '30 Hari',
+      overridden_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
   await sql`
     CREATE TABLE IF NOT EXISTS sales_os.vault_documents (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

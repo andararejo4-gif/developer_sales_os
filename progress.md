@@ -3,26 +3,68 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
-## P-111 | 2026-11-26 | Penanganan Penuh 7 Temuan Utama (T4 Keamanan, T5 Onboarding DB/Upload, T6 Modul Lokal, T7 Rekonsiliasi)
+## P-118 | 2026-11-27 | Merge origin/main (P-110..P-116) + Penanganan 7 Temuan Utama (T4–T7)
 - Status: selesai
-- Ubah: `tests/security-penetration-suite.test.ts`, `src/components/RegistrationAndOnboardingWizard.tsx`, `src/components/OnboardingWizardModal.tsx`, `src/components/CrmPipelineView.tsx`, `src/components/field/SmFieldMonitoringView.tsx`, `docs/LAPORAN_KONSOLIDASI_7_TEMUAN_26_NOV_2026.md`
-- Alasan/keputusan: T4 uji TOTP replay/role isolation/SSRF-injection nyata; T5 sambungkan registrasi tenant ke `POST /api/auth/register` & upload berkas nyata ke `POST /api/truth/upload`; T6 sinkronisasi `CrmPipelineView` ke `GET /api/pipeline/leads` & prioritas `dbFieldLogs` di `SmFieldMonitoringView`; T7 rekonsiliasi 3 metrik progres resmi (`369/782`, `34/100` fitur 5/5, `1/6` gate).
-- Verifikasi: `rtk bun test` (197 pass, 0 fail across 39 files), `rtk bun run build` (`tsc --noEmit && vite build` exit 0).
+- Ubah: `tests/security-penetration-suite.test.ts`, `src/components/RegistrationAndOnboardingWizard.tsx`, `src/components/CrmPipelineView.tsx`, `src/components/field/SmFieldMonitoringView.tsx`, `docs/LAPORAN_KONSOLIDASI_7_TEMUAN_26_NOV_2026.md`, `server/index.ts` (pertahankan `${targetTenantId}` + stage `'NEW'`)
+- Alasan/keputusan: Menggabungkan fitur multi-tenant isolation, OCR onboarding, factual love letter, dan 6 coupled chains dari `origin/main` (`26c579a`) bersama remediasi T4–T7 (TOTP replay/SSRF test, registrasi DB, sinkronisasi `CrmPipelineView`/`SmFieldMonitoringView`, rekonsiliasi metrik).
+- Verifikasi: `rtk bun run build` & `rtk bun test` setelah merge + migrasi `0032`–`0036`.
 - Berikutnya: Tanda tangan Direksi pada Berita Acara UAT & smoke test produksi (`GATE-01`).
 
-## P-110 | 2026-11-26 | Remediasi Temuan Kritis T1, T2, T3: Bukti UAT Nyata, Gate-00 & Registri DEV Tunggal
+## P-117 | 2026-11-26 | Remediasi Temuan Kritis T1, T2, T3: Bukti UAT Nyata, Gate-00 & Registri DEV Tunggal
 - Status: selesai
 - Ubah: `server/index.ts` (fix skema `POST /api/public/leads`), `server/runtime-governance.ts` (`pg_advisory_xact_lock` pada `createAppointmentAtomic`), `scripts/run_uat_priority_suite.ts`, `tests/e2e-auto-contracts.test.ts`, `docs/uat-evidence/*`, `docs/BERITA_ACARA_UAT_26_NOV_2026.html`, `docs/BERITA_ACARA_UAT_26_NOV_2026.pdf`, `docs/REGISTRI_DEV_DAN_PELAPORAN_TUNGGAL.md`, `docs/SPEC_CORE_FEATURES_R0_R1.md`, `docs/GOVERNANCE_BASELINE_GATE_00.md`, `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx`
 - Alasan/keputusan: Menjawab temuan kritis T1 (log UAT per-kasus/langkah + Berita Acara UAT + perbaikan 2 bug nyata saat UAT), T2 (`GATE-00` 13/13 prasyarat lengkap & 34 fitur core mencapai `5/5` dengan `-SP`/`-AUTO`), T3 (standar nomor laporan unik & pemisahan `DEV-01..44` vs `WEB-DEV-01..10`).
 - Verifikasi: `rtk bun run scripts/run_uat_priority_suite.ts` (10/10 PASS di `127.0.0.1:3040` + PostgreSQL), `rtk bun test` (194 pass, 0 fail across 38 files), `rtk bun run build` (`tsc --noEmit && vite build` exit 0).
-- Berikutnya: Tanda tangan Direksi pada Berita Acara UAT & smoke test produksi (`GATE-01`).
+- Berikutnya: -
 
-## P-110 | 2026-11-26 | Remediasi Temuan Kritis T1, T2, T3: Bukti UAT Nyata, Gate-00 & Registri DEV Tunggal
-- Status: selesai
-- Ubah: `server/index.ts` (fix skema `POST /api/public/leads`), `server/runtime-governance.ts` (`pg_advisory_xact_lock` pada `createAppointmentAtomic`), `scripts/run_uat_priority_suite.ts`, `tests/e2e-auto-contracts.test.ts`, `docs/uat-evidence/*`, `docs/BERITA_ACARA_UAT_26_NOV_2026.html`, `docs/BERITA_ACARA_UAT_26_NOV_2026.pdf`, `docs/REGISTRI_DEV_DAN_PELAPORAN_TUNGGAL.md`, `docs/SPEC_CORE_FEATURES_R0_R1.md`, `docs/GOVERNANCE_BASELINE_GATE_00.md`, `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx`
-- Alasan/keputusan: Menjawab temuan kritis T1 (log UAT per-kasus/langkah + Berita Acara UAT + perbaikan 2 bug nyata saat UAT), T2 (`GATE-00` 13/13 prasyarat lengkap & 34 fitur core mencapai `5/5` dengan `-SP`/`-AUTO`), T3 (standar nomor laporan unik & pemisahan `DEV-01..44` vs `WEB-DEV-01..10`).
-- Verifikasi: `rtk bun run scripts/run_uat_priority_suite.ts` (10/10 PASS di `127.0.0.1:3040` + PostgreSQL), `rtk bun test` (194 pass, 0 fail across 38 files), `rtk bun run build` (`tsc --noEmit && vite build` exit 0).
-- Berikutnya: Tanda tangan Direksi pada Berita Acara UAT & smoke test produksi (`GATE-01`).
+## P-116 | 2026-11-26 | Isolasi Proyek Tenant, Auto-Login Onboarding & Isolasi Rekening Perusahaan
+- Status: selesai di lokal
+- Ubah: `server/index.ts` (`GET /api/tenant/projects` & hapus fallback default `PT Andara Rejo Makmur`/`the-park-townhouse` di `POST /api/company/bank-accounts`), `src/App.tsx` (sinkronisasi proyek ketat per `tenant_id` non-Andara), `src/components/OnboardingWizardModal.tsx` & `src/components/v3/PublicHomepageV3.tsx` (auto-login pasca aktivasi langsung ke `/dashboard`), `src/components/company/CompanyBankAccountsModal.tsx` (kirim `Bearer`+cookie, hapus fallback `localStorage` `PT Andara Rejo Makmur`, tampilkan nama sesi login aktif)
+- Alasan/keputusan: Mencegah data proyek & rekening `PT Andara Rejo Makmur` bocor ke dashboard tenant baru (seperti `PT Graha Padma Internusa`).
+- Verifikasi: `npm run build` & `bun build server/index.ts` + restart server lokal `:3040`.
+- Berikutnya: Siap commit & push ke `origin/main` bila user selesai uji di lokal.
+
+## P-115 | 2026-11-26 | Generator Surat Cinta Faktual (No-Filler, POI OSM Nyata, AI Editorial & Gap Report)
+- Status: selesai di lokal
+- Ubah: `server/poi-lookup.ts` (Overpass OSM + Haversine jarak/menit + cache), `server/love-letter-generator.ts` (hapus filler palsu, pecah fasilitas/cluster/unit OCR + POI nyata + enrichment AI `9router` ber-guardrail + `gapRecommendations`), `server/tenant-guard.ts` (simpan `love_letter_points` ke `projects_registry`), `server/index.ts` (`/api/onboarding/generate-love-letter`), `src/components/OnboardingWizardModal.tsx` (Step 5 tampilkan jumlah poin faktual, badge POI/AI, preview poin, & panel Gap Data), `tests/love-letter-generator.test.ts`
+- Alasan/keputusan: Mematuhi Blueprint v1.2 Bab 05 ("Hingga 99 Poin" tanpa klaim fiktif/filler, jarak nyata dari GPS, dan nol kontaminasi proyek lain).
+- Verifikasi: `npm run build`, `bun build server/index.ts`, `bun test` penuh (41 files), & uji live endpoint dengan koordinat Graha Padma Semarang.
+- Berikutnya: Commit & push ke `origin/main` atau deploy ke `hades` bila user siap.
+
+## P-114 | 2026-11-26 | 6 Rantai Gandengan CRUD Terintegrasi (0036) + Uji Multi-Layer End-to-End
+- Status: selesai di lokal
+- Ubah: `db/migrations/0036_workspace_items_and_couplings.sql`, `server/workspace-couplings.ts` (CRUD `tenant_workspace_items`, `pickNextRoundRobinSe` prioritas F65, `propagateTruthChangeToWorkspaceAssets`, `spawnLegalMilestoneOnAkad`, `createDisputeAndHoldCommission`, `registerEventRsvpToLead`), `server/index.ts` (`/api/workspace-items`, `/api/couplings/*`, `GET /api/cobroke/deals`, hook round-robin di `/api/public/leads` & akad KPR), `src/components/operations/CoupledModulesPanel.tsx`, `src/components/operations/R2OperationsWorkbench.tsx`, `tests/coupled-chains-e2e.test.ts`
+- Alasan/keputusan: Menuntaskan fitur CRUD R1–R3 yang masih kosong dengan 6 rantai gandengan otomatis antar-fitur dan isolasi mutlak `tenant_id`.
+- Verifikasi: `npm run build`, `bun build server/index.ts`, & `bun test` penuh (40 files) lulus 100%, serta live server smoke check.
+- Berikutnya: Siap commit & push ke `origin/main` atau deploy ke `hades` (jalankan migrasi `0025`–`0036`).
+
+## P-113 | 2026-11-26 | Hardening Isolasi Multi-Tenant & Pipeline Onboarding OCR (PyMuPDF+RapidOCR) + Dummy PG
+- Status: selesai di lokal
+- Ubah: `db/migrations/0035_multi_tenant_onboarding.sql`, `server/tenant-guard.ts` (`resolveStrictTenantId`, `resolveTenantByProjectSlug`, `getIsolatedStorageDir`, `runOnboardingExtraction`, `activateOnboardingWithDummyPayment`), `server/index.ts` (kunci `tenantId` dari sesi server, routing publik dinamis berbasis slug, endpoint `/api/onboarding/extract|activate`), `src/components/v3/SwimlaneAndPricingV3.tsx`, `src/components/v3/PublicHomepageV3.tsx`, `src/components/OnboardingWizardModal.tsx` (upload file nyata + edit inline Step 4 + checkout dummy PG Step 5), `tests/multi-tenant-isolation-e2e.test.ts` (11 kondisi isolasi end-to-end)
+- Alasan/keputusan: Mencegah kebocoran data lintas tim/perusahaan (1 Tim = 1 `tenant_id` terisolasi) dan menyambungkan Wizard Onboarding Paket ke `doc-extractor.py` (`PyMuPDF+RapidOCR`) + `SandboxDummyPaymentAdapter`.
+- Verifikasi: `npm run build`, `bun build server/index.ts`, & `bun test` penuh (39 files) lulus 100%.
+- Berikutnya: Restart server lokal & commit/push ke `origin/main` bila siap.
+
+## P-112 | 2026-11-26 | Dummy Payment Gateway (0034), Panel Operasional R1–R2 (Conflict, Dedup, Claim, POI) & /live Publik
+- Status: selesai di lokal
+- Ubah: `db/migrations/0034_payment_gateway_dummy.sql`, `server/payment-gateway.ts` (`SandboxDummyPaymentAdapter` ber-HMAC + settlement AIC Top-up & Booking Fee), `server/index.ts` (`/api/payments/*`, `GET /api/projects/poi-risk`, `GET /api/claims/ledger`, `/api/leads/duplicates`, `/api/leads/merge`, `/api/public/live/:slug`), `src/components/operations/R2OperationsWorkbench.tsx` (panel peran IT/Admin/SM/SE), `src/components/PublicProjectSitePage.tsx` (seksi `/live`), `src/App.tsx`, `tests/payment-gateway.test.ts`, `tests/audit-findings-remediation.test.ts` (fix timeout T3 via stub fetch deterministik)
+- Alasan/keputusan: Menutup 8 celah fitur R1–R2 per role (IT, Admin, SM, SE, Publik) dengan hanya Payment Gateway yang memakai mode dummy/simulasi sesuai kesepakatan.
+- Verifikasi: Migrasi `0025`–`0034` diterapkan di PostgreSQL lokal, `npm run build`, `bun build server/index.ts`, & `bun test` penuh (38 files).
+- Berikutnya: Restart server lokal & uji end-to-end endpoint live sebelum commit/push.
+
+## P-111 | 2026-11-26 | Shortlink /c/:code, Touch Tracking, Otomasi Kantong B & Privasi E6 (/program-referral)
+- Status: selesai di lokal
+- Ubah: `db/migrations/0033_smart_links_and_touches.sql` (baru), `server/index.ts` (bootstrap `smart_links` & `link_touches`, public redirector `GET /c/:code`, `GET/POST /api/smart-links`, & otomasi Kantong B `QL_BONUS`/`VISIT_BONUS`/`SOURCE_FEE` di `PATCH /api/pipeline/leads`), `vite.config.ts` (proxy `/c`), `src/lib/creator/creator-desk-store.ts` (`buildShortTrackLink`, `maskLeadPiiForPartner`), `src/components/ReferralProgramPage.tsx` (link resmi `/site/` + tombol `Buat Shortlink /c/` + masking E6 untuk mitra), `src/components/creator/CreatorDeskTab.tsx` (simpan `/c/` & counter klik real-time), `tests/creator-desk.test.ts`
+- Alasan/keputusan: Menyelaraskan `/program-referral` dan `CreatorDeskTab` dengan brief `ARM-DSOS-CLK-TPTH-2026-02` (Tabel 20, 21, E6, E8, dan dua kantong ledger).
+- Verifikasi: `npm run build`, `bun build server/index.ts`, & `bun test tests/creator-desk.test.ts` lulus.
+- Berikutnya: Restart server lokal (`dist-server.mjs` + Vite) bila ingin langsung uji `/c/:code`, serta terapkan migrasi `0025`–`0033` di PostgreSQL saat deploy.
+
+## P-110 | 2026-11-26 | Sinkronisasi Terarah origin/IT-kantor (dfe926e) + Plan Override PostgreSQL (0032)
+- Status: selesai di lokal
+- Ubah: `db/migrations/0032_developer_plan_overrides.sql` (rename dari `0025` agar tidak bentrok dengan `0025_creator_affiliate_pilot.sql`), `src/lib/plans/plan-override.ts`, `src/components/superadmin/ItCommandCenterDashboard.tsx`, `src/App.tsx`, `src/lib/projects/projects-data.ts`, `server/index.ts`, plus merge seluruh fitur `origin/IT-kantor` (`P-098`–`P-109`: Creator Desk, Live Radar GPS, Laporan Harian SM+SE PDF, R0/R1/R2 engines, `AppErrorBoundary`)
+- Alasan/keputusan: Menggabungkan seluruh pembaruan `origin/IT-kantor` tanpa menimpa arsitektur `developer_plan_overrides` berbasis PostgreSQL (`0032`) dan auth TOTP 2FA `main`.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`), `bun build server/index.ts`, & unit test terkait lulus; 16 test integrasi DB `0025–0031` menunggu eksekusi migrasi SQL di PostgreSQL.
+- Berikutnya: Jalankan migrasi `0025`–`0032` di PostgreSQL lokal/`hades`, lalu push `main` & deploy.
 
 ## P-109 | 2026-11-26 | Laporan Harian SM+SE, Format PDF Eksekutif, Isolasi User Tenant & ErrorBoundary
 - Status: selesai

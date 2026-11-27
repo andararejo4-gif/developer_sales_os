@@ -10,6 +10,10 @@ export default defineConfig({
         target: 'http://127.0.0.1:3040',
         changeOrigin: true,
       },
+      '/c': {
+        target: 'http://127.0.0.1:3040',
+        changeOrigin: true,
+      },
     },
   },
   plugins: [
@@ -42,7 +46,7 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/c\//],
       },
     }),
   ],

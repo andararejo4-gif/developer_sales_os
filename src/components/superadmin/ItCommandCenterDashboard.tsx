@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ShieldAlert,
   Database,
@@ -22,8 +22,9 @@ import {
 import type { RoleKey } from '../../data';
 import {
   loadDeveloperPlanOverrides,
-  setDeveloperPlanOverride,
-  removeDeveloperPlanOverride,
+  fetchPlanOverridesFromDb,
+  savePlanOverrideToDb,
+  deletePlanOverrideFromDb,
   PLAN_TIER_DETAILS,
   type PlanTier,
   type DeveloperPlanOverride,
@@ -300,17 +301,31 @@ export function ItCommandCenterDashboard({
   const [formPhone, setFormPhone] = useState('');
   const [formRole, setFormRole] = useState<RoleKey>('SE');
 
-  // State Override Paket Langganan untuk IT Internal
+  const triggerToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // State Override Paket Langganan untuk IT Internal (PostgreSQL)
   const [overrides, setOverrides] = useState<Record<string, DeveloperPlanOverride>>(() => loadDeveloperPlanOverrides());
   const [overrideModalDev, setOverrideModalDev] = useState<DeveloperHierarchyItem | null>(null);
   const [selectedTier, setSelectedTier] = useState<PlanTier>('Diamond');
   const [overrideReason, setOverrideReason] = useState<string>('Uji coba fitur enterprise & modul AI');
   const [overrideValidity, setOverrideValidity] = useState<string>('30 Hari');
 
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+  useEffect(() => {
+    let active = true;
+    fetchPlanOverridesFromDb().then((dbMap) => {
+      if (!active) return;
+      setOverrides(dbMap);
+      setHierarchyData((prev) =>
+        prev.map((d) => (dbMap[d.id] ? { ...d, plan: dbMap[d.id].overriddenPlan } : d))
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const openPlanOverrideModal = (dev: DeveloperHierarchyItem) => {
     const existing = overrides[dev.id];
@@ -320,10 +335,9 @@ export function ItCommandCenterDashboard({
     setOverrideValidity(existing?.validUntil || '30 Hari');
   };
 
-  const handleSavePlanOverride = (e: React.FormEvent) => {
+  const handleSavePlanOverride = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!overrideModalDev) return;
-
     const newOverride: DeveloperPlanOverride = {
       developerId: overrideModalDev.id,
       companyName: overrideModalDev.companyName,
@@ -334,32 +348,33 @@ export function ItCommandCenterDashboard({
       reason: overrideReason.trim() || 'Override paket oleh IT',
       validUntil: overrideValidity,
     };
-
-    setDeveloperPlanOverride(newOverride);
-    const updated = loadDeveloperPlanOverrides();
-    setOverrides(updated);
-
+    const res = await savePlanOverrideToDb(newOverride);
+    if (!res.ok) {
+      triggerToast(res.error || 'Gagal menyimpan override paket ke database.');
+      return;
+    }
+    setOverrides(loadDeveloperPlanOverrides());
     setHierarchyData((prev) =>
       prev.map((d) => (d.id === overrideModalDev.id ? { ...d, plan: selectedTier } : d))
     );
-
-    triggerToast(`Paket ${overrideModalDev.companyName} berhasil di-override ke ${selectedTier}.`);
+    triggerToast(`Paket ${overrideModalDev.companyName} disimpan di DB sebagai ${selectedTier}.`);
     setOverrideModalDev(null);
   };
 
-  const handleResetPlanOverride = (devId: string) => {
-    removeDeveloperPlanOverride(devId);
-    const updated = loadDeveloperPlanOverrides();
-    setOverrides(updated);
-
+  const handleResetPlanOverride = async (devId: string) => {
+    const res = await deletePlanOverrideFromDb(devId);
+    if (!res.ok) {
+      triggerToast(res.error || 'Gagal mereset override paket di database.');
+      return;
+    }
+    setOverrides(loadDeveloperPlanOverrides());
     const originalDev = INITIAL_HIERARCHY_DATA.find((d) => d.id === devId);
     if (originalDev) {
       setHierarchyData((prev) =>
         prev.map((d) => (d.id === devId ? { ...d, plan: originalDev.plan } : d))
       );
     }
-
-    triggerToast(`Override paket untuk developer ini telah di-reset ke paket awal.`);
+    triggerToast('Override paket telah di-reset ke paket kontrak asli di database.');
     setOverrideModalDev(null);
   };
 
@@ -1012,7 +1027,6 @@ export function ItCommandCenterDashboard({
             </div>
 
             <form onSubmit={handleSavePlanOverride} className="p-6 space-y-4 overflow-y-auto text-xs">
-              {/* Info Developer Target */}
               <div className="p-3.5 rounded-2xl bg-sandstone/50 border border-warmborder flex items-center justify-between">
                 <div>
                   <span className="text-[10px] font-bold text-warmmuted uppercase">Developer Target:</span>
@@ -1028,7 +1042,6 @@ export function ItCommandCenterDashboard({
                 )}
               </div>
 
-              {/* Pilihan Paket Gold / Platinum / Diamond */}
               <div>
                 <label className="block text-xs font-bold text-espresso mb-2">
                   Pilih Paket yang Diberikan (Override Tier) *
@@ -1043,8 +1056,8 @@ export function ItCommandCenterDashboard({
                         onClick={() => setSelectedTier(tier)}
                         className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
                           isSelected
-                            ? `bg-purple-50/70 ${meta.border} ring-2 ring-purple-500/30 shadow-xs`
-                            : 'bg-white border-warmborder hover:bg-sandstone/40'
+                            ? `bg-purple-50/70 ${meta.border} ring-2 ring-purple-300`
+                            : 'bg-white border-warmborder hover:bg-sandstone/30'
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1">
@@ -1076,7 +1089,6 @@ export function ItCommandCenterDashboard({
                 </div>
               </div>
 
-              {/* Alasan Override */}
               <div>
                 <label className="block text-xs font-bold text-espresso mb-1">Alasan / Catatan Override IT *</label>
                 <input
@@ -1089,7 +1101,6 @@ export function ItCommandCenterDashboard({
                 />
               </div>
 
-              {/* Masa Berlaku Override */}
               <div>
                 <label className="block text-xs font-bold text-espresso mb-1">Masa Berlaku Override</label>
                 <select
@@ -1104,7 +1115,6 @@ export function ItCommandCenterDashboard({
                 </select>
               </div>
 
-              {/* Tombol Aksi */}
               <div className="pt-3 border-t border-warmborder flex items-center justify-between gap-2">
                 <div>
                   {overrides[overrideModalDev.id] && (

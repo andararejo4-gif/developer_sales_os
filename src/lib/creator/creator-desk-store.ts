@@ -150,6 +150,44 @@ export function buildCreatorSmartLink(params: {
   return query ? `${base}?${query}` : base;
 }
 
+export interface SmartLinkRecord {
+  id: string;
+  shortCode: string;
+  partnerRole: string;
+  creatorCode: string;
+  contentCode: string;
+  personaCode: string;
+  targetUrl: string;
+  clickCount: number;
+  createdAt: string;
+}
+
+export function buildShortTrackLink(origin: string, shortCode: string): string {
+  const cleanOrigin = origin.replace(/\/+$/, '');
+  const cleanCode = shortCode.trim();
+  return `${cleanOrigin}/c/${encodeURIComponent(cleanCode)}`;
+}
+
+/**
+ * Aturan E6 (ARM-DSOS-CLK-TPTH-2026-02): mitra/kreator hanya melihat angka & status,
+ * tidak pernah melihat nama lengkap atau nomor WhatsApp calon pembeli.
+ */
+export function maskLeadPiiForPartner(name: string, phone: string): { maskedName: string; maskedPhone: string } {
+  const cleanName = String(name || '').trim();
+  const maskedName = cleanName
+    ? cleanName
+        .split(/\s+/)
+        .map((part) => (part.length <= 2 ? `${part[0] || '*'}*` : `${part.slice(0, 2)}***`))
+        .join(' ')
+    : 'Prospek Terlindungi';
+
+  const digits = String(phone || '').replace(/\D/g, '');
+  const maskedPhone =
+    digits.length >= 8 ? `${digits.slice(0, 4)}-****-${digits.slice(-3)}` : '****-****';
+
+  return { maskedName, maskedPhone };
+}
+
 export const INITIAL_DEMO_CREATORS: CreatorProfile[] = [
   {
     id: 'cr-1',

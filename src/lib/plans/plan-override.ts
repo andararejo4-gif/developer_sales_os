@@ -4,6 +4,7 @@
  */
 
 import { loadPersistedState, savePersistedState } from '../navigation/router';
+import { loadAuthSession } from '../auth/dummy-accounts';
 
 export type PlanTier = 'Gold' | 'Platinum' | 'Diamond';
 
@@ -96,4 +97,92 @@ export function removeDeveloperPlanOverride(developerId: string): void {
   const current = loadDeveloperPlanOverrides();
   delete current[developerId];
   savePersistedState(PLAN_OVERRIDE_STORAGE_KEY, current);
+}
+
+function getPlanAuthHeaders(): HeadersInit {
+  const session = loadAuthSession();
+  return {
+    'Content-Type': 'application/json',
+    ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+  };
+}
+
+function mapApiOverride(row: any): DeveloperPlanOverride {
+  return {
+    developerId: String(row.developer_id || row.developerId),
+    companyName: String(row.company_name || row.companyName || ''),
+    originalPlan: (row.original_plan || row.originalPlan || 'Platinum') as PlanTier,
+    overriddenPlan: (row.overridden_plan || row.overriddenPlan || 'Platinum') as PlanTier,
+    overriddenAt: String(row.overridden_at || row.overriddenAt || new Date().toISOString()),
+    overriddenBy: String(row.overridden_by || row.overriddenBy || 'Tim IT Internal (SUPERADMIN_IT)'),
+    reason: String(row.reason || ''),
+    validUntil: String(row.valid_until || row.validUntil || '30 Hari'),
+  };
+}
+
+export async function fetchPlanOverridesFromDb(): Promise<Record<string, DeveloperPlanOverride>> {
+  try {
+    const res = await fetch('/api/it/plan-overrides', {
+      credentials: 'include',
+      headers: getPlanAuthHeaders(),
+    });
+    if (!res.ok) return loadDeveloperPlanOverrides();
+    const json = await res.json();
+    if (!json.ok || !Array.isArray(json.overrides)) return loadDeveloperPlanOverrides();
+    const map: Record<string, DeveloperPlanOverride> = {};
+    for (const row of json.overrides) {
+      const item = mapApiOverride(row);
+      map[item.developerId] = item;
+    }
+    inMemoryOverrides = { ...map };
+    savePersistedState(PLAN_OVERRIDE_STORAGE_KEY, map);
+    return map;
+  } catch {
+    return loadDeveloperPlanOverrides();
+  }
+}
+
+export async function savePlanOverrideToDb(
+  override: DeveloperPlanOverride
+): Promise<{ ok: boolean; error?: string; override?: DeveloperPlanOverride }> {
+  try {
+    const res = await fetch('/api/it/plan-overrides', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: getPlanAuthHeaders(),
+      body: JSON.stringify(override),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.ok) {
+      return { ok: false, error: json.error || 'Gagal menyimpan override paket ke database.' };
+    }
+    const saved = json.override ? mapApiOverride(json.override) : override;
+    setDeveloperPlanOverride(saved);
+    return { ok: true, override: saved };
+  } catch {
+    return { ok: false, error: 'Gagal terhubung ke server.' };
+  }
+}
+
+export async function deletePlanOverrideFromDb(
+  developerId: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(
+      `/api/it/plan-overrides?developerId=${encodeURIComponent(developerId)}`,
+      {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: getPlanAuthHeaders(),
+      }
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.ok) {
+      return { ok: false, error: json.error || 'Gagal mereset override paket di database.' };
+    }
+    removeDeveloperPlanOverride(developerId);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'Gagal terhubung ke server.' };
+  }
 }
