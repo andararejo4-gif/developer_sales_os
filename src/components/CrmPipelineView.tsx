@@ -68,6 +68,47 @@ export function CrmPipelineView({
   const [selectedLead, setSelectedLead] = useState<ProjectLead | null>(null);
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [dataSourceMode, setDataSourceMode] = useState<'db' | 'local'>('local');
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/pipeline/leads?projectId=${encodeURIComponent(projectId)}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (!active || !json?.ok || !Array.isArray(json.leads)) return;
+        const mapped: ProjectLead[] = json.leads.map((row: any) => ({
+          id: String(row.id),
+          projectId: String(row.project_id || projectId),
+          fullName: String(row.full_name || '-'),
+          phoneWhatsapp: String(row.phone_wa || ''),
+          source: String(row.source || 'WhatsApp Inbound'),
+          stage: (row.stage || 'LEAD_BARU') as LeadStage,
+          unitOfInterest: String(row.unit_interest || '-'),
+          assignedSeName: String(row.owner_se_name || row.owner_se_email || 'SE'),
+          nextActionPlan: String(row.next_action || ''),
+          notes: String(row.sales_notes || ''),
+          createdAt: String(row.created_at || new Date().toISOString()),
+          updatedAt: String(row.updated_at || new Date().toISOString()),
+          bant: {
+            budget: Number(row.bant_b || 0),
+            authority: Number(row.bant_a || 0),
+            need: Number(row.bant_n || 0),
+            timeline: Number(row.bant_t || 0),
+            totalScore: Number(row.bant_total || 0),
+          },
+        }));
+        if (mapped.length > 0) {
+          setLeads(mapped);
+        }
+        setDataSourceMode('db');
+      })
+      .catch(() => {
+        // Fallback ke cache lokal bila belum login / offline
+      });
+    return () => {
+      active = false;
+    };
+  }, [projectId]);
 
   useEffect(() => {
     savePersistedState(`devos_crm_tab_${projectId}`, viewMode);
@@ -146,6 +187,9 @@ export function CrmPipelineView({
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-terracotta/10 text-terracotta border border-terracotta/20 shrink-0">
                   {leads.length} Leads
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${dataSourceMode === 'db' ? 'bg-lime-100 text-olive' : 'bg-amber-100 text-terracotta'}`}>
+                  {dataSourceMode === 'db' ? 'Sinkron DB' : 'Cache Lokal'}
                 </span>
               </div>
               <p className="text-xs text-warmmuted mt-0.5 leading-relaxed">

@@ -86,19 +86,9 @@ export const SmFieldMonitoringView: React.FC<SmFieldMonitoringViewProps> = ({
     []
   );
 
-  // Daftar SE terdaftar (gabungan SE_TEAM_DATA + akun SE yang tercatat di DB logs)
+  // Daftar SE terdaftar: utamakan data nyata PostgreSQL (dbFieldLogs); fallback konstanta hanya bila DB masih kosong
   const registeredSes = useMemo(() => {
     const map = new Map<string, { email: string; name: string; seId: string; zone: string }>();
-    for (const se of SE_TEAM_DATA) {
-      const firstToken = se.nama.toLowerCase().replace(/[^a-z0-9]+/g, '.');
-      const email = `${firstToken}@andararejomakmur.co.id`;
-      map.set(email, {
-        email,
-        name: se.nama,
-        seId: se.seId,
-        zone: se.zonaHariIni,
-      });
-    }
     for (const log of dbFieldLogs) {
       const email = String(log.se_email || '').toLowerCase();
       if (email && !map.has(email)) {
@@ -107,6 +97,18 @@ export const SmFieldMonitoringView: React.FC<SmFieldMonitoringViewProps> = ({
           name: log.se_name || email.split('@')[0],
           seId: 'SE',
           zone: 'Lapangan',
+        });
+      }
+    }
+    if (map.size === 0) {
+      for (const se of SE_TEAM_DATA) {
+        const firstToken = se.nama.toLowerCase().replace(/[^a-z0-9]+/g, '.');
+        const email = `${firstToken}@andararejomakmur.co.id`;
+        map.set(email, {
+          email,
+          name: se.nama,
+          seId: se.seId,
+          zone: se.zonaHariIni,
         });
       }
     }

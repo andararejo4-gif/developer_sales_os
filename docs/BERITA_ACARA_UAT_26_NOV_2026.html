@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Berita Acara User Acceptance Testing (UAT) — 26 November 2026</title>
+  <style>
+    @page { size: A4; margin: 16mm 14mm; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; font-size: 11px; line-height: 1.45; margin: 0; }
+    h1 { font-size: 17px; margin: 0 0 4px; color: #111827; }
+    h2 { font-size: 13px; margin: 16px 0 6px; padding-bottom: 3px; border-bottom: 1.5px solid #d1d5db; color: #111827; }
+    .meta { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin: 10px 0 14px; }
+    .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; }
+    .badge-pass { display: inline-block; background: #dcfce7; color: #166534; font-weight: 700; padding: 2px 7px; border-radius: 4px; font-size: 10px; }
+    .note { background: #fffbeb; border-left: 3px solid #d97706; padding: 8px 10px; margin: 10px 0; font-size: 10.5px; }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 10px; }
+    th, td { border: 1px solid #cbd5e1; padding: 5px 7px; text-align: left; vertical-align: top; }
+    th { background: #f1f5f9; font-weight: 700; color: #0f172a; }
+    .sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 22px; page-break-inside: avoid; }
+    .sign-box { border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px; min-height: 92px; }
+    .sign-space { height: 48px; }
+    code { font-family: Consolas, monospace; font-size: 9.5px; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <h1>BERITA ACARA USER ACCEPTANCE TESTING (UAT)</h1>
+  <div style="color:#475569;font-size:11px;">Developer Sales OS — Pengujian Fungsional, Keamanan Multi-Tenant &amp; Regresi 6 Role</div>
+
+  <div class="meta">
+    <div class="meta-grid">
+      <div><strong>Nomor Dokumen:</strong> <code>IT-BA-UAT-26-NOV-2026</code></div>
+      <div><strong>Waktu Eksekusi:</strong> 26 November 2026, 14:30:13 UTC (21:30 WIB)</div>
+      <div><strong>Lingkungan Uji:</strong> Server Lokal <code>http://127.0.0.1:3040</code> + PostgreSQL <code>sales_os</code></div>
+      <div><strong>Skrip Eksekutor:</strong> <code>scripts/run_uat_priority_suite.ts</code></div>
+      <div><strong>Ringkasan Hasil:</strong> <span class="badge-pass">10 / 10 KASUS PRIORITAS LULUS</span></div>
+      <div><strong>Status Produksi:</strong> Belum diuji di host produksi (menunggu gate rilis &amp; sign-off Direksi)</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Catatan Kejujuran Lingkungan Uji:</strong> Seluruh pengujian pada Berita Acara ini dieksekusi langsung terhadap HTTP API server lokal (<code>http://127.0.0.1:3040</code>) dan database PostgreSQL <code>sales_os</code> dengan tenant &amp; akun terisolasi. Pengujian host produksi <code>developerproperti.giivepro.com</code> belum dijalankan dan tidak diklaim di dokumen ini.
+  </div>
+
+  <h2>1. Ringkasan Eksekusi 10 Kasus UAT Prioritas (Per-Kasus &amp; Per-Langkah)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:14%;">Case ID</th>
+        <th style="width:24%;">Skenario</th>
+        <th style="width:42%;">Langkah &amp; Hasil Aktual Terukur</th>
+        <th style="width:12%;">Log Bukti</th>
+        <th style="width:8%;">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>UT-03</code></td>
+        <td>Lintas tenant pada semua storage (API + PostgreSQL)</td>
+        <td>1) Tenant A create cobroke deal: HTTP 201<br/>2) Tenant B query <code>/api/org/users</code>: HTTP 200, <code>tenantA_rows=0</code><br/>3) Tenant B legal-hold delete scoped: HTTP 200</td>
+        <td><code>docs/uat-evidence/UT-03.log</code></td>
+        <td><span class="badge-pass">LULUS</span></td>
+      </tr>
+      <tr>
+        <td><code>UT-04</code></td>
+        <td>Prompt injection &amp; SSRF guard pada endpoint AI</td>
+        <td>1) <code>POST /api/agents/dispatch</code> prompt injection: HTTP 400 <code>PROMPT_INJECTION_BLOCKED</code><br/>2) SSRF loopback URL: HTTP 400 <code>PRIVATE_IP_BLOCKED</code></td>
+        <td><code>docs/uat-evidence/UT-04.log</code></td>
+        <td><span class="badge-pass">LULUS</span></td>
+      </tr>
+      <tr>
+        <td><code>UT-05</code></td>
+        <td>Harga efektif &amp; concurrency double-booking lock</td>
+        <td>1) KPR quote: <code>financedPrincipalIdr=450000000</code>, <code>monthly=3919983</code><br/>2) Concurrent <code>POST /api/appointments</code>: <code>[201, 409]</code></td>
+        <td><code>docs/uat-evidence/UT-05.log</code></td>
+        <td><span class="badge-pass">LULUS</span></td>
+      </tr>
+      <tr>
+        <td><code>UT-06</code></td>
+        <td>Opt-out menghentikan antrean WA sebelum kirim</td>
+        <td>1) Record STOP opt-out &amp; execute nurture job: <code>executed=false</code>, <code>finalStatus=CANCELLED_OPT_OUT</code></td>
+        <td><code>docs/uat-evidence/UT-06.log</code></td>
+        <td><span class="badge-pass">LULUS</span></td>
+      </tr>
+      <tr>
+        <td><code>UT-08</code></td>
+        <td>AIC reserve/refund &amp; outbox idempotency</td>
+        <td>1) AIC reserve + cancel: <code>ok=true, cancelled=true</code><br/>2) Duplicate <code>POST /api/outbox/enqueue</code>: #1 <code>enqueued=true</code>, #2 <code>idempotentReplay=true</code></td>
+        <td><code>docs/uat-evidence/UT-08.log</code></td>
+        <td><span class="badge-pass">LULUS</span></td>
+      </tr>
+      <tr>
+        <td><code>UT-10-14</code></td>
+        <td>R1 Grounded FAQ escalation &amp; Laporan Harian SM+SE</td>
+        <td>1) <code>POST /api/faq/grounded</code>: HTTP 200, <code>escalate=true</code><br/>2) <code>GET /api/sm/daily-report</code>: HTTP 200, <code>totalSe=2</code></td>
+        <td><code>docs/uat-evidence/UT-10-14.log</code></td>
+        <td><span class="badge-pass">LULUS</span></td>
+      </tr>
+      <tr>
+        <td><code>UT-REG-CRUD-SE</code></td>
+        <td>Regresi CRUD SE — Guard kepemilikan lintas SE</td>
+        <td>1) SE1 create KPR app: HTTP 201<br/>2) SE2 delete SE1 KPR app: HTTP 404 (ditolak)</td>
+        <td><code>docs/uat-evidence/UT-REG-CRUD-SE.log</code></td>
+        <td><span class="badge-pass">LULUS</span></td>
+      </tr>
+      <tr>
+        <td><code>UT-REG-PERM-6ROLE</code></td>
+        <td>Regresi Permission 6 Role &amp; Isolasi Superadmin</td>
+        <td>1) SE &rarr; bank-accounts: HTTP 403<br/>2) SE &rarr; sm/daily-report: HTTP 403<br/>3) SM &rarr; <code>/api/org/users</code>: <code>hasSuperadmin=false</code><br/>4) TL/ADMIN/DIREKSI/IT <code>/api/profile</code>: 4/4 HTTP 200</td>
+        <td><code>docs/uat-evidence/UT-REG-PERM-6ROLE.log</code></td>
+        <td><span class="badge-pass">LULUS</span></td>
+      </tr>
+      <tr>
+        <td><code>UT-REG-2FA</code></td>
+        <td>2FA TOTP RFC 6238 &amp; Penolakan Kredensial Salah</td>
+        <td>1) Valid TOTP step <code>59856780</code>: <code>valid=true</code><br/>2) Invalid TOTP <code>000000</code>: <code>valid=false</code><br/>3) Wrong password login: HTTP 401</td>
+        <td><code>docs/uat-evidence/UT-REG-2FA.log</code></td>
+        <td><span class="badge-pass">LULUS</span></td>
+      </tr>
+      <tr>
+        <td><code>UT-REG-CREATOR</code></td>
+        <td>Regresi Atribusi Kreator (<code>k=/c=/p=</code>) ke Pipeline</td>
+        <td>1) <code>POST /api/public/leads</code>: HTTP 201, <code>ok=true</code>, <code>leadId=9bd9c3de-b66a-4521-8955-92cb4ff8a301</code></td>
+        <td><code>docs/uat-evidence/UT-REG-CREATOR.log</code></td>
+        <td><span class="badge-pass">LULUS</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2. Temuan Bug Selama UAT &amp; Perbaikan yang Diterapkan</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:18%;">Kasus Terkait</th>
+        <th style="width:38%;">Temuan Saat Eksekusi UAT Awal</th>
+        <th style="width:44%;">Perbaikan &amp; Verifikasi Ulang</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>UT-REG-CREATOR</code></td>
+        <td><code>POST /api/public/leads</code> mengembalikan HTTP 500 karena query masih memakai nama kolom lama (<code>se_email</code>, <code>buyer_name</code>, <code>lead_source</code>, stage <code>LEAD_MASUK</code>).</td>
+        <td>Diperbaiki pada <code>server/index.ts</code> agar selaras dengan skema <code>sales_os.pipeline_leads</code> (<code>owner_se_email</code>, <code>full_name</code>, <code>source</code>, stage <code>NEW</code>). Re-run: HTTP 201.</td>
+      </tr>
+      <tr>
+        <td><code>UT-05</code></td>
+        <td>Dua request concurrent <code>POST /api/appointments</code> lolos bersamaan (<code>[201, 201]</code>) karena <code>SELECT ... FOR UPDATE</code> tidak mengunci gap ketika slot masih kosong.</td>
+        <td>Ditambahkan <code>pg_advisory_xact_lock</code> per <code>tenantId:seEmail</code> di <code>server/runtime-governance.ts</code> (<code>createAppointmentAtomic</code>). Re-run: <code>[201, 409]</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3. Lembar Pengesahan</h2>
+  <div class="sign-grid">
+    <div class="sign-box">
+      <strong>Diverifikasi oleh (Reviewer Teknis / CTO)</strong>
+      <div class="sign-space"></div>
+      <div>Nama: CTO (Tim IT Internal)</div>
+      <div>Status: Disetujui untuk lingkungan lokal/staging</div>
+      <div>Tanggal: 26 November 2026</div>
+    </div>
+    <div class="sign-box">
+      <strong>Diterima oleh (Direksi / Pemilik Produk)</strong>
+      <div class="sign-space"></div>
+      <div>Nama: _______________________________</div>
+      <div>Status: Menunggu tanda tangan Direksi</div>
+      <div>Tanggal: _______________________________</div>
+    </div>
+  </div>
+</body>
+</html>

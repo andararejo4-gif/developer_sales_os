@@ -144,6 +144,9 @@ export async function createAppointmentAtomic(params: {
   }
 
   return sql.begin(async (tx: any) => {
+    const lockKey = `${params.tenantId}:${params.seEmail.toLowerCase()}`;
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+
     const conflicts = await tx`
       SELECT id, scheduled_start, scheduled_end, customer_name
       FROM sales_os.appointments

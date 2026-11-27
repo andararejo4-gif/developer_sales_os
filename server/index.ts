@@ -3699,7 +3699,7 @@ const server = http.createServer(async (req, res) => {
 
       // Deduplikasi nomor WA di tenant aktif
       const existing = await sql`
-        SELECT id, buyer_name, se_email FROM sales_os.pipeline_leads
+        SELECT id, full_name, owner_se_email FROM sales_os.pipeline_leads
         WHERE tenant_id = 'andara_rejo_makmur' AND phone_wa = ${phoneWa}
         LIMIT 1
       `;
@@ -3714,15 +3714,16 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      const ownerSeName = assignedSe.split('@')[0] || 'Sales Executive';
       const inserted = await sql`
         INSERT INTO sales_os.pipeline_leads (
-          tenant_id, se_email, buyer_name, phone_wa, lead_source, stage,
-          unit_interest, notes, wa_consent, wa_consent_updated_at, lead_quality, last_activity_at,
+          tenant_id, owner_se_email, owner_se_name, full_name, phone_wa, source, stage,
+          unit_interest, sales_notes, wa_consent, wa_consent_updated_at, lead_quality, last_activity_at,
           creator_code, content_code, persona_code
         ) VALUES (
-          'andara_rejo_makmur', ${assignedSe}, ${name}, ${phoneWa}, ${utmSource}, 'LEAD_MASUK',
+          'andara_rejo_makmur', ${assignedSe}, ${ownerSeName}, ${name}, ${phoneWa}, ${utmSource}, 'NEW',
           ${unitInterest}, ${'Form Website Publik (Consent v1.0)'}, 'OPT_IN', NOW(), 'WARM', NOW(),
-          ${creatorCode || null}, ${contentCode || null}, ${personaCode || null}
+          ${creatorCode || null}, ${contentCode || ''}, ${personaCode || 'P1'}
         )
         RETURNING id
       `;

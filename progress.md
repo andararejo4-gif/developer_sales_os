@@ -3,6 +3,27 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-111 | 2026-11-26 | Penanganan Penuh 7 Temuan Utama (T4 Keamanan, T5 Onboarding DB/Upload, T6 Modul Lokal, T7 Rekonsiliasi)
+- Status: selesai
+- Ubah: `tests/security-penetration-suite.test.ts`, `src/components/RegistrationAndOnboardingWizard.tsx`, `src/components/OnboardingWizardModal.tsx`, `src/components/CrmPipelineView.tsx`, `src/components/field/SmFieldMonitoringView.tsx`, `docs/LAPORAN_KONSOLIDASI_7_TEMUAN_26_NOV_2026.md`
+- Alasan/keputusan: T4 uji TOTP replay/role isolation/SSRF-injection nyata; T5 sambungkan registrasi tenant ke `POST /api/auth/register` & upload berkas nyata ke `POST /api/truth/upload`; T6 sinkronisasi `CrmPipelineView` ke `GET /api/pipeline/leads` & prioritas `dbFieldLogs` di `SmFieldMonitoringView`; T7 rekonsiliasi 3 metrik progres resmi (`369/782`, `34/100` fitur 5/5, `1/6` gate).
+- Verifikasi: `rtk bun test` (197 pass, 0 fail across 39 files), `rtk bun run build` (`tsc --noEmit && vite build` exit 0).
+- Berikutnya: Tanda tangan Direksi pada Berita Acara UAT & smoke test produksi (`GATE-01`).
+
+## P-110 | 2026-11-26 | Remediasi Temuan Kritis T1, T2, T3: Bukti UAT Nyata, Gate-00 & Registri DEV Tunggal
+- Status: selesai
+- Ubah: `server/index.ts` (fix skema `POST /api/public/leads`), `server/runtime-governance.ts` (`pg_advisory_xact_lock` pada `createAppointmentAtomic`), `scripts/run_uat_priority_suite.ts`, `tests/e2e-auto-contracts.test.ts`, `docs/uat-evidence/*`, `docs/BERITA_ACARA_UAT_26_NOV_2026.html`, `docs/BERITA_ACARA_UAT_26_NOV_2026.pdf`, `docs/REGISTRI_DEV_DAN_PELAPORAN_TUNGGAL.md`, `docs/SPEC_CORE_FEATURES_R0_R1.md`, `docs/GOVERNANCE_BASELINE_GATE_00.md`, `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx`
+- Alasan/keputusan: Menjawab temuan kritis T1 (log UAT per-kasus/langkah + Berita Acara UAT + perbaikan 2 bug nyata saat UAT), T2 (`GATE-00` 13/13 prasyarat lengkap & 34 fitur core mencapai `5/5` dengan `-SP`/`-AUTO`), T3 (standar nomor laporan unik & pemisahan `DEV-01..44` vs `WEB-DEV-01..10`).
+- Verifikasi: `rtk bun run scripts/run_uat_priority_suite.ts` (10/10 PASS di `127.0.0.1:3040` + PostgreSQL), `rtk bun test` (194 pass, 0 fail across 38 files), `rtk bun run build` (`tsc --noEmit && vite build` exit 0).
+- Berikutnya: Tanda tangan Direksi pada Berita Acara UAT & smoke test produksi (`GATE-01`).
+
+## P-110 | 2026-11-26 | Remediasi Temuan Kritis T1, T2, T3: Bukti UAT Nyata, Gate-00 & Registri DEV Tunggal
+- Status: selesai
+- Ubah: `server/index.ts` (fix skema `POST /api/public/leads`), `server/runtime-governance.ts` (`pg_advisory_xact_lock` pada `createAppointmentAtomic`), `scripts/run_uat_priority_suite.ts`, `tests/e2e-auto-contracts.test.ts`, `docs/uat-evidence/*`, `docs/BERITA_ACARA_UAT_26_NOV_2026.html`, `docs/BERITA_ACARA_UAT_26_NOV_2026.pdf`, `docs/REGISTRI_DEV_DAN_PELAPORAN_TUNGGAL.md`, `docs/SPEC_CORE_FEATURES_R0_R1.md`, `docs/GOVERNANCE_BASELINE_GATE_00.md`, `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx`
+- Alasan/keputusan: Menjawab temuan kritis T1 (log UAT per-kasus/langkah + Berita Acara UAT + perbaikan 2 bug nyata saat UAT), T2 (`GATE-00` 13/13 prasyarat lengkap & 34 fitur core mencapai `5/5` dengan `-SP`/`-AUTO`), T3 (standar nomor laporan unik & pemisahan `DEV-01..44` vs `WEB-DEV-01..10`).
+- Verifikasi: `rtk bun run scripts/run_uat_priority_suite.ts` (10/10 PASS di `127.0.0.1:3040` + PostgreSQL), `rtk bun test` (194 pass, 0 fail across 38 files), `rtk bun run build` (`tsc --noEmit && vite build` exit 0).
+- Berikutnya: Tanda tangan Direksi pada Berita Acara UAT & smoke test produksi (`GATE-01`).
+
 ## P-109 | 2026-11-26 | Laporan Harian SM+SE, Format PDF Eksekutif, Isolasi User Tenant & ErrorBoundary
 - Status: selesai
 - Ubah: server/index.ts (GET /api/sm/daily-report), src/components/SmDailyReportPanel.tsx, src/lib/exporters/daily-report-exporter.ts, server/auth.ts (filter SUPERADMIN/SUPERADMIN_IT di listTenantUsers), src/components/OrgUserManagementPage.tsx, src/components/AppErrorBoundary.tsx, src/main.tsx, src/lib/navigation/router.ts, src/App.tsx, src/components/ContentCalendarViewer.tsx, src/components/creator/CreatorDeskTab.tsx, src/components/PipelinePage.tsx, src/components/BankSubmissionWorkflowPage.tsx, src/components/SecureDocumentVaultPage.tsx, src/components/superadmin/ItCommandCenterDashboard.tsx

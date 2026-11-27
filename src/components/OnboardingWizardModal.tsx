@@ -40,36 +40,101 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({ isOpen, onClose, 
     facilities: 'One gate system, security 24 jam, cctv kawasan, underground utilities, children play area, zen garden'
   });
 
-  // Mock Extracted Units for Review & Correction Screen
-  const [extractedUnits] = useState([
-    { unit: 'A.01', tipe: 'Diamond (Nagoya)', lt: 90, lb: 75, keras: 'Rp 850.000.000', tempo24: 'Rp 950.000.000', kpr: 'Rp 900.000.000', status: 'terverifikasi' },
-    { unit: 'A.02', tipe: 'Diamond (Nagoya)', lt: 90, lb: 75, keras: 'Rp 830.000.000', tempo24: 'Rp 930.000.000', kpr: 'Rp 880.000.000', status: 'terverifikasi' },
-    { unit: 'B.01', tipe: 'Gold (Osaka)', lt: 72, lb: 60, keras: 'Rp 680.000.000', tempo24: 'Rp 760.000.000', kpr: 'Rp 720.000.000', status: 'terverifikasi' },
-    { unit: 'B.02', tipe: 'Gold (Osaka)', lt: 72, lb: 60, keras: 'Rp 670.000.000', tempo24: 'Rp 750.000.000', kpr: 'Rp 710.000.000', status: 'terverifikasi' },
-    { unit: 'C.01', tipe: 'Emerald (Tokyo)', lt: 60, lb: 50, keras: 'Rp 580.000.000', tempo24: 'Rp 650.000.000', kpr: 'Rp 620.000.000', status: 'terverifikasi' },
-    { unit: 'C.02', tipe: 'Emerald (Tokyo)', lt: 60, lb: 50, keras: 'Rp 580.000.000', tempo24: 'Rp 650.000.000', kpr: 'Rp 620.000.000', status: 'terverifikasi' },
-    { unit: 'C.10 (Hook)', tipe: 'Emerald Plus', lt: 78, lb: 50, keras: 'perlu dicek', tempo24: 'perlu dicek', kpr: 'perlu dicek', status: 'perlu dicek' },
-  ]);
+  const [brochureFile, setBrochureFile] = useState<File | null>(null);
+  const [pricelistFile, setPricelistFile] = useState<File | null>(null);
+  const [extractionSourceLabel, setExtractionSourceLabel] = useState<string>('Siap Ekstraksi API (/api/truth/upload)');
+  const [extractedUnits, setExtractedUnits] = useState<
+    Array<{ unit: string; tipe: string; lt: number | string; lb: number | string; keras: string; tempo24: string; kpr: string; status: string }>
+  >([]);
 
   const validationResult = validateLoveLetter(THE_PARK_99_POINTS);
 
   if (!isOpen) return null;
 
-  // Simulate AI extraction job
-  const handleStartExtraction = () => {
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Gagal membaca berkas.'));
+      reader.readAsDataURL(file);
+    });
+
+  // Real document ingestion via /api/truth/upload (doc-extractor.py / truth-engine.ts)
+  const handleStartExtraction = async () => {
     setIsProcessing(true);
-    setUploadProgress(15);
-    const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 95) {
-          clearInterval(interval);
-          setIsProcessing(false);
-          setCurrentStep(4); // Move to Review & Correction screen
-          return 100;
-        }
-        return prev + 25;
+    setUploadProgress(20);
+    try {
+      const targetFile = pricelistFile || brochureFile;
+      let filename = targetFile ? targetFile.name : `${formData.projectName.replace(/\s+/g, '_')}_profil.txt`;
+      let contentBase64 = '';
+      if (targetFile) {
+        contentBase64 = await fileToBase64(targetFile);
+      } else {
+        const summaryText = `Proyek: ${formData.projectName}\nDeveloper: ${formData.developerName}\nKota: ${formData.city}, ${formData.province}\nFasilitas: ${formData.facilities}\n`;
+        contentBase64 = btoa(unescape(encodeURIComponent(summaryText)));
+      }
+      setUploadProgress(55);
+
+      const res = await fetch('/api/truth/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename,
+          contentBase64,
+          docType: pricelistFile ? 'pricelist' : 'brosur',
+        }),
       });
-    }, 250);
+      setUploadProgress(85);
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok) {
+        const unitsFromApi = Array.isArray(json.parsedUnits) && json.parsedUnits.length > 0
+          ? json.parsedUnits.map((u: any) => ({
+              unit: String(u.unitCode || '-'),
+              tipe: String(u.cluster || formData.projectName),
+              lt: u.ltSqm ?? '-',
+              lb: u.lbSqm ?? '-',
+              keras: u.priceCash ? `Rp ${Number(u.priceCash).toLocaleString('id-ID')}` : 'perlu dicek',
+              tempo24: 'sesuai pricelist',
+              kpr: u.priceKpr ? `Rp ${Number(u.priceKpr).toLocaleString('id-ID')}` : 'perlu dicek',
+              status: u.priceCash || u.priceKpr ? 'terverifikasi' : 'perlu dicek',
+            }))
+          : [
+              {
+                unit: filename,
+                tipe: `Dokumen Terindeks (v${json.version || 1})`,
+                lt: '-',
+                lb: '-',
+                keras: `${json.factsCount ?? 0} fakta diekstrak`,
+                tempo24: '-',
+                kpr: '-',
+                status: 'terverifikasi',
+              },
+            ];
+        setExtractedUnits(unitsFromApi);
+        setExtractionSourceLabel(`Terindeks di PostgreSQL (${json.documentId || filename})`);
+      } else {
+        setExtractedUnits([
+          {
+            unit: filename,
+            tipe: 'Perlu Login Admin/SM/IT',
+            lt: '-',
+            lb: '-',
+            keras: json.error || `HTTP ${res.status}`,
+            tempo24: '-',
+            kpr: '-',
+            status: 'perlu dicek',
+          },
+        ]);
+        setExtractionSourceLabel(json.error || `Gagal upload (HTTP ${res.status})`);
+      }
+      setUploadProgress(100);
+      setCurrentStep(4);
+    } catch (err: any) {
+      setExtractionSourceLabel(err?.message || 'Gagal menghubungi /api/truth/upload');
+      setCurrentStep(4);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // Download DOCX
@@ -220,30 +285,42 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({ isOpen, onClose, 
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Brosur Upload Box */}
-                <div className="border-2 border-dashed border-warmborder rounded-2xl p-5 text-center bg-sandstone/30 hover:bg-sandstone/60 transition-colors">
+                <label className="border-2 border-dashed border-warmborder rounded-2xl p-5 text-center bg-sandstone/30 hover:bg-sandstone/60 transition-colors cursor-pointer block">
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg,.txt"
+                    className="hidden"
+                    onChange={(e) => setBrochureFile(e.target.files?.[0] || null)}
+                  />
                   <div className="size-10 rounded-xl bg-white text-terracotta grid place-items-center mx-auto shadow-2xs mb-2">
                     <FileText className="size-5" />
                   </div>
                   <p className="text-xs font-bold text-espresso">Brosur / Katalog Proyek</p>
-                  <p className="text-[11px] text-warmmuted mt-0.5">Format: PDF atau Gambar (Maks 25 MB)</p>
+                  <p className="text-[11px] text-warmmuted mt-0.5">Klik untuk pilih PDF, Gambar, atau TXT (Maks 20 MB)</p>
                   <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white border border-warmborder text-[11px] font-semibold text-olive">
                     <CheckCircle2 className="size-3.5" />
-                    <span>the_park_katalog_v2.pdf (14.2 MB)</span>
+                    <span>{brochureFile ? `${brochureFile.name} (${(brochureFile.size / 1024).toFixed(0)} KB)` : 'Belum dipilih (opsional)'}</span>
                   </div>
-                </div>
+                </label>
 
                 {/* Pricelist Upload Box */}
-                <div className="border-2 border-dashed border-warmborder rounded-2xl p-5 text-center bg-sandstone/30 hover:bg-sandstone/60 transition-colors">
+                <label className="border-2 border-dashed border-warmborder rounded-2xl p-5 text-center bg-sandstone/30 hover:bg-sandstone/60 transition-colors cursor-pointer block">
+                  <input
+                    type="file"
+                    accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg,.txt"
+                    className="hidden"
+                    onChange={(e) => setPricelistFile(e.target.files?.[0] || null)}
+                  />
                   <div className="size-10 rounded-xl bg-white text-olive grid place-items-center mx-auto shadow-2xs mb-2">
                     <FileSpreadsheet className="size-5" />
                   </div>
                   <p className="text-xs font-bold text-espresso">Pricelist &amp; Skema Bayar</p>
-                  <p className="text-[11px] text-warmmuted mt-0.5">Format: PDF, Excel, atau Foto Pricelist</p>
+                  <p className="text-[11px] text-warmmuted mt-0.5">Klik untuk pilih PDF, Excel, CSV, atau Foto</p>
                   <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white border border-warmborder text-[11px] font-semibold text-olive">
                     <CheckCircle2 className="size-3.5" />
-                    <span>pricelist_the_park_sukoharjo.xlsx (1.8 MB)</span>
+                    <span>{pricelistFile ? `${pricelistFile.name} (${(pricelistFile.size / 1024).toFixed(0)} KB)` : 'Belum dipilih (opsional)'}</span>
                   </div>
-                </div>
+                </label>
               </div>
 
               <div>
@@ -348,15 +425,15 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({ isOpen, onClose, 
           {/* STEP 4: PERIKSA & KOREKSI HASIL EKSTRAKSI AI */}
           {currentStep === 4 && (
             <div className="space-y-4">
-              <div className="p-3 bg-sandstone rounded-xl border border-warmborder flex items-center justify-between text-xs">
+              <div className="p-3 bg-sandstone rounded-xl border border-warmborder flex items-center justify-between gap-2 flex-wrap text-xs">
                 <div>
                   <span className="font-bold text-espresso">Layar Periksa &amp; Koreksi Data</span>
                   <p className="text-warmmuted text-[11px]">
-                    Aturan Guardrail: AI dilarang mengubah angka harga. Data yang tidak terbaca ditandai &ldquo;perlu dicek&rdquo;.
+                    {extractionSourceLabel} &middot; Guardrail aktif: AI dilarang mengubah angka harga.
                   </p>
                 </div>
                 <span className="px-2 py-0.5 rounded bg-lime-100 text-olive text-[11px] font-bold">
-                  6 Unit Siap &middot; 1 Perlu Dicek
+                  {extractedUnits.filter((u) => u.status === 'terverifikasi').length} Siap &middot; {extractedUnits.filter((u) => u.status !== 'terverifikasi').length} Perlu Dicek
                 </span>
               </div>
 

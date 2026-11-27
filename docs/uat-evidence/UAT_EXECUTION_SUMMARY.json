@@ -1,0 +1,240 @@
+{
+  "executedAt": "2026-11-26T14:30:13.080Z",
+  "baseUrl": "http://127.0.0.1:3040",
+  "total": 10,
+  "passed": 10,
+  "reports": [
+    {
+      "caseId": "UT-03",
+      "title": "Lintas tenant pada semua storage (API + PostgreSQL)",
+      "environment": "http://127.0.0.1:3040 + PostgreSQL sales_os",
+      "executedAt": "2026-11-26T14:30:12.912Z",
+      "passed": true,
+      "summaryActual": "Tenant A create 201; Tenant B /api/org/users leak=0 (0 kebocoran)",
+      "steps": [
+        {
+          "step": "Tenant A creates cobroke deal",
+          "expected": "HTTP 201",
+          "actual": "HTTP 201",
+          "passed": true
+        },
+        {
+          "step": "Tenant B queries /api/org/users",
+          "expected": "0 users from Tenant A",
+          "actual": "HTTP 200, tenantA_rows=0, total_users_B=1",
+          "passed": true
+        },
+        {
+          "step": "Tenant B legal-hold delete scoped to tenantB only",
+          "expected": "HTTP 200 scoped to tenantB",
+          "actual": "HTTP 200",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "caseId": "UT-04",
+      "title": "Prompt injection & SSRF guard pada endpoint AI",
+      "environment": "http://127.0.0.1:3040 + PostgreSQL sales_os",
+      "executedAt": "2026-11-26T14:30:12.919Z",
+      "passed": true,
+      "summaryActual": "HTTP 400 (PROMPT_INJECTION_BLOCKED) & HTTP 400 (PRIVATE_IP_BLOCKED)",
+      "steps": [
+        {
+          "step": "POST /api/agents/dispatch with prompt injection payload",
+          "expected": "HTTP 400 PROMPT_INJECTION_BLOCKED",
+          "actual": "HTTP 400 error=PROMPT_INJECTION_BLOCKED",
+          "passed": true
+        },
+        {
+          "step": "POST /api/agents/dispatch with SSRF loopback URL",
+          "expected": "HTTP 400 PRIVATE_IP_BLOCKED",
+          "actual": "HTTP 400 error=PRIVATE_IP_BLOCKED",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "caseId": "UT-05",
+      "title": "Harga efektif & concurrency double-booking lock",
+      "environment": "http://127.0.0.1:3040 + PostgreSQL sales_os",
+      "executedAt": "2026-11-26T14:30:12.938Z",
+      "passed": true,
+      "summaryActual": "Quote=450jt; concurrent POST /api/appointments => [201, 409]",
+      "steps": [
+        {
+          "step": "Deterministic KPR quote calculation",
+          "expected": "financedPrincipalIdr=450000000",
+          "actual": "financedPrincipalIdr=450000000, monthly=3919983",
+          "passed": true
+        },
+        {
+          "step": "Concurrent overlapping appointment booking via POST /api/appointments",
+          "expected": "One 201 Created, one 409 Conflict",
+          "actual": "HTTP statuses=[201, 409]",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "caseId": "UT-06",
+      "title": "Opt-out menghentikan antrean WA sebelum kirim",
+      "environment": "http://127.0.0.1:3040 + PostgreSQL sales_os",
+      "executedAt": "2026-11-26T14:30:12.954Z",
+      "passed": true,
+      "summaryActual": "executed=false, finalStatus=CANCELLED_OPT_OUT",
+      "steps": [
+        {
+          "step": "Record STOP opt-out and execute nurture job",
+          "expected": "executed=false, finalStatus=CANCELLED_OPT_OUT",
+          "actual": "executed=false, finalStatus=CANCELLED_OPT_OUT",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "caseId": "UT-08",
+      "title": "AIC reserve/refund & outbox idempotency",
+      "environment": "http://127.0.0.1:3040 + PostgreSQL sales_os",
+      "executedAt": "2026-11-26T14:30:13.002Z",
+      "passed": true,
+      "summaryActual": "AIC cancel=true; outbox #1 enqueued=true, #2 replay=true",
+      "steps": [
+        {
+          "step": "AIC reserve + cancel refund",
+          "expected": "ok=true, cancelled=true",
+          "actual": "ok=true, cancelled=true",
+          "passed": true
+        },
+        {
+          "step": "Duplicate POST /api/outbox/enqueue with same idempotencyKey",
+          "expected": "enqueued=true then idempotentReplay=true",
+          "actual": "first=true, replay=true",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "caseId": "UT-10-14",
+      "title": "R1 Grounded FAQ disclosure/escalation & Laporan Harian SM+SE",
+      "environment": "http://127.0.0.1:3040 + PostgreSQL sales_os",
+      "executedAt": "2026-11-26T14:30:13.026Z",
+      "passed": true,
+      "summaryActual": "FAQ HTTP 200 escalate=true; SM report HTTP 200 SE=2",
+      "steps": [
+        {
+          "step": "POST /api/faq/grounded human request",
+          "expected": "HTTP 200, escalateToHuman=true, disclosure present",
+          "actual": "HTTP 200, escalate=true",
+          "passed": true
+        },
+        {
+          "step": "GET /api/sm/daily-report date-range",
+          "expected": "HTTP 200, ok=true, teamTotals present",
+          "actual": "HTTP 200, totalSe=2",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "caseId": "UT-REG-CRUD-SE",
+      "title": "Regresi CRUD SE — Guard kepemilikan lintas SE",
+      "environment": "http://127.0.0.1:3040 + PostgreSQL sales_os",
+      "executedAt": "2026-11-26T14:30:13.034Z",
+      "passed": true,
+      "summaryActual": "SE1 create KPR HTTP 201; SE2 delete attempt HTTP 404",
+      "steps": [
+        {
+          "step": "SE1 creates KPR application",
+          "expected": "HTTP 201",
+          "actual": "HTTP 201",
+          "passed": true
+        },
+        {
+          "step": "SE2 attempts DELETE on SE1 KPR application",
+          "expected": "HTTP 403/404 rejected",
+          "actual": "HTTP 404",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "caseId": "UT-REG-PERM-6ROLE",
+      "title": "Regresi Permission 6 Role (Positif + Negatif) & Isolasi Superadmin",
+      "environment": "http://127.0.0.1:3040 + PostgreSQL sales_os",
+      "executedAt": "2026-11-26T14:30:13.038Z",
+      "passed": true,
+      "summaryActual": "SE->bank=403, SE->smReport=403, SM users hasSuperadmin=false",
+      "steps": [
+        {
+          "step": "SE tries POST /api/company/bank-accounts",
+          "expected": "HTTP 403 Forbidden",
+          "actual": "HTTP 403",
+          "passed": true
+        },
+        {
+          "step": "SE tries GET /api/sm/daily-report",
+          "expected": "HTTP 403 Forbidden",
+          "actual": "HTTP 403",
+          "passed": true
+        },
+        {
+          "step": "SM lists /api/org/users (no internal Superadmin)",
+          "expected": "HTTP 200, hasSuperadmin=false",
+          "actual": "HTTP 200, hasSuperadmin=false",
+          "passed": true
+        },
+        {
+          "step": "TL/ADMIN/DIREKSI/IT tokens active for /api/profile",
+          "expected": "All 4 HTTP 200",
+          "actual": "4/4 role tokens authenticated",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "caseId": "UT-REG-2FA",
+      "title": "2FA TOTP & Invalid Credential Rejection",
+      "environment": "http://127.0.0.1:3040 + RFC 6238",
+      "executedAt": "2026-11-26T14:30:13.073Z",
+      "passed": true,
+      "summaryActual": "TOTP valid=true, invalid=false; wrong password HTTP 401; step=59856780",
+      "steps": [
+        {
+          "step": "Accept valid RFC 6238 TOTP code",
+          "expected": "valid=true",
+          "actual": "valid=true",
+          "passed": true
+        },
+        {
+          "step": "Reject invalid TOTP 000000",
+          "expected": "valid=false",
+          "actual": "valid=false",
+          "passed": true
+        },
+        {
+          "step": "Reject wrong password on /api/auth/login",
+          "expected": "HTTP 401",
+          "actual": "HTTP 401",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "caseId": "UT-REG-CREATOR",
+      "title": "Regresi Atribusi Kreator (k=/c=/p=) ke Pipeline",
+      "environment": "http://127.0.0.1:3040 + PostgreSQL sales_os",
+      "executedAt": "2026-11-26T14:30:13.080Z",
+      "passed": true,
+      "summaryActual": "POST /api/public/leads HTTP 201, ok=true, leadId=9bd9c3de-b66a-4521-8955-92cb4ff8a301",
+      "steps": [
+        {
+          "step": "Submit public lead with k=AC-RN27&c=tpth-klip-001&p=P1",
+          "expected": "HTTP 200/201, ok=true",
+          "actual": "HTTP 201 ok=true",
+          "passed": true
+        }
+      ]
+    }
+  ]
+}
