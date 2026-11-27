@@ -3,6 +3,48 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-124 | 2026-11-27 | Kolom Penjelasan Khusus Kategori "Lainnya" di Catatan Aktivitas Harian
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `src/components/ManualDailyActivityBox.tsx` (input dinamis `customCategory` saat kategori `"Lainnya"` dipilih, disimpan sebagai `Lainnya: <kegiatan>`)
+- Alasan/keputusan: Memberi kolom penjelasan khusus ketika SE/SM memilih kategori `"Lainnya"` agar jenis kegiatannya tetap spesifik di UI, PDF, dan Excel.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-123 | 2026-11-27 | Catatan Aktivitas Harian Kantor / Non-Lead di Laporan SE, SM & PDF/Excel
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `db/migrations/0037_daily_manual_activities.sql`, `server/index.ts` (`POST/DELETE /api/daily-report/manual-activity` & agregasi di `/api/sm/daily-report` & `/api/se/daily-report`), `src/components/ManualDailyActivityBox.tsx` (baru), `src/components/SeDailyReportDetailPanel.tsx`, `src/components/SmDailyReportPanel.tsx`, `src/lib/exporters/daily-report-exporter.ts`
+- Alasan/keputusan: Memungkinkan SE maupun SM mencatat kegiatan harian di kantor (dokumentasi, pembuatan laporan, koordinasi, administrasi) di luar lead atau canvassing dan langsung masuk ke rekap serta ekspor PDF/Excel.
+- Verifikasi: Migrasi `0037` diterapkan di `devsales-pg`, `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files), server lokal `:3040` aktif.
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-122 | 2026-11-27 | Isolasi Ketat SQL & Template Ekspor Laporan Harian SE vs SM
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (filter `WHERE LOWER(...) = LOWER(user.email)` langsung di SQL `se_daily_notes`, `se_field_logs`, `pipeline_leads` dan hapus `smSummary` pada `GET /api/se/daily-report`), `src/lib/exporters/daily-report-exporter.ts` (`reportMode: 'se'` terpisah dari template SM), `src/components/SeDailyReportDetailPanel.tsx`
+- Alasan/keputusan: Mencegah kebocoran query/payload atau tampilan label Sales Manager pada akun & dokumen ekspor SE; SE hanya melihat dan mengekspor laporan periodik miliknya sendiri.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files), server lokal `:3040` direstart.
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-121 | 2026-11-27 | Bukti Foto & Titik Koordinat Nyata di Laporan Harian SE, SM & PDF/Excel
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (sertakan `photo_data_url` di `GET /api/sm/daily-report` & `GET /api/se/daily-report`), `src/components/SmDailyReportPanel.tsx`, `src/components/SeDailyReportDetailPanel.tsx`, `src/lib/exporters/daily-report-exporter.ts` (render thumbnail foto & titik koordinat `lat, lng` di UI, PDF & Excel)
+- Alasan/keputusan: Memastikan setiap laporan harian SE & SM memuat bukti lapangan autentik berupa foto (`photo_data_url`) dan titik koordinat GPS dari database.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files), server lokal `:3040` direstart.
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-120 | 2026-11-27 | Panel & Ekspor Detail Laporan Harian di Akun SE (GET /api/se/daily-report)
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (`GET /api/se/daily-report` dengan isolasi ketat `user.email` untuk role `SE`), `src/components/SeDailyReportDetailPanel.tsx` (baru), `src/App.tsx` (tampilkan `SeDailyReportDetailPanel` di Dashboard SE)
+- Alasan/keputusan: Agar setiap akun SE dapat meninjau & mengekspor (PDF/Excel) rincian aktivitas pribadinya (catatan harian playbook, log lapangan absen/GPS/call, dan daftar prospek) per rentang tanggal.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files), server lokal `:3040` dinyalakan.
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-119 | 2026-11-27 | Detail Laporan Harian Per SE di Dashboard SM & Ekspor PDF/Excel
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (`GET /api/sm/daily-report` menyertakan `details: { fieldLogs, leads, dailyNotes }`), `src/lib/exporters/daily-report-exporter.ts` (Seksi 03 Rincian Detail per SE pada PDF & tabel rincian Excel), `src/components/SmDailyReportPanel.tsx` (panel expandable detail per SE: catatan playbook, log lapangan absen/GPS/call, dan daftar prospek)
+- Alasan/keputusan: Agar SM dan pembaca laporan PDF/Excel mengetahui rincian aktivitas nyata tiap SE (bukan hanya angka agregat).
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
 ## P-118 | 2026-11-27 | Merge origin/main (P-110..P-116) + Penanganan 7 Temuan Utama (T4–T7)
 - Status: selesai
 - Ubah: `tests/security-penetration-suite.test.ts`, `src/components/RegistrationAndOnboardingWizard.tsx`, `src/components/CrmPipelineView.tsx`, `src/components/field/SmFieldMonitoringView.tsx`, `docs/LAPORAN_KONSOLIDASI_7_TEMUAN_26_NOV_2026.md`, `server/index.ts` (pertahankan `${targetTenantId}` + stage `'NEW'`)

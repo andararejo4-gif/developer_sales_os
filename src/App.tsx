@@ -61,6 +61,7 @@ import {
   exportDailyReportPdf,
 } from './lib/exporters/daily-report-exporter';
 import { SmDailyReportPanel } from './components/SmDailyReportPanel';
+import { SeDailyReportDetailPanel } from './components/SeDailyReportDetailPanel';
 import {
   loadAuthSession,
   logoutFromServer,
@@ -2924,6 +2925,9 @@ export default function App() {
                   </button>
                 </div>
               </section>
+
+              {/* Rincian Laporan Harian & Riwayat Aktivitas SE (Absen, GPS, Call, Canvassing, Lead) */}
+              <SeDailyReportDetailPanel projectName={activeProject.nama} />
             </>
           )}
 

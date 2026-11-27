@@ -5442,8 +5442,76 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (pathname === '/api/sm/daily-report' && req.method === 'GET') {
-      if (!['SM', 'TL', 'ADMIN', 'DIREKSI', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role)) {
+    if (pathname === '/api/daily-report/manual-activity' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const activityDate = String(body.activityDate || toWibDateStr(new Date())).slice(0, 10);
+      const category = String(body.category || 'Kantor / Administrasi').trim().slice(0, 80) || 'Kantor / Administrasi';
+      const note = String(body.note || '').trim().slice(0, 1000);
+      if (!note) {
+        sendJson(res, 400, { ok: false, error: 'Catatan aktivitas harian tidak boleh kosong.' });
+        return;
+      }
+      await sql`
+        CREATE TABLE IF NOT EXISTS sales_os.daily_manual_activities (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id TEXT NOT NULL,
+          user_email TEXT NOT NULL,
+          user_name TEXT NOT NULL,
+          user_role TEXT NOT NULL,
+          activity_date DATE NOT NULL DEFAULT CURRENT_DATE,
+          category TEXT NOT NULL DEFAULT 'Kantor / Administrasi',
+          activity_note TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      const inserted = await sql`
+        INSERT INTO sales_os.daily_manual_activities (
+          tenant_id, user_email, user_name, user_role, activity_date, category, activity_note
+        ) VALUES (
+          ${user.tenantId}, ${user.email}, ${user.name}, ${user.role}, ${activityDate}::date, ${category}, ${note}
+        )
+        RETURNING id, activity_date, category, activity_note, created_at
+      `;
+      sendJson(res, 201, {
+        ok: true,
+        activity: {
+          id: String(inserted[0].id),
+          activityDate: String(inserted[0].activity_date).slice(0, 10),
+          category: String(inserted[0].category),
+          note: String(inserted[0].activity_note),
+          createdAt: String(inserted[0].created_at),
+        },
+      });
+      return;
+    }
+
+    if (pathname === '/api/daily-report/manual-activity' && req.method === 'DELETE') {
+      const id = String(parsedUrl.searchParams.get('id') || '').trim();
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'Parameter id wajib diisi.' });
+        return;
+      }
+      const deleted = await sql`
+        DELETE FROM sales_os.daily_manual_activities
+        WHERE id = ${id}::uuid
+          AND tenant_id = ${user.tenantId}
+          AND LOWER(user_email) = LOWER(${user.email})
+        RETURNING id
+      `;
+      if (deleted.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Catatan aktivitas tidak ditemukan.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if ((pathname === '/api/sm/daily-report' || pathname === '/api/se/daily-report') && req.method === 'GET') {
+      const isSeEndpoint = pathname === '/api/se/daily-report';
+      const allowedRoles = isSeEndpoint
+        ? ['SE', 'SM', 'TL', 'ADMIN', 'DIREKSI', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT']
+        : ['SM', 'TL', 'ADMIN', 'DIREKSI', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT'];
+      if (!allowedRoles.includes(user.role)) {
         sendJson(res, 403, { ok: false, error: 'Hanya role manajemen yang dapat mengakses Laporan Harian SM & Tim SE.' });
         return;
       }
@@ -5451,48 +5519,122 @@ const server = http.createServer(async (req, res) => {
       const rawStart = String(parsedUrl.searchParams.get('startDate') || parsedUrl.searchParams.get('date') || todayWib).slice(0, 10);
       const rawEnd = String(parsedUrl.searchParams.get('endDate') || rawStart).slice(0, 10);
       const [startDate, endDate] = rawStart <= rawEnd ? [rawStart, rawEnd] : [rawEnd, rawStart];
+      const restrictToSelfSe = isSeEndpoint && user.role === 'SE';
 
-      const [seUsers, dailyNotes, fieldLogs, leadsInRange, smAuditLogs] = await Promise.all([
-        sql`
-          SELECT email, name, project_id, phone
-          FROM sales_os.app_users
-          WHERE tenant_id = ${user.tenantId}
-            AND role = 'SE'
-            AND is_active = TRUE
-          ORDER BY name ASC
-        `,
-        sql`
-          SELECT * FROM sales_os.se_daily_notes
-          WHERE report_date >= ${startDate}::date
-            AND report_date <= ${endDate}::date
-        `,
-        sql`
-          SELECT se_email, se_name, log_type, title, location_label, lat, lng, created_at
-          FROM sales_os.se_field_logs
-          WHERE (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
-            AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
-          ORDER BY created_at ASC
-        `,
-        sql`
-          SELECT owner_se_email, stage, bant_total, booking_fee_paid, last_activity_at, created_at
-          FROM sales_os.pipeline_leads
-          WHERE tenant_id = ${user.tenantId}
-            AND COALESCE(validity_status, 'VALID') = 'VALID'
-            AND (
-              ((created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
-              OR ((last_activity_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (last_activity_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
-            )
-        `,
-        sql`
-          SELECT action, target_entity AS entity, target_id AS entity_id, summary, details, created_at
-          FROM sales_os.activity_audit_logs
-          WHERE tenant_id = ${user.tenantId}
-            AND LOWER(actor_email) = LOWER(${user.email})
-            AND (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
-            AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
-          ORDER BY created_at DESC
-          LIMIT 100
-        `,
+      await sql`
+        CREATE TABLE IF NOT EXISTS sales_os.daily_manual_activities (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id TEXT NOT NULL,
+          user_email TEXT NOT NULL,
+          user_name TEXT NOT NULL,
+          user_role TEXT NOT NULL,
+          activity_date DATE NOT NULL DEFAULT CURRENT_DATE,
+          category TEXT NOT NULL DEFAULT 'Kantor / Administrasi',
+          activity_note TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+
+      const [seUsers, dailyNotes, fieldLogs, leadsInRange, smAuditLogs, manualActivities] = await Promise.all([
+        restrictToSelfSe
+          ? sql`
+              SELECT email, name, project_id, phone
+              FROM sales_os.app_users
+              WHERE tenant_id = ${user.tenantId}
+                AND LOWER(email) = LOWER(${user.email})
+                AND is_active = TRUE
+              ORDER BY name ASC
+            `
+          : sql`
+              SELECT email, name, project_id, phone
+              FROM sales_os.app_users
+              WHERE tenant_id = ${user.tenantId}
+                AND role = 'SE'
+                AND is_active = TRUE
+              ORDER BY name ASC
+            `,
+        restrictToSelfSe
+          ? sql`
+              SELECT * FROM sales_os.se_daily_notes
+              WHERE LOWER(se_email) = LOWER(${user.email})
+                AND report_date >= ${startDate}::date
+                AND report_date <= ${endDate}::date
+            `
+          : sql`
+              SELECT * FROM sales_os.se_daily_notes
+              WHERE report_date >= ${startDate}::date
+                AND report_date <= ${endDate}::date
+            `,
+        restrictToSelfSe
+          ? sql`
+              SELECT se_email, se_name, log_type, title, location_label, lat, lng, photo_data_url, created_at
+              FROM sales_os.se_field_logs
+              WHERE LOWER(se_email) = LOWER(${user.email})
+                AND (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
+                AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
+              ORDER BY created_at ASC
+            `
+          : sql`
+              SELECT se_email, se_name, log_type, title, location_label, lat, lng, photo_data_url, created_at
+              FROM sales_os.se_field_logs
+              WHERE (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
+                AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
+              ORDER BY created_at ASC
+            `,
+        restrictToSelfSe
+          ? sql`
+              SELECT owner_se_email, full_name, unit_interest, source, stage, bant_total, booking_fee_paid, last_activity_at, created_at
+              FROM sales_os.pipeline_leads
+              WHERE tenant_id = ${user.tenantId}
+                AND LOWER(owner_se_email) = LOWER(${user.email})
+                AND COALESCE(validity_status, 'VALID') = 'VALID'
+                AND (
+                  ((created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
+                  OR ((last_activity_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (last_activity_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
+                )
+              ORDER BY COALESCE(last_activity_at, created_at) DESC
+            `
+          : sql`
+              SELECT owner_se_email, full_name, unit_interest, source, stage, bant_total, booking_fee_paid, last_activity_at, created_at
+              FROM sales_os.pipeline_leads
+              WHERE tenant_id = ${user.tenantId}
+                AND COALESCE(validity_status, 'VALID') = 'VALID'
+                AND (
+                  ((created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
+                  OR ((last_activity_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (last_activity_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
+                )
+              ORDER BY COALESCE(last_activity_at, created_at) DESC
+            `,
+        restrictToSelfSe
+          ? Promise.resolve([])
+          : sql`
+              SELECT action, target_entity AS entity, target_id AS entity_id, summary, details, created_at
+              FROM sales_os.activity_audit_logs
+              WHERE tenant_id = ${user.tenantId}
+                AND LOWER(actor_email) = LOWER(${user.email})
+                AND (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
+                AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
+              ORDER BY created_at DESC
+              LIMIT 100
+            `,
+        restrictToSelfSe
+          ? sql`
+              SELECT id, user_email, activity_date, category, activity_note, created_at
+              FROM sales_os.daily_manual_activities
+              WHERE tenant_id = ${user.tenantId}
+                AND LOWER(user_email) = LOWER(${user.email})
+                AND activity_date >= ${startDate}::date
+                AND activity_date <= ${endDate}::date
+              ORDER BY activity_date DESC, created_at DESC
+            `
+          : sql`
+              SELECT id, user_email, activity_date, category, activity_note, created_at
+              FROM sales_os.daily_manual_activities
+              WHERE tenant_id = ${user.tenantId}
+                AND activity_date >= ${startDate}::date
+                AND activity_date <= ${endDate}::date
+              ORDER BY activity_date DESC, created_at DESC
+            `,
       ]);
 
       const notesByEmail = new Map<string, any>();
@@ -5508,6 +5650,7 @@ const server = http.createServer(async (req, res) => {
           posted_wa_status: 0,
           posted_stories: 0,
           hambatan_list: [] as string[],
+          daily_notes_rows: [] as any[],
         };
         prev.dial_count += Number(n.dial_count || 0);
         prev.connected_call_count += Number(n.connected_call_count || 0);
@@ -5520,6 +5663,18 @@ const server = http.createServer(async (req, res) => {
         if (n.hambatan_bantuan && String(n.hambatan_bantuan).trim()) {
           prev.hambatan_list.push(String(n.hambatan_bantuan).trim());
         }
+        prev.daily_notes_rows.push({
+          reportDate: n.report_date ? String(n.report_date).slice(0, 10) : '',
+          dialCount: Number(n.dial_count || 0),
+          connectedCallCount: Number(n.connected_call_count || 0),
+          canvassingContacts: Number(n.canvassing_contacts || 0),
+          canvassingBrochures: Number(n.canvassing_brochures || 0),
+          canvassingLeads: Number(n.canvassing_leads || 0),
+          postedReels: Number(n.posted_reels || 0),
+          postedWaStatus: Number(n.posted_wa_status || 0),
+          postedStories: Number(n.posted_stories || 0),
+          hambatan: n.hambatan_bantuan ? String(n.hambatan_bantuan).trim() : '',
+        });
         notesByEmail.set(email, prev);
       }
 
@@ -5574,9 +5729,47 @@ const server = http.createServer(async (req, res) => {
           visitsCount,
           bookingsCount,
           hambatanBantuan: Array.isArray(note.hambatan_list) ? note.hambatan_list.join(' | ') : '',
+          details: {
+            fieldLogs: [...myLogs].reverse().map((l: any) => ({
+              logType: String(l.log_type || ''),
+              title: String(l.title || ''),
+              locationLabel: String(l.location_label || ''),
+              lat: l.lat != null ? Number(l.lat) : null,
+              lng: l.lng != null ? Number(l.lng) : null,
+              photoDataUrl: l.photo_data_url ? String(l.photo_data_url) : null,
+              createdAt: String(l.created_at || ''),
+            })),
+            leads: myLeads.map((l: any) => ({
+              fullName: String(l.full_name || '-'),
+              unitInterest: String(l.unit_interest || '-'),
+              source: String(l.source || '-'),
+              stage: String(l.stage || '-'),
+              bantTotal: Number(l.bant_total || 0),
+              createdAt: String(l.created_at || ''),
+            })),
+            dailyNotes: Array.isArray(note.daily_notes_rows) ? note.daily_notes_rows : [],
+            manualActivities: manualActivities
+              .filter((m: any) => String(m.user_email || '').toLowerCase() === email)
+              .map((m: any) => ({
+                id: String(m.id),
+                activityDate: String(m.activity_date).slice(0, 10),
+                category: String(m.category || 'Kantor / Administrasi'),
+                note: String(m.activity_note || ''),
+                createdAt: String(m.created_at || ''),
+              })),
+          },
         };
       });
 
+      const smManualActivities = manualActivities
+        .filter((m: any) => String(m.user_email || '').toLowerCase() === user.email.toLowerCase())
+        .map((m: any) => ({
+          id: String(m.id),
+          activityDate: String(m.activity_date).slice(0, 10),
+          category: String(m.category || 'Kantor / Administrasi'),
+          note: String(m.activity_note || ''),
+          createdAt: String(m.created_at || ''),
+        }));
       const smOwnLogs = fieldLogs.filter((l: any) => String(l.se_email || '').toLowerCase() === user.email.toLowerCase());
       const teamTotals = {
         totalSe: seReports.length,
@@ -5594,13 +5787,18 @@ const server = http.createServer(async (req, res) => {
         startDate,
         endDate,
         date: startDate === endDate ? startDate : `${startDate} s.d. ${endDate}`,
-        smSummary: {
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          ownActivities: smAuditLogs,
-          ownFieldLogs: smOwnLogs,
-        },
+        ...(isSeEndpoint
+          ? {}
+          : {
+              smSummary: {
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                ownActivities: smAuditLogs,
+                ownFieldLogs: smOwnLogs,
+                manualActivities: smManualActivities,
+              },
+            }),
         teamTotals,
         seReports,
       });
