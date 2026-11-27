@@ -2,8 +2,18 @@ import { describe, expect, test } from 'bun:test';
 import { computeTotpCode, generateTotpSecret, verifyTotpToken } from '../server/totp';
 import { BASIC_ORG_ROLES, listTenantUsers } from '../server/auth';
 import { dispatchRegisteredAgent } from '../server/runtime-governance';
+import { sql } from '../server/db';
 
 describe('T4 Security Penetration & Guardrail Suite', () => {
+  test('PostgreSQL RLS: 12 core multi-tenant tables have tenant_isolation_policy enabled', async () => {
+    const policies = await sql`
+      SELECT tablename, policyname
+      FROM pg_policies
+      WHERE schemaname = 'sales_os' AND policyname = 'tenant_isolation_policy'
+      ORDER BY tablename
+    `;
+    expect(policies.length).toBeGreaterThanOrEqual(12);
+  });
   test('TOTP Replay Protection: same 6-digit code cannot be reused on same or earlier step', () => {
     const secret = generateTotpSecret();
     const step = Math.floor(Date.now() / 1000 / 30);

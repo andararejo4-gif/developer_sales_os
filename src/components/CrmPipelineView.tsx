@@ -123,26 +123,42 @@ export function CrmPipelineView({
 
   const followUpChecklist = getFollowUpChecklist(projectId);
 
-  const handleStageMove = (leadId: string, nextStage: LeadStage) => {
-    const updated = moveLeadStage(leadId, nextStage);
-    if (updated) {
-      setLeads(getProjectLeads(projectId));
-      setToastMessage(`Status prospek diperbarui ke ${nextStage}`);
+  const handleStageMove = async (leadId: string, nextStage: LeadStage) => {
+    setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, stage: nextStage } : l)));
+    moveLeadStage(leadId, nextStage);
+    try {
+      const res = await fetch(`/api/pipeline/leads/${encodeURIComponent(leadId)}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: nextStage }),
+      });
+      if (res.ok) setDataSourceMode('db');
+    } catch {
+      /* fallback cache lokal bila offline */
     }
+    setToastMessage(`Status prospek diperbarui ke ${nextStage}`);
   };
 
-  const handleAddLeadSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddLeadSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const fullName = String(fd.get('fullName') || '');
+    const phoneWhatsapp = String(fd.get('phone') || '');
+    const source = String(fd.get('source') || 'Input Manual');
+    const unitOfInterest = String(fd.get('unit') || '');
+    const nextActionPlan = String(fd.get('action') || '');
+    const notes = String(fd.get('notes') || '');
+
     const created = addProjectLead({
       projectId,
-      fullName: fd.get('fullName') as string,
-      phoneWhatsapp: fd.get('phone') as string,
-      source: fd.get('source') as string,
-      unitOfInterest: fd.get('unit') as string,
-      assignedSeName: fd.get('se') as string,
-      nextActionPlan: fd.get('action') as string,
-      notes: fd.get('notes') as string,
+      fullName,
+      phoneWhatsapp,
+      source,
+      unitOfInterest,
+      assignedSeName: String(fd.get('se') || ''),
+      nextActionPlan,
+      notes,
       bant: {
         budget: Number(fd.get('b') || 7),
         authority: Number(fd.get('a') || 7),
@@ -157,7 +173,28 @@ export function CrmPipelineView({
       },
     });
 
-    setLeads(getProjectLeads(projectId));
+    setLeads((prev) => [created, ...prev]);
+    try {
+      const res = await fetch('/api/pipeline/leads', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName,
+          phoneWa: phoneWhatsapp,
+          source,
+          unitInterest: unitOfInterest,
+          nextAction: nextActionPlan,
+          salesNotes: notes,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json?.ok) {
+        setDataSourceMode('db');
+      }
+    } catch {
+      /* fallback cache lokal bila offline */
+    }
     setShowAddLeadModal(false);
     setToastMessage(`Lead baru "${created.fullName}" berhasil ditambahkan.`);
   };

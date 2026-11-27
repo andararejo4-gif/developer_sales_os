@@ -445,8 +445,29 @@ async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, a
   }
   const raw = Buffer.concat(chunks).toString('utf8').trim();
   if (!raw) return {};
-  return JSON.parse(raw) as Record<string, any>;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw Object.assign(new Error('Payload JSON harus berupa objek.'), { statusCode: 400 });
+    }
+    return parsed as Record<string, any>;
+  } catch (err: any) {
+    if (err?.statusCode === 400) throw err;
+    throw Object.assign(new Error('Format JSON tidak valid.'), { statusCode: 400 });
+  }
 }
+
+const ALLOWED_CORS_ORIGINS = new Set([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:3040',
+  'http://127.0.0.1:3040',
+  'https://developerproperti.giivepro.com',
+  'https://demo.giivepro.com',
+  'https://sedemo.giivepro.com',
+]);
+
+const loginFailureTracker = new Map<string, { count: number; resetAt: number }>();
 
 function sendJson(
   res: http.ServerResponse,
@@ -455,9 +476,13 @@ function sendJson(
   extraHeaders: Record<string, string | string[]> = {}
 ): void {
   const body = JSON.stringify(payload);
+  const existingOrigin = res.getHeader('access-control-allow-origin');
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
-    'access-control-allow-origin': '*',
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'strict-origin-when-cross-origin',
+    ...(existingOrigin ? {} : { 'access-control-allow-origin': 'http://localhost:5173' }),
     'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     'access-control-allow-headers': 'Content-Type, Authorization, X-User-Email, X-User-Role',
     ...extraHeaders,
@@ -1161,6 +1186,15 @@ const liveSeLocationsMap = new Map<
 >();
 
 const server = http.createServer(async (req, res) => {
+  const reqOrigin = String(req.headers.origin || '').trim();
+  if (reqOrigin && ALLOWED_CORS_ORIGINS.has(reqOrigin)) {
+    res.setHeader('access-control-allow-origin', reqOrigin);
+    res.setHeader('access-control-allow-credentials', 'true');
+    res.setHeader('vary', 'Origin');
+  } else {
+    res.setHeader('access-control-allow-origin', 'https://developerproperti.giivepro.com');
+  }
+
   if (req.method === 'OPTIONS') {
     sendJson(res, 200, { ok: true });
     return;
@@ -1173,14 +1207,52 @@ const server = http.createServer(async (req, res) => {
     // 0. AUTHENTICATION ENDPOINTS (Server-side session + TOTP 2FA, F91)
     if (pathname === '/api/auth/login' && req.method === 'POST') {
       const body = await readJsonBody(req);
-      const resAuth = await startLogin(String(body.email || ''), String(body.password || ''), {
-        userAgent: String(req.headers['user-agent'] || ''),
-        ipAddress: String(req.socket?.remoteAddress || ''),
-      });
-      if (!resAuth.ok) {
-        sendJson(res, 401, { ok: false, error: resAuth.error });
+      const clientIp = String(req.socket?.remoteAddress || 'unknown');
+      const emailKey = `${clientIp}:${String(body.email || '').trim().toLowerCase()}`;
+      const ipKey = `ip:${clientIp}`;
+      const now = Date.now();
+      const recEmail = loginFailureTracker.get(emailKey);
+      const recIp = loginFailureTracker.get(ipKey);
+      if ((recEmail && recEmail.resetAt > now && recEmail.count >= 5) || (recIp && recIp.resetAt > now && recIp.count >= 10)) {
+        const lockResetAt = Math.max(recEmail?.resetAt || 0, recIp?.resetAt || 0);
+        const retryAfterSeconds = Math.max(1, Math.ceil((lockResetAt - now) / 1000));
+        sendJson(res, 429, {
+          ok: false,
+          error: `Terlalu banyak percobaan login gagal. Coba lagi dalam ${retryAfterSeconds} detik.`,
+          remainingAttempts: 0,
+          maxAttempts: 5,
+          isLastAttempt: false,
+          retryAfterSeconds,
+        });
         return;
       }
+
+      const resAuth = await startLogin(String(body.email || ''), String(body.password || ''), {
+        userAgent: String(req.headers['user-agent'] || ''),
+        ipAddress: clientIp,
+      });
+      if (!resAuth.ok) {
+        const windowEnd = now + 5 * 60 * 1000;
+        const nextEmail = recEmail && recEmail.resetAt > now ? { count: recEmail.count + 1, resetAt: recEmail.resetAt } : { count: 1, resetAt: windowEnd };
+        const nextIp = recIp && recIp.resetAt > now ? { count: recIp.count + 1, resetAt: recIp.resetAt } : { count: 1, resetAt: windowEnd };
+        loginFailureTracker.set(emailKey, nextEmail);
+        loginFailureTracker.set(ipKey, nextIp);
+        const remainingAttempts = Math.max(0, 5 - nextEmail.count);
+        const isLastAttempt = remainingAttempts === 1;
+        const msg = isLastAttempt
+          ? `${resAuth.error} Peringatan: sisa 1 kesempatan terakhir sebelum dikunci 5 menit!`
+          : `${resAuth.error} (Sisa ${remainingAttempts} dari 5 percobaan)`;
+        sendJson(res, 401, {
+          ok: false,
+          error: msg,
+          remainingAttempts,
+          maxAttempts: 5,
+          isLastAttempt,
+        });
+        return;
+      }
+      loginFailureTracker.delete(emailKey);
+      loginFailureTracker.delete(ipKey);
       if (!resAuth.requiresMfa) {
         sendJson(
           res,
@@ -4811,12 +4883,12 @@ const server = http.createServer(async (req, res) => {
         await Promise.all([
           sql`SELECT id, name, email, role, is_active FROM sales_os.app_users WHERE tenant_id = ${user.tenantId}`,
           sql`SELECT id, owner_se_email, owner_se_name, full_name, phone_wa, stage, grade, unit_interest, unit_price_idr, payment_scheme, lead_quality, spam_reason, is_in_pool, response_time_seconds, created_at, updated_at FROM sales_os.pipeline_leads WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC`,
-          sql`SELECT id, unit_code, cluster, status, price_idr FROM sales_os.project_units WHERE tenant_id = ${user.tenantId} ${projectIdParam ? sql`AND project_id = ${projectIdParam}` : sql``}`,
+          sql`SELECT id, unit_code, cluster, status, price_cash AS price_idr FROM sales_os.project_units WHERE tenant_id = ${user.tenantId} ${projectIdParam ? sql`AND project_id = ${projectIdParam}` : sql``}`,
           sql`SELECT id, applicant_name, unit_code, target_bank, plafond_amount, status, created_at FROM sales_os.bank_applications WHERE tenant_id = ${user.tenantId}`,
           sql`SELECT id, lead_name, doc_type, status FROM sales_os.vault_documents WHERE tenant_id = ${user.tenantId}`,
           sql`SELECT id, se_email, se_name, log_type, location_label, created_at FROM sales_os.se_field_logs ORDER BY created_at DESC LIMIT 200`,
           sql`SELECT * FROM sales_os.escalation_requests WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC`,
-          sql`SELECT id, actor_name, actor_role, summary, action_type, created_at FROM sales_os.activity_audit_logs WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC LIMIT 30`,
+          sql`SELECT id, actor_name, actor_role, summary, action AS action_type, created_at FROM sales_os.activity_audit_logs WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC LIMIT 30`,
           sql`SELECT * FROM sales_os.ad_campaigns WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC`,
         ]);
 
@@ -6741,6 +6813,10 @@ const server = http.createServer(async (req, res) => {
   } catch (err: unknown) {
     if (err instanceof CrossTenantViolationError) {
       sendJson(res, 403, { ok: false, error: err.message });
+      return;
+    }
+    if ((err as any)?.statusCode === 400) {
+      sendJson(res, 400, { ok: false, error: (err as Error).message || 'Permintaan tidak valid.' });
       return;
     }
     const message = err instanceof Error ? err.message : 'Terjadi kesalahan internal server.';

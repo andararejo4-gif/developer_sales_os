@@ -51,7 +51,7 @@ export async function loginWithServer(
 ): Promise<
   | { ok: true; requiresMfa: false; session: AuthSession }
   | { ok: true; requiresMfa: true; challenge: MfaChallenge }
-  | { ok: false; error: string }
+  | { ok: false; error: string; remainingAttempts?: number; maxAttempts?: number; isLastAttempt?: boolean; retryAfterSeconds?: number }
 > {
   try {
     const res = await fetch('/api/auth/login', {
@@ -62,7 +62,14 @@ export async function loginWithServer(
     });
     const data = await res.json();
     if (!res.ok || !data.ok) {
-      return { ok: false, error: data.error || 'Gagal masuk. Periksa email dan kata sandi.' };
+      return {
+        ok: false,
+        error: data.error || 'Gagal masuk. Periksa email dan kata sandi.',
+        remainingAttempts: typeof data.remainingAttempts === 'number' ? data.remainingAttempts : undefined,
+        maxAttempts: typeof data.maxAttempts === 'number' ? data.maxAttempts : undefined,
+        isLastAttempt: Boolean(data.isLastAttempt),
+        retryAfterSeconds: typeof data.retryAfterSeconds === 'number' ? data.retryAfterSeconds : undefined,
+      };
     }
     if (!data.requiresMfa && data.session) {
       saveAuthSession(data.session as AuthSession);

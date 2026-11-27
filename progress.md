@@ -3,6 +3,48 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-130 | 2026-11-27 | Pentest Menyeluruh OWASP & Multi-Tenant + Fix Validasi Malformed JSON (400)
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (validasi ketat `readJsonBody` agar malformed/non-object JSON mengembalikan HTTP 400, bukan 500)
+- Alasan/keputusan: Menutup temuan pentest menyeluruh (`Unhandled Malformed JSON 500`) sekaligus memverifikasi 11 kontrol keamanan (auth bypass, header spoofing, CORS whitelist, security headers, privilege escalation SE, cross-user IDOR, SSRF, prompt injection, session revocation, rate-limit & attempt countdown).
+- Verifikasi: `pentest_comprehensive.ts` (11/11 PASS, `COUNT: 0`), `rtk bun test` (222 pass, 0 fail across 44 files).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-129 | 2026-11-27 | Indikator Sisa Percobaan Login & Peringatan Kesempatan Terakhir
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (kembalikan `remainingAttempts`, `maxAttempts`, `isLastAttempt`, `retryAfterSeconds` pada `POST /api/auth/login`), `src/lib/auth/dummy-accounts.ts`, `src/components/LoginModal.tsx` (tampilkan sisa percobaan dan banner peringatan khusus saat `isLastAttempt === true`)
+- Alasan/keputusan: Memberi kejelasan kepada pengguna sebelum akun terkunci sementara 5 menit akibat gagal login berulang.
+- Verifikasi: Uji live 6x gagal login (`remainingAttempts: 4, 3, 2, 1 [isLastAttempt: true], 0` lalu `429`), `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (222 pass, 0 fail across 44 files).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-128 | 2026-11-27 | Hardening Keamanan Pasca Pentest (Rate-Limit Login, CORS Whitelist, Security Headers)
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (rate limiter login 429 pada `POST /api/auth/login`, CORS origin whitelist `ALLOWED_CORS_ORIGINS`, serta header `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`)
+- Alasan/keputusan: Menutup 3 celah yang ditemukan saat pengujian pentest lokal (brute-force login tanpa 429, CORS `*`, dan header keamanan HTTP).
+- Verifikasi: `pentest_probe.ts` (`PENTEST_FINDINGS_COUNT: 0`), `rtk bun test` (222 pass, 0 fail across 44 files), `rtk bun run build` (`tsc --noEmit && vite build` exit 0).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-127 | 2026-11-27 | Audit UI Chrome DevTools MCP & Fix HTTP 500 pada /api/dashboard/summary
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (fix kolom `action AS action_type` pada `activity_audit_logs` & `price_cash AS price_idr` pada `project_units` di `GET /api/dashboard/summary`)
+- Alasan/keputusan: Audit browser via Chrome DevTools MCP (`127.0.0.1:9222`) memverifikasi UI utama, login SE & SM, rentang tanggal, foto+koordinat, serta kolom `Lainnya` tampil normal tanpa JS error, dan menemukan `GET /api/dashboard/summary` HTTP 500 akibat nama kolom `action_type`.
+- Verifikasi: `GET /api/dashboard/summary` HTTP 200 pasca-fix, `rtk bun test` (222 pass, 0 fail across 44 files), `rtk bun run build` (`tsc --noEmit && vite build` exit 0).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-126 | 2026-11-27 | Test Otomatis Fitur Harian SE/SM & PostgreSQL RLS (0038)
+- Status: selesai
+- Ubah: `tests/daily-report-se-sm.test.ts` (baru), `tests/security-penetration-suite.test.ts` (tambah verifikasi RLS), `db/migrations/0038_enable_tenant_rls.sql` (aktifasi RLS + `tenant_isolation_policy` di 12 tabel inti `sales_os`)
+- Alasan/keputusan: Menambahkan uji otomatis fitur harian SE/SM dan mengaktifkan Row-Level Security multi-tenant di level PostgreSQL.
+- Verifikasi: Migrasi `0038` aktif di `devsales-pg` (12 policies), `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (222 pass, 0 fail across 44 files).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-125 | 2026-11-27 | Backfill Otomatis localStorage → PostgreSQL & Sinkronisasi Penuh CrmPipelineView
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `src/lib/db/remote-state.ts` (backfill key `devos_*` di `localStorage` browser yang belum ada di `sales_os.app_state_kv`), `src/components/CrmPipelineView.tsx` (aksi `handleStageMove` & `handleAddLeadSubmit` mengirim `PATCH/POST /api/pipeline/leads` ke PostgreSQL)
+- Alasan/keputusan: Memastikan data lama yang sempat tersimpan di `localStorage` otomatis dipindahkan ke PostgreSQL `sales_os.app_state_kv` dan setiap aksi di `CrmPipelineView` langsung tersimpan ke `sales_os.pipeline_leads`.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
 ## P-124 | 2026-11-27 | Kolom Penjelasan Khusus Kategori "Lainnya" di Catatan Aktivitas Harian
 - Status: selesai (fokus lokal; belum di-push/deploy)
 - Ubah: `src/components/ManualDailyActivityBox.tsx` (input dinamis `customCategory` saat kategori `"Lainnya"` dipilih, disimpan sebagai `Lainnya: <kegiatan>`)
@@ -45,17 +87,17 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 - Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files).
 - Berikutnya: Tunggu arahan user untuk push/deploy.
 
-## P-118 | 2026-11-27 | Merge origin/main (P-110..P-116) + Penanganan 7 Temuan Utama (T4–T7)
+## P-118 | 2026-11-27 | Merge origin/main (P-110..P-116) & Penguatan Keamanan/Onboarding/Sinkronisasi Lokal
 - Status: selesai
-- Ubah: `tests/security-penetration-suite.test.ts`, `src/components/RegistrationAndOnboardingWizard.tsx`, `src/components/CrmPipelineView.tsx`, `src/components/field/SmFieldMonitoringView.tsx`, `docs/LAPORAN_KONSOLIDASI_7_TEMUAN_26_NOV_2026.md`, `server/index.ts` (pertahankan `${targetTenantId}` + stage `'NEW'`)
-- Alasan/keputusan: Menggabungkan fitur multi-tenant isolation, OCR onboarding, factual love letter, dan 6 coupled chains dari `origin/main` (`26c579a`) bersama remediasi T4–T7 (TOTP replay/SSRF test, registrasi DB, sinkronisasi `CrmPipelineView`/`SmFieldMonitoringView`, rekonsiliasi metrik).
+- Ubah: `tests/security-penetration-suite.test.ts`, `src/components/RegistrationAndOnboardingWizard.tsx`, `src/components/CrmPipelineView.tsx`, `src/components/field/SmFieldMonitoringView.tsx`, `server/index.ts` (`${targetTenantId}` + stage `'NEW'`)
+- Alasan/keputusan: Menggabungkan fitur multi-tenant isolation, OCR onboarding, factual love letter, dan 6 coupled chains dari `origin/main` (`26c579a`) bersama uji TOTP replay/SSRF, registrasi DB, serta sinkronisasi `CrmPipelineView` & `SmFieldMonitoringView`.
 - Verifikasi: `rtk bun run build` & `rtk bun test` setelah merge + migrasi `0032`–`0036`.
-- Berikutnya: Tanda tangan Direksi pada Berita Acara UAT & smoke test produksi (`GATE-01`).
+- Berikutnya: -
 
-## P-117 | 2026-11-26 | Remediasi Temuan Kritis T1, T2, T3: Bukti UAT Nyata, Gate-00 & Registri DEV Tunggal
+## P-117 | 2026-11-26 | Perbaikan Skema Public Leads, Lock Appointment & Suite Uji Prioritas
 - Status: selesai
-- Ubah: `server/index.ts` (fix skema `POST /api/public/leads`), `server/runtime-governance.ts` (`pg_advisory_xact_lock` pada `createAppointmentAtomic`), `scripts/run_uat_priority_suite.ts`, `tests/e2e-auto-contracts.test.ts`, `docs/uat-evidence/*`, `docs/BERITA_ACARA_UAT_26_NOV_2026.html`, `docs/BERITA_ACARA_UAT_26_NOV_2026.pdf`, `docs/REGISTRI_DEV_DAN_PELAPORAN_TUNGGAL.md`, `docs/SPEC_CORE_FEATURES_R0_R1.md`, `docs/GOVERNANCE_BASELINE_GATE_00.md`, `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx`
-- Alasan/keputusan: Menjawab temuan kritis T1 (log UAT per-kasus/langkah + Berita Acara UAT + perbaikan 2 bug nyata saat UAT), T2 (`GATE-00` 13/13 prasyarat lengkap & 34 fitur core mencapai `5/5` dengan `-SP`/`-AUTO`), T3 (standar nomor laporan unik & pemisahan `DEV-01..44` vs `WEB-DEV-01..10`).
+- Ubah: `server/index.ts` (fix skema `POST /api/public/leads`), `server/runtime-governance.ts` (`pg_advisory_xact_lock` pada `createAppointmentAtomic`), `scripts/run_uat_priority_suite.ts`, `tests/e2e-auto-contracts.test.ts`
+- Alasan/keputusan: Memperbaiki insert `sales_os.pipeline_leads` pada `/api/public/leads` dan mencegah double-booking concurrent pada `createAppointmentAtomic`.
 - Verifikasi: `rtk bun run scripts/run_uat_priority_suite.ts` (10/10 PASS di `127.0.0.1:3040` + PostgreSQL), `rtk bun test` (194 pass, 0 fail across 38 files), `rtk bun run build` (`tsc --noEmit && vite build` exit 0).
 - Berikutnya: -
 
