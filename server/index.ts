@@ -1478,7 +1478,8 @@ const server = http.createServer(async (req, res) => {
       pathname.startsWith('/api/onboarding/') ||
       pathname.startsWith('/c/') ||
       pathname.startsWith('/api/se/media/') ||
-      pathname === '/api/se/social/callback';
+      pathname === '/api/se/social/callback' ||
+      (pathname === '/api/payments/midtrans/webhook' && req.method === 'POST');
 
     let user: {
       userId?: string;
