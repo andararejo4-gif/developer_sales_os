@@ -3,6 +3,13 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-152 | 2026-11-28 | Optimasi Kecepatan Absensi/GPS SM (Pisah Stream Foto dari JSON + Cache Instan + Skeleton Per Card)
+- Status: selesai & live di `hades`
+- Ubah: `server/index.ts` (tambah endpoint `GET /api/se/field-logs/:id/photo` dengan `Cache-Control: private, max-age=86400`; optimasi `GET /api/se/field-logs` pakai `Promise.all` & kirim URL foto ringan alih-alih blob base64 di JSON list), `src/components/FieldOpsModal.tsx` (cache instan `sessionStorage` + state `isLoadingFieldLogs`), `src/components/field/SmFieldMonitoringView.tsx` (animasi skeleton per card `animate-pulse` untuk tab Absensi & GPS + `loading="lazy"` pada thumbnail foto).
+- Alasan/keputusan: Sebelumnya `GET /api/se/field-logs` menarik 400 baris lengkap dengan base64 `photo_data_url` (puluhan MB JSON) sehingga halaman Absensi sangat lambat dan terlihat kosong; dengan pemisahan stream foto + cache + skeleton per card, render awal jauh lebih cepat dan responsif.
+- Verifikasi: `npm run build`, `bun build server/index.ts --outfile dist-server.mjs --target node`, deploy ke `hades` + restart PM2 & `/api/health` OK.
+- Berikutnya: -
+
 ## P-151 | 2026-11-28 | Halaman Pendaftaran Terpisah `/daftar/:plan` (Gold/Platinum/Diamond) — Antislop UI & Mobile-First
 - Status: selesai & live di `hades`
 - Ubah: `src/components/OnboardingRegistrationPage.tsx` (baru; halaman penuh 2-kolom editorial di desktop + reflow kartu & sticky action bar di HP/tablet, plan switcher Gold/Platinum/Diamond, 5 langkah OCR/GPS/Unit/Bayar Midtrans, draft persistence `dsos_onboarding_draft_v1`), `src/App.tsx` (rute lazy `/daftar` & `/daftar/:plan`), `src/components/v3/PublicHomepageV3.tsx` (arahkan seluruh tombol Beli Paket & Buat Surat Cinta ke `/daftar/:plan`).

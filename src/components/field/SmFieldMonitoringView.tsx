@@ -34,6 +34,7 @@ interface SmFieldMonitoringViewProps {
   baseCoords: { lat: number; lng: number };
   dbFieldLogs: DbFieldLogRow[];
   seMembers?: Array<{ email: string; name: string }>;
+  isLoading?: boolean;
   fallbackAttendance?: SeAttendanceRecord[];
   fallbackGpsLogs?: SeGpsTrackPoint[];
 }
@@ -72,6 +73,7 @@ export const SmFieldMonitoringView: React.FC<SmFieldMonitoringViewProps> = ({
   baseCoords,
   dbFieldLogs,
   seMembers = [],
+  isLoading = false,
 }) => {
   const [period, setPeriod] = useState<AttendancePeriod>('harian');
   const [selectedSeEmail, setSelectedSeEmail] = useState<string | null>(null);
@@ -288,6 +290,7 @@ export const SmFieldMonitoringView: React.FC<SmFieldMonitoringViewProps> = ({
                           <img
                             src={log.photo_data_url}
                             alt="Bukti Absen"
+                            loading="lazy"
                             className="size-12 rounded-xl object-cover border border-warmborder"
                           />
                         </button>
@@ -376,7 +379,36 @@ export const SmFieldMonitoringView: React.FC<SmFieldMonitoringViewProps> = ({
 
         {/* List SE */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {attendanceSummaryPerSe.map((se) => (
+          {isLoading && attendanceSummaryPerSe.length === 0
+            ? Array.from({ length: 6 }).map((_, idx) => (
+                <div
+                  key={`absen-skel-${idx}`}
+                  className="p-4 rounded-2xl bg-white border border-warmborder space-y-3 animate-pulse"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="h-4 w-32 rounded-md bg-sandstone" />
+                      <div className="h-3 w-44 rounded-md bg-sandstone/70" />
+                    </div>
+                    <div className="h-5 w-20 rounded-full bg-sandstone" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-sandstone/50">
+                    <div className="space-y-1.5">
+                      <div className="h-2.5 w-14 rounded bg-warmborder/70" />
+                      <div className="h-4 w-16 rounded bg-warmborder" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="h-2.5 w-14 rounded bg-warmborder/70" />
+                      <div className="h-4 w-16 rounded bg-warmborder" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-warmborder/60">
+                    <div className="h-3 w-20 rounded bg-sandstone" />
+                    <div className="h-3 w-20 rounded bg-sandstone" />
+                  </div>
+                </div>
+              ))
+            : attendanceSummaryPerSe.map((se) => (
             <button
               key={se.email}
               type="button"
@@ -647,7 +679,31 @@ export const SmFieldMonitoringView: React.FC<SmFieldMonitoringViewProps> = ({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {gpsSummaryPerSe.map((se) => (
+        {isLoading && gpsSummaryPerSe.length === 0
+          ? Array.from({ length: 6 }).map((_, idx) => (
+              <div
+                key={`gps-skel-${idx}`}
+                className="p-4 rounded-2xl bg-white border border-warmborder space-y-3 animate-pulse"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="h-4 w-32 rounded-md bg-sandstone" />
+                    <div className="h-3 w-24 rounded-md bg-sandstone/70" />
+                  </div>
+                  <div className="h-5 w-16 rounded-full bg-sandstone" />
+                </div>
+                <div className="p-3 rounded-xl bg-sandstone/40 border border-warmborder space-y-2">
+                  <div className="h-3.5 w-44 rounded bg-warmborder/80" />
+                  <div className="h-3 w-36 rounded bg-warmborder/60" />
+                  <div className="h-2.5 w-28 rounded bg-warmborder/50" />
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t border-warmborder/60">
+                  <div className="h-3 w-24 rounded bg-sandstone" />
+                  <div className="h-3 w-24 rounded bg-sandstone" />
+                </div>
+              </div>
+            ))
+          : gpsSummaryPerSe.map((se) => (
           <button
             key={se.email}
             type="button"

@@ -258,8 +258,24 @@ export function FieldOpsModal({
     };
   }, [isRadarTracking, userRole, activeUserName, effectiveCoords.lat, effectiveCoords.lng, effectiveProjectName]);
 
-  const [dbFieldLogs, setDbFieldLogs] = useState<any[]>([]);
-  const [seMembers, setSeMembers] = useState<Array<{ email: string; name: string }>>([]);
+  const fieldLogsCacheKey = `dsos_field_logs_cache_v1_${userRole}_${userEmail.toLowerCase()}`;
+  const initialCachedField = (() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = sessionStorage.getItem(fieldLogsCacheKey);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const [dbFieldLogs, setDbFieldLogs] = useState<any[]>(
+    Array.isArray(initialCachedField?.logs) ? initialCachedField.logs : []
+  );
+  const [seMembers, setSeMembers] = useState<Array<{ email: string; name: string }>>(
+    Array.isArray(initialCachedField?.seMembers) ? initialCachedField.seMembers : []
+  );
+  const [isLoadingFieldLogs, setIsLoadingFieldLogs] = useState<boolean>(!initialCachedField);
   const liveRadarStorageKey = `devos_live_radar_se_${activeProjectId}`;
   const offlineLogsStorageKey = `devos_offline_field_logs_${activeProjectId}`;
 
@@ -359,9 +375,24 @@ export function FieldOpsModal({
         if (json.ok && Array.isArray(json.seMembers)) {
           setSeMembers(json.seMembers);
         }
+        if (json.ok) {
+          try {
+            sessionStorage.setItem(
+              fieldLogsCacheKey,
+              JSON.stringify({
+                logs: Array.isArray(json.logs) ? json.logs : [],
+                seMembers: Array.isArray(json.seMembers) ? json.seMembers : [],
+              })
+            );
+          } catch {
+            /* ignore */
+          }
+        }
       }
     } catch {
       /* ignore */
+    } finally {
+      setIsLoadingFieldLogs(false);
     }
   };
 
@@ -1025,6 +1056,7 @@ export function FieldOpsModal({
                     baseCoords={effectiveCoords}
                     dbFieldLogs={dbFieldLogs}
                     seMembers={seMembers}
+                    isLoading={isLoadingFieldLogs}
                   />
                 </>
               )}
@@ -1268,6 +1300,7 @@ export function FieldOpsModal({
                 baseCoords={effectiveCoords}
                 dbFieldLogs={dbFieldLogs}
                 seMembers={seMembers}
+                isLoading={isLoadingFieldLogs}
               />
             </div>
           )}

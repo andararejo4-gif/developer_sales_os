@@ -2905,46 +2905,98 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (pathname.startsWith('/api/se/field-logs/') && pathname.endsWith('/photo') && req.method === 'GET') {
+      const logId = decodeURIComponent(
+        pathname.replace('/api/se/field-logs/', '').replace(/\/photo$/, '')
+      ).trim();
+      const rows = await sql`
+        SELECT l.photo_data_url
+        FROM sales_os.se_field_logs l
+        WHERE l.id = ${logId}
+          AND LOWER(l.se_email) IN (
+            SELECT LOWER(email) FROM sales_os.app_users WHERE tenant_id = ${user.tenantId}
+          )
+        LIMIT 1
+      `;
+      const dataUrl = String(rows[0]?.photo_data_url || '');
+      if (!dataUrl) {
+        sendJson(res, 404, { ok: false, error: 'Foto tidak ditemukan.' });
+        return;
+      }
+      const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        const mime = match[1] || 'image/jpeg';
+        const buf = Buffer.from(match[2], 'base64');
+        res.writeHead(200, {
+          'Content-Type': mime,
+          'Content-Length': buf.length,
+          'Cache-Control': 'private, max-age=86400',
+        });
+        res.end(buf);
+        return;
+      }
+      res.writeHead(302, { Location: dataUrl });
+      res.end();
+      return;
+    }
+
     if (pathname === '/api/se/field-logs' && req.method === 'GET') {
       const isManagerRole = user.role !== 'SE';
       const filterEmail = String(parsedUrl.searchParams.get('seEmail') || '').trim().toLowerCase();
-      const seMemberRows = await sql`
-        SELECT email, name
-        FROM sales_os.app_users
-        WHERE tenant_id = ${user.tenantId}
-          AND role = 'SE'
-          AND is_active = TRUE
-        ORDER BY name ASC
-      `;
+      const [seMemberRows, rows] = await Promise.all([
+        sql`
+          SELECT email, name
+          FROM sales_os.app_users
+          WHERE tenant_id = ${user.tenantId}
+            AND role = 'SE'
+            AND is_active = TRUE
+          ORDER BY name ASC
+        `,
+        isManagerRole
+          ? filterEmail
+            ? sql`
+                SELECT id, se_email, se_name, log_type, title, location_label,
+                       lat, lng, duration_seconds, outcome, notes, created_at,
+                       CASE WHEN photo_data_url IS NOT NULL AND photo_data_url <> ''
+                            THEN '/api/se/field-logs/' || id::text || '/photo'
+                            ELSE NULL END AS photo_data_url
+                FROM sales_os.se_field_logs
+                WHERE LOWER(se_email) = ${filterEmail}
+                  AND LOWER(se_email) IN (
+                    SELECT LOWER(email) FROM sales_os.app_users WHERE tenant_id = ${user.tenantId}
+                  )
+                ORDER BY created_at DESC
+                LIMIT 200
+              `
+            : sql`
+                SELECT id, se_email, se_name, log_type, title, location_label,
+                       lat, lng, duration_seconds, outcome, notes, created_at,
+                       CASE WHEN photo_data_url IS NOT NULL AND photo_data_url <> ''
+                            THEN '/api/se/field-logs/' || id::text || '/photo'
+                            ELSE NULL END AS photo_data_url
+                FROM sales_os.se_field_logs
+                WHERE LOWER(se_email) IN (
+                  SELECT LOWER(email) FROM sales_os.app_users WHERE tenant_id = ${user.tenantId}
+                )
+                ORDER BY created_at DESC
+                LIMIT 200
+              `
+          : sql`
+              SELECT id, se_email, se_name, log_type, title, location_label,
+                     lat, lng, duration_seconds, outcome, notes, created_at,
+                     CASE WHEN photo_data_url IS NOT NULL AND photo_data_url <> ''
+                          THEN '/api/se/field-logs/' || id::text || '/photo'
+                          ELSE NULL END AS photo_data_url
+              FROM sales_os.se_field_logs
+              WHERE LOWER(se_email) = ${user.email.toLowerCase()}
+              ORDER BY created_at DESC
+              LIMIT 80
+            `,
+      ]);
       const seMembers = seMemberRows.map((u: any) => ({
         email: String(u.email).toLowerCase(),
         name: String(u.name),
       }));
-      const rows = isManagerRole
-        ? filterEmail
-          ? await sql`
-              SELECT * FROM sales_os.se_field_logs
-              WHERE LOWER(se_email) = ${filterEmail}
-                AND LOWER(se_email) IN (
-                  SELECT LOWER(email) FROM sales_os.app_users WHERE tenant_id = ${user.tenantId}
-                )
-              ORDER BY created_at DESC
-              LIMIT 400
-            `
-          : await sql`
-              SELECT * FROM sales_os.se_field_logs
-              WHERE LOWER(se_email) IN (
-                SELECT LOWER(email) FROM sales_os.app_users WHERE tenant_id = ${user.tenantId}
-              )
-              ORDER BY created_at DESC
-              LIMIT 400
-            `
-        : await sql`
-            SELECT * FROM sales_os.se_field_logs
-            WHERE LOWER(se_email) = ${user.email.toLowerCase()}
-            ORDER BY created_at DESC
-            LIMIT 100
-          `;
       sendJson(res, 200, { ok: true, logs: rows, seMembers });
       return;
     }
