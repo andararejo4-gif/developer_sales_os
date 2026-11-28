@@ -3,6 +3,20 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-145 | 2026-11-28 | Penutupan Kebocoran Lintas Tenant pada Field Ops, Live Location & Laporan Harian
+- Status: selesai
+- Ubah: `server/index.ts` (tambah isolasi `tenantId` pada `liveSeLocationsMap` di `/api/se/live-location`, serta filter `EXISTS app_users.tenant_id = user.tenantId` pada `GET /api/se/field-logs`, `GET /api/dashboard/summary`, dan `GET /api/sm/daily-report` untuk `se_field_logs` & `se_daily_notes`)
+- Alasan/keputusan: Mencegah data GPS live, absensi/foto lapangan, dan catatan harian SE bocor ke manager/admin tenant lain.
+- Verifikasi: `rtk bun run build` & `rtk bun test tests/security-penetration-suite.test.ts`
+- Berikutnya: -
+
+## P-144 | 2026-11-28 | Sinkronisasi Data DB Lintas Role & Seed Database Lokal
+- Status: selesai
+- Ubah: `src/App.tsx` (sambungkan `SeMobileScorecardList` ke `realScorecardRows`/`realSummary.seTeamPerformance`, `DIGITAL_MARKETING` ke `realSummary.campaigns`, & hapus fallback dummy `BOOKING_TRANSACTIONS`), `scripts/seed-local-db.ts` (baru; seed idempotent `ad_campaigns`, `appointments`, `bank_applications`, `vault_documents`, `complaint_tickets`, `creator_profiles`, `creator_content_metrics`, `creator_ledger_entries`, `smart_links`, `payment_invoices`, `escalation_requests`, & `se_field_logs`)
+- Alasan/keputusan: Menghilangkan data statis/dummy pada dashboard lintas role dan memastikan DB lokal terisi data awal realistis untuk semua role.
+- Verifikasi: `bun run scripts/seed-local-db.ts` & `rtk bun run build`
+- Berikutnya: -
+
 ## P-143 | 2026-11-28 | Dark Theme & Toggle Light/Dark
 - Status: selesai
 - Ubah: `index.html` (inisialisasi class `dark` dari `localStorage.devos_theme`), `src/index.css` (override token `html.dark`, permukaan kartu/modal/input/Leaflet, serta animasi riak air 3D smooth `theme-radial-reveal` + 3 cincin konsentris `theme-teardrop-wave`), `src/App.tsx` (state `isDarkTheme`, `toggleTheme` dari pusat koordinat tombol, & tombol toggle `Sun`/`Moon`)

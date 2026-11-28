@@ -1228,6 +1228,7 @@ async function buildRealSeDashboardData(seEmail: string, seName: string) {
 const liveSeLocationsMap = new Map<
   string,
   {
+    tenantId: string;
     seEmail: string;
     seName: string;
     role: string;
@@ -2861,7 +2862,9 @@ const server = http.createServer(async (req, res) => {
     // 9. FIELD OPS (ABSEN, GPS + FOTO, LOG PANGGILAN) -> REAL POSTGRESQL sales_os
     // Endpoint ringan in-memory untuk Live Location SE (ala WA Live Location, tanpa mengotori counter canvassing)
     if (pathname === '/api/se/live-location' && req.method === 'GET') {
-      const locations = Array.from(liveSeLocationsMap.values());
+      const locations = Array.from(liveSeLocationsMap.values()).filter(
+        (loc) => loc.tenantId === user.tenantId
+      );
       sendJson(res, 200, { ok: true, locations });
       return;
     }
@@ -2875,6 +2878,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const entry = {
+        tenantId: user.tenantId,
         seEmail: user.email.toLowerCase(),
         seName: user.name,
         role: user.role,
@@ -2901,19 +2905,27 @@ const server = http.createServer(async (req, res) => {
       const rows = isManagerRole
         ? filterEmail
           ? await sql`
-              SELECT * FROM sales_os.se_field_logs
-              WHERE se_email = ${filterEmail}
-              ORDER BY created_at DESC
+              SELECT l.* FROM sales_os.se_field_logs l
+              WHERE LOWER(l.se_email) = ${filterEmail}
+                AND EXISTS (
+                  SELECT 1 FROM sales_os.app_users u
+                  WHERE LOWER(u.email) = LOWER(l.se_email) AND u.tenant_id = ${user.tenantId}
+                )
+              ORDER BY l.created_at DESC
               LIMIT 400
             `
           : await sql`
-              SELECT * FROM sales_os.se_field_logs
-              ORDER BY created_at DESC
+              SELECT l.* FROM sales_os.se_field_logs l
+              WHERE EXISTS (
+                SELECT 1 FROM sales_os.app_users u
+                WHERE LOWER(u.email) = LOWER(l.se_email) AND u.tenant_id = ${user.tenantId}
+              )
+              ORDER BY l.created_at DESC
               LIMIT 400
             `
         : await sql`
             SELECT * FROM sales_os.se_field_logs
-            WHERE se_email = ${user.email}
+            WHERE LOWER(se_email) = LOWER(${user.email})
             ORDER BY created_at DESC
             LIMIT 100
           `;
@@ -4941,7 +4953,7 @@ const server = http.createServer(async (req, res) => {
           sql`SELECT id, unit_code, cluster, status, price_cash AS price_idr FROM sales_os.project_units WHERE tenant_id = ${user.tenantId} ${projectIdParam ? sql`AND project_id = ${projectIdParam}` : sql``}`,
           sql`SELECT id, applicant_name, unit_code, target_bank, plafond_amount, status, created_at FROM sales_os.bank_applications WHERE tenant_id = ${user.tenantId}`,
           sql`SELECT id, lead_name, doc_type, status FROM sales_os.vault_documents WHERE tenant_id = ${user.tenantId}`,
-          sql`SELECT id, se_email, se_name, log_type, location_label, created_at FROM sales_os.se_field_logs ORDER BY created_at DESC LIMIT 200`,
+          sql`SELECT l.id, l.se_email, l.se_name, l.log_type, l.location_label, l.created_at FROM sales_os.se_field_logs l WHERE EXISTS (SELECT 1 FROM sales_os.app_users u WHERE LOWER(u.email) = LOWER(l.se_email) AND u.tenant_id = ${user.tenantId}) ORDER BY l.created_at DESC LIMIT 200`,
           sql`SELECT * FROM sales_os.escalation_requests WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC`,
           sql`SELECT id, actor_name, actor_role, summary, action AS action_type, created_at FROM sales_os.activity_audit_logs WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC LIMIT 30`,
           sql`SELECT * FROM sales_os.ad_campaigns WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC`,
@@ -5688,9 +5700,13 @@ const server = http.createServer(async (req, res) => {
                 AND report_date <= ${endDate}::date
             `
           : sql`
-              SELECT * FROM sales_os.se_daily_notes
-              WHERE report_date >= ${startDate}::date
-                AND report_date <= ${endDate}::date
+              SELECT n.* FROM sales_os.se_daily_notes n
+              WHERE n.report_date >= ${startDate}::date
+                AND n.report_date <= ${endDate}::date
+                AND EXISTS (
+                  SELECT 1 FROM sales_os.app_users u
+                  WHERE LOWER(u.email) = LOWER(n.se_email) AND u.tenant_id = ${user.tenantId}
+                )
             `,
         restrictToSelfSe
           ? sql`
@@ -5702,11 +5718,15 @@ const server = http.createServer(async (req, res) => {
               ORDER BY created_at ASC
             `
           : sql`
-              SELECT se_email, se_name, log_type, title, location_label, lat, lng, photo_data_url, created_at
-              FROM sales_os.se_field_logs
-              WHERE (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
-                AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
-              ORDER BY created_at ASC
+              SELECT l.se_email, l.se_name, l.log_type, l.title, l.location_label, l.lat, l.lng, l.photo_data_url, l.created_at
+              FROM sales_os.se_field_logs l
+              WHERE (l.created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
+                AND (l.created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
+                AND EXISTS (
+                  SELECT 1 FROM sales_os.app_users u
+                  WHERE LOWER(u.email) = LOWER(l.se_email) AND u.tenant_id = ${user.tenantId}
+                )
+              ORDER BY l.created_at ASC
             `,
         restrictToSelfSe
           ? sql`

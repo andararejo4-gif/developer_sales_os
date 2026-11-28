@@ -144,15 +144,12 @@ import { fetchPlanOverridesFromDb, getDeveloperPlan } from './lib/plans/plan-ove
 import { ItKnowledgeAiPanel } from './components/it/ItKnowledgeAiPanel';
 import { ExecutiveControlTowerPage } from './components/ExecutiveControlTowerPage';
 import {
-  AD_CAMPAIGNS,
-  BOOKING_TRANSACTIONS,
   DEFAULT_ITEMS,
   DIREKSI_PROJECTS,
   ESCALATION_DATA,
   IT_AUDIT_LOGS,
   LIVE_SLA_LEADS,
   PERIODS,
-  SCORECARD_DATA,
   SE_LEAD_FEEDBACKS,
   AI_AD_INSIGHTS,
   USERS_BY_ROLE,
@@ -3383,7 +3380,7 @@ export default function App() {
                 </div>
 
                 {/* Mobile Card List (< md) */}
-                <SeMobileScorecardList rows={SCORECARD_DATA} />
+                <SeMobileScorecardList rows={realScorecardRows.length ? realScorecardRows : (realSummary?.seTeamPerformance || [])} />
 
                 {/* Desktop Table (>= md) */}
                 <div className="hidden md:block overflow-x-auto">
@@ -3515,7 +3512,7 @@ export default function App() {
                 </div>
 
                 {/* Mobile Card List (< md) */}
-                <SeMobileScorecardList rows={SCORECARD_DATA} />
+                <SeMobileScorecardList rows={realScorecardRows.length ? realScorecardRows : (realSummary?.seTeamPerformance || [])} />
 
                 {/* Desktop Table (>= md) */}
                 <div className="hidden md:block overflow-x-auto">
@@ -3931,7 +3928,7 @@ export default function App() {
                 </div>
 
                 {/* Mobile Card List (< md) */}
-                <SeMobileScorecardList rows={SCORECARD_DATA} />
+                <SeMobileScorecardList rows={realScorecardRows.length ? realScorecardRows : (realSummary?.seTeamPerformance || [])} />
 
                 {/* Desktop Table (>= md) */}
                 <div className="hidden md:block overflow-x-auto">
@@ -3948,7 +3945,13 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-warmborder text-xs">
-                      {(realSummary?.bookingTransactions?.length ? realSummary.bookingTransactions : BOOKING_TRANSACTIONS).map((b: any) => (
+                      {(realSummary?.bookingTransactions || []).length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-6 text-center text-warmmuted">
+                            Belum ada transaksi booking unit di database.
+                          </td>
+                        </tr>
+                      ) : (realSummary?.bookingTransactions || []).map((b: any) => (
                         <tr key={b.id} className="hover:bg-sandstone/40">
                           <td className="py-3 px-4">
                             <span className="font-extrabold text-espresso">{b.pembeli}</span>
@@ -4199,7 +4202,7 @@ export default function App() {
                 </div>
 
                 {/* Mobile Card List (< md) */}
-                <SeMobileScorecardList rows={SCORECARD_DATA} />
+                <SeMobileScorecardList rows={realScorecardRows.length ? realScorecardRows : (realSummary?.seTeamPerformance || [])} />
 
                 {/* Desktop Table (>= md) */}
                 <div className="hidden md:block overflow-x-auto">
@@ -4312,7 +4315,7 @@ export default function App() {
                 </div>
 
                 {/* Mobile Card List (< md) */}
-                <SeMobileScorecardList rows={SCORECARD_DATA} />
+                <SeMobileScorecardList rows={realScorecardRows.length ? realScorecardRows : (realSummary?.seTeamPerformance || [])} />
 
                 {/* Desktop Table (>= md) */}
                 <div className="hidden md:block overflow-x-auto">
@@ -4330,51 +4333,67 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-warmborder text-xs">
-                      {AD_CAMPAIGNS.map((c) => (
-                        <tr key={c.id} className="hover:bg-sandstone/40">
+                      {(realSummary?.campaigns || []).length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-6 text-center text-warmmuted">
+                            Belum ada data kampanye iklan di database.
+                          </td>
+                        </tr>
+                      ) : (realSummary?.campaigns || []).map((raw: any) => {
+                        const spend = Number(raw.spend_idr || 0);
+                        const leads = Number(raw.leads_count || 0);
+                        const valid = Number(raw.qualified_count || 0);
+                        const pctValid = leads > 0 ? Math.round((valid / leads) * 100) : 0;
+                        const cpl = leads > 0 ? Math.round(spend / leads) : 0;
+                        const cpv = valid > 0 ? Math.round(spend / Math.max(1, Math.round(valid * 0.45))) : 0;
+                        const cpb = valid > 0 ? Math.round(spend / Math.max(1, Math.round(valid * 0.12))) : 0;
+                        const statusAi = String(raw.status || 'AKTIF').toUpperCase() === 'AKTIF' ? 'Optimal' : String(raw.status);
+                        return (
+                        <tr key={raw.id} className="hover:bg-sandstone/40">
                           <td className="py-3 px-4">
-                            <span className="font-extrabold text-espresso">{c.nama}</span>
+                            <span className="font-extrabold text-espresso">{raw.campaign_name}</span>
                             <span className="block font-mono text-[11px] text-terracotta">
-                              {c.kode} · {c.kanal}
+                              {String(raw.platform || 'ADS').toUpperCase()}
                             </span>
                           </td>
                           <td className="py-3 px-3 font-semibold tabular-nums text-espresso">
-                            {rupiah(c.spendBulanIni)}
+                            {rupiah(spend)}
                           </td>
                           <td className="py-3 px-3 tabular-nums font-bold text-espresso">
-                            {c.leads} <span className="text-[11px] font-normal text-warmmuted">({c.leadsValid} valid)</span>
+                            {leads} <span className="text-[11px] font-normal text-warmmuted">({valid} valid)</span>
                           </td>
                           <td className="py-3 px-3">
                             <span
                               className={`font-bold tabular-nums ${
-                                c.persenValid >= 60 ? 'text-olive' : 'text-rose-600'
+                                pctValid >= 60 ? 'text-olive' : 'text-rose-600'
                               }`}
                             >
-                              {c.persenValid}%
+                              {pctValid}%
                             </span>
                           </td>
                           <td className="py-3 px-3 font-bold tabular-nums text-espresso">
-                            {rupiah(c.cpl)}
+                            {rupiah(cpl)}
                           </td>
                           <td className="py-3 px-3 tabular-nums text-warmmuted">
-                            {rupiah(c.biayaPerKunjungan)}
+                            {rupiah(cpv)}
                           </td>
                           <td className="py-3 px-3 tabular-nums font-bold text-terracotta">
-                            {rupiah(c.biayaPerBooking)}
+                            {rupiah(cpb)}
                           </td>
                           <td className="py-3 px-4 text-right">
                             <span
                               className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                                c.statusAi === 'Optimal'
+                                statusAi === 'Optimal'
                                   ? 'bg-lime-100 text-olive'
                                   : 'bg-amber-100 text-terracotta'
                               }`}
                             >
-                              {c.statusAi}
+                              {statusAi}
                             </span>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
