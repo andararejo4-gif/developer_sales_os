@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { sql } from './db';
 import { appendAuditLog, grantTopupLotAtomic } from './aic-ledger';
 
-export type PaymentInvoiceType = 'AIC_TOPUP' | 'BOOKING_FEE';
+export type PaymentInvoiceType = 'AIC_TOPUP' | 'BOOKING_FEE' | 'PLAN_SUBSCRIPTION';
 export type PaymentInvoiceStatus = 'PENDING' | 'PAID' | 'EXPIRED' | 'REFUNDED';
 
 export interface CreateInvoiceInput {
@@ -111,7 +111,38 @@ export class SandboxDummyPaymentAdapter implements PaymentGatewayAdapter {
     const nextInv = updated[0];
 
     if (params.targetStatus === 'PAID') {
-      if (inv.invoice_type === 'AIC_TOPUP' && Number(inv.aic_amount || 0) > 0) {
+      if (inv.invoice_type === 'PLAN_SUBSCRIPTION') {
+        const ref = String(inv.reference_code || '').toUpperCase();
+        const planCode = ref.includes('DIAMOND') ? 'diamond' : ref.includes('GOLD') ? 'gold' : 'platinum';
+        await sql`
+          UPDATE sales_os.tenants
+          SET plan_code = ${planCode},
+              status = 'ACTIVE',
+              updated_at = NOW()
+          WHERE tenant_id = ${params.tenantId}
+        `;
+        if (Number(inv.aic_amount || 0) > 0) {
+          const exp = new Date();
+          exp.setMonth(exp.getMonth() + 3);
+          await grantTopupLotAtomic({
+            tenantId: params.tenantId,
+            billableEventId: `pg_plan_${inv.invoice_no}`,
+            lotCode: `PLAN-${planCode.toUpperCase()}-${inv.invoice_no}`,
+            amountAic: Number(inv.aic_amount),
+            expiresAt: exp.toISOString(),
+            actorEmail: params.actorEmail,
+            actorRole: 'SYSTEM',
+          });
+          await sql`
+            INSERT INTO sales_os.tenant_aic_wallets (tenant_id, balance_aic, total_aic_granted)
+            VALUES (${params.tenantId}, ${Number(inv.aic_amount)}, ${Number(inv.aic_amount)})
+            ON CONFLICT (tenant_id) DO UPDATE SET
+              balance_aic = sales_os.tenant_aic_wallets.balance_aic + ${Number(inv.aic_amount)},
+              total_aic_granted = sales_os.tenant_aic_wallets.total_aic_granted + ${Number(inv.aic_amount)},
+              updated_at = NOW()
+          `;
+        }
+      } else if (inv.invoice_type === 'AIC_TOPUP' && Number(inv.aic_amount || 0) > 0) {
         const exp = new Date();
         exp.setMonth(exp.getMonth() + 3);
         await grantTopupLotAtomic({

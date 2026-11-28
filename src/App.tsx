@@ -118,6 +118,7 @@ import {
   RefreshCw,
   Search,
   Download,
+  FileText,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -135,6 +136,7 @@ import { CustomerComplaintsPage } from './components/CustomerComplaintsPage';
 import { BankSubmissionWorkflowPage } from './components/BankSubmissionWorkflowPage';
 import { OrgUserManagementModal } from './components/OrgUserManagementModal';
 import { OrgUserManagementPage } from './components/OrgUserManagementPage';
+import { TransactionsInvoicesPage } from './components/billing/TransactionsInvoicesPage';
 import { R2OperationsWorkbench } from './components/operations/R2OperationsWorkbench';
 import { fetchPlanOverridesFromDb, getDeveloperPlan } from './lib/plans/plan-override';
 import { ItKnowledgeAiPanel } from './components/it/ItKnowledgeAiPanel';
@@ -1361,6 +1363,18 @@ export default function App() {
               <ShieldAlert className="size-4 shrink-0" />
               <span>Eskalasi Diskon &amp; Refund</span>
             </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('transaksi'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'transaksi'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <FileText className="size-4 shrink-0" />
+              <span>Transaksi &amp; Invoice</span>
+            </button>
           </>
         )}
 
@@ -1418,6 +1432,18 @@ export default function App() {
             >
               <Building2 className="size-4 shrink-0" />
               <span>Pengajuan KPR Multi-Bank</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleItemClick(() => openView('transaksi'))}
+              className={`w-full flex items-center gap-3 h-10 px-3.5 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                activeView === 'transaksi'
+                  ? 'bg-amber-50 text-terracotta font-bold'
+                  : 'text-warmmuted font-medium hover:bg-sandstone hover:text-espresso'
+              }`}
+            >
+              <FileText className="size-4 shrink-0" />
+              <span>Transaksi &amp; Invoice</span>
             </button>
           </>
         )}
@@ -2513,6 +2539,14 @@ export default function App() {
             />
           )}
 
+          {activeView === 'transaksi' && (
+            <TransactionsInvoicesPage
+              projectId={activeProject.id}
+              projectName={activeProject.nama}
+              userRole={role}
+            />
+          )}
+
           {/* ========================================================================= */}
           {/* ROLE: REFERRAL PARTNER & SALES PARTNER DASHBOARD VIEW */}
           {/* ========================================================================= */}
@@ -3487,14 +3521,24 @@ export default function App() {
                     Status Data: <strong>Terkonsolidasi Realtime · Terverifikasi Keuangan</strong>
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsDireksiGlossaryOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-900 font-bold hover:bg-emerald-100/50 transition-colors cursor-pointer text-[11px] self-start md:self-auto shadow-2xs"
-                >
-                  <BookOpen className="size-3.5" />
-                  Glosarium Metrik Tunggal
-                </button>
+                <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => openView('transaksi')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-terracotta text-white font-bold hover:bg-terracotta/90 transition-colors cursor-pointer text-[11px] shadow-2xs"
+                  >
+                    <FileText className="size-3.5" />
+                    Transaksi &amp; Invoice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsDireksiGlossaryOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-900 font-bold hover:bg-emerald-100/50 transition-colors cursor-pointer text-[11px] shadow-2xs"
+                  >
+                    <BookOpen className="size-3.5" />
+                    Glosarium Metrik Tunggal
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -3786,6 +3830,13 @@ export default function App() {
                       className="px-3.5 py-2 rounded-xl bg-espresso hover:bg-espresso/90 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
                     >
                       <Users className="size-3.5" /> Kelola User (6 Role)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openView('transaksi')}
+                      className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-terracotta border border-amber-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <FileText className="size-3.5" /> Transaksi &amp; Invoice
                     </button>
                     <button
                       onClick={() => setIsBankAccountsModalOpen(true)}

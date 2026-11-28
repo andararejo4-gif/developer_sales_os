@@ -18,6 +18,7 @@ import { validateLoveLetter } from '../lib/love-letter/validator';
 import { generateLoveLetterDocx } from '../lib/love-letter/docx-exporter';
 import { generateLoveLetterHtml } from '../lib/love-letter/html-exporter';
 import { loginWithServer } from '../lib/auth/dummy-accounts';
+import { InvoiceDetailModal, type PaymentInvoiceRecord } from './billing/TransactionsInvoicesPage';
 
 interface WizardProps {
   isOpen: boolean;
@@ -74,7 +75,10 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({
     slug: string;
     invoiceNo: string;
     initialAic: number;
+    planLabel: string;
+    amountIdr: number;
   } | null>(null);
+  const [issuedInvoice, setIssuedInvoice] = useState<PaymentInvoiceRecord | null>(null);
 
   const [formData, setFormData] = useState({
     developerName: 'PT Andara Rejo Makmur',
@@ -234,11 +238,30 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({
       });
       const json = await res.json();
       if (res.ok && json.ok) {
+        const planLabel = String(json.planLabel || planMeta.name);
+        const amountIdr = Number(json.amountIdr || (selectedPlan === 'diamond' ? 19_900_000 : selectedPlan === 'gold' ? 4_900_000 : 9_900_000));
+        const initialAic = Number(json.initialAic || 0);
+        const invoiceNo = String(json.invoiceNo);
         setActivationResult({
           tenantId: String(json.tenantId),
           slug: String(json.slug),
-          invoiceNo: String(json.invoiceNo),
-          initialAic: Number(json.initialAic || 0),
+          invoiceNo,
+          initialAic,
+          planLabel,
+          amountIdr,
+        });
+        setIssuedInvoice({
+          invoice_no: invoiceNo,
+          invoice_type: 'PLAN_SUBSCRIPTION',
+          reference_code: `PLAN-${selectedPlan.toUpperCase()}`,
+          description: `Aktivasi Paket ${planLabel} (${formData.developerName.trim()})`,
+          amount_idr: amountIdr,
+          aic_amount: initialAic,
+          customer_name: formData.ownerName.trim() || formData.developerName.trim(),
+          status: 'PAID',
+          created_by: formData.ownerEmail.trim(),
+          created_at: new Date().toISOString(),
+          paid_at: new Date().toISOString(),
         });
         // Auto-login sesi tim baru agar saat klik Selesai langsung masuk Dashboard proyek sendiri
         await loginWithServer(
@@ -729,12 +752,46 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({
                 </div>
 
                 {activationResult ? (
-                  <div className="p-3 rounded-lg bg-olive/10 border border-olive/30 text-xs text-olive space-y-1">
-                    <div className="font-bold">Tim &amp; Workspace Terisolasi Aktif!</div>
+                  <div className="p-3 rounded-lg bg-olive/10 border border-olive/30 text-xs text-olive space-y-2">
+                    <div className="font-bold">Tim &amp; Workspace Terisolasi Aktif! Invoice Resmi Diterbitkan.</div>
                     <div>Tenant ID: <span className="font-mono font-bold">{activationResult.tenantId}</span></div>
-                    <div>Invoice Dummy: <span className="font-mono">{activationResult.invoiceNo}</span> (PAID)</div>
+                    <div>Invoice Paket {activationResult.planLabel}: <span className="font-mono font-bold">{activationResult.invoiceNo}</span> (PAID · Rp {activationResult.amountIdr.toLocaleString('id-ID')})</div>
                     <div>Kuota AIC Awal: <strong>{activationResult.initialAic.toLocaleString('id-ID')} AIC</strong></div>
                     <div>Website Publik: <span className="font-mono">/site/{activationResult.slug}</span></div>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setIssuedInvoice({
+                            invoice_no: activationResult.invoiceNo,
+                            invoice_type: 'PLAN_SUBSCRIPTION',
+                            reference_code: `PLAN-${selectedPlan.toUpperCase()}`,
+                            description: `Aktivasi Paket ${activationResult.planLabel} (${formData.developerName.trim()})`,
+                            amount_idr: activationResult.amountIdr,
+                            aic_amount: activationResult.initialAic,
+                            customer_name: formData.ownerName.trim() || formData.developerName.trim(),
+                            status: 'PAID',
+                            created_by: formData.ownerEmail.trim(),
+                            created_at: new Date().toISOString(),
+                            paid_at: new Date().toISOString(),
+                          })
+                        }
+                        className="px-3 py-1.5 rounded-lg bg-espresso text-white font-bold cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        <FileText className="size-3.5" />
+                        <span>Lihat / Cetak Invoice Resmi</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          window.location.href = '/transaksi';
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-white border border-olive/40 text-olive font-bold cursor-pointer"
+                      >
+                        Buka Halaman Transaksi
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <button
@@ -834,6 +891,12 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({
           )}
         </div>
       </div>
+
+      <InvoiceDetailModal
+        invoice={issuedInvoice}
+        companyName={formData.developerName.trim() || 'Developer Sales OS'}
+        onClose={() => setIssuedInvoice(null)}
+      />
     </div>
   );
 };

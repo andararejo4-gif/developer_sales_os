@@ -348,7 +348,7 @@ export async function activateOnboardingWithDummyPayment(params: {
   const invoice = await paymentGateway.createInvoice({
     tenantId,
     projectId,
-    invoiceType: 'AIC_TOPUP',
+    invoiceType: 'PLAN_SUBSCRIPTION',
     referenceCode: `PLAN-${planCode.toUpperCase()}`,
     description: `Aktivasi Paket ${planMeta.label} (${sess.company_name})`,
     amountIdr: planMeta.priceIdr,
@@ -363,16 +363,6 @@ export async function activateOnboardingWithDummyPayment(params: {
     targetStatus: 'PAID',
     actorEmail: cleanEmail,
   });
-
-  await grantTopupLotAtomic({
-    tenantId,
-    billableEventId: `onboard_${invoice.invoice_no}`,
-    lotCode: `ONBOARD-${planCode.toUpperCase()}`,
-    amountAic: planMeta.initialAic,
-    expiresAt: new Date(Date.now() + 90 * 86400_000).toISOString(),
-    actorEmail: cleanEmail,
-    actorRole: 'IT',
-  }).catch(() => {});
 
   // 3. Buat Akun IT/Admin Pertama Tim Terikat ke tenant_id Baru
   const passwordHash = hashPassword(params.ownerPassword || 'Andara2026!');
@@ -421,6 +411,8 @@ export async function activateOnboardingWithDummyPayment(params: {
     projectId,
     slug: String(sess.slug),
     planCode,
+    planLabel: planMeta.label,
+    amountIdr: planMeta.priceIdr,
     invoiceNo: String(invoice.invoice_no),
     initialAic: planMeta.initialAic,
   };

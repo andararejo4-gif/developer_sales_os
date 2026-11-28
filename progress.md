@@ -3,6 +3,13 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-140 | 2026-11-28 | Halaman Transaksi & Invoice Paket Developer (Admin & Direksi)
+- Status: selesai
+- Ubah: `db/migrations/0039_plan_subscription_invoices.sql` (baru; tipe `PLAN_SUBSCRIPTION`), `server/payment-gateway.ts` (settlement paket + kuota AIC), `server/tenant-guard.ts`, `server/index.ts` (`GET /api/billing/summary`, `POST /api/billing/subscribe-plan`, update constraint `payment_invoices`), `src/lib/navigation/router.ts` (rute `/transaksi`), `src/components/billing/TransactionsInvoicesPage.tsx` (baru; halaman transaksi + beli paket + `InvoiceDetailModal`), `src/components/OnboardingWizardModal.tsx` (popup invoice resmi sesaat setelah aktivasi paket), `src/App.tsx` (menu & akses halaman transaksi di role `ADMIN` & `DIREKSI`), `tests/transactions-invoices.test.ts` (baru)
+- Alasan/keputusan: Memastikan pembelian paket Gold/Platinum/Diamond langsung menerbitkan invoice resmi dan tersedia halaman riwayat transaksi & invoice di role `ADMIN` dan `DIREKSI`.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build`), `rtk bun test tests/transactions-invoices.test.ts`
+- Berikutnya: -
+
 ## P-139 | 2026-11-27 | Penutupan 85 Item Non-Fitur (INT-I05..I15, MOB-01..09, OPS-01..07, S01..S18, REL & GATE)
 - Status: selesai (fokus lokal; tidak di-push ke repo sesuai arahan user)
 - Ubah: `server/r2-r4-connectors.ts` (baru; 11 konektor resmi I05–I15), `src/lib/operations/mob-ops-services-engine.ts` (baru; guardrail MOB-01..09 & katalog work order S01–S18), `server/index.ts` (`/api/connectors/health` + `POST /api/ops/service-work-order`), `tests/non-feature-85-complete.test.ts` (baru), `docs/R2_R4_OPS_MOBILE_AND_HANDOVER_REPORT.md` (baru), `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx` (85 item → `Selesai`; total **782/782 Selesai**)

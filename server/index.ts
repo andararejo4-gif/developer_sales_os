@@ -24,6 +24,7 @@ import { generateGroundedLoveLetter } from './love-letter-generator';
 import {
   activateOnboardingWithDummyPayment,
   CrossTenantViolationError,
+  PLAN_CATALOG_CONFIG,
   resolveStrictTenantId,
   resolveTenantByProjectSlug,
   runOnboardingExtraction,
@@ -6285,9 +6286,14 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const body = await readJsonBody(req);
-      const invoiceType = (String(body.invoiceType || 'AIC_TOPUP').toUpperCase() === 'BOOKING_FEE'
-        ? 'BOOKING_FEE'
-        : 'AIC_TOPUP') as PaymentInvoiceType;
+      const rawType = String(body.invoiceType || 'AIC_TOPUP').toUpperCase();
+      const invoiceType = (
+        rawType === 'BOOKING_FEE'
+          ? 'BOOKING_FEE'
+          : rawType === 'PLAN_SUBSCRIPTION'
+          ? 'PLAN_SUBSCRIPTION'
+          : 'AIC_TOPUP'
+      ) as PaymentInvoiceType;
       const amountIdr = Number(body.amountIdr || 0);
       if (!Number.isFinite(amountIdr) || amountIdr < 1000) {
         sendJson(res, 400, { ok: false, error: 'Nominal invoice minimal Rp 1.000.' });
@@ -6329,6 +6335,103 @@ const server = http.createServer(async (req, res) => {
         actorEmail: user.email,
       });
       sendJson(res, settled.ok ? 200 : 400, settled);
+      return;
+    }
+
+    // TRANSAKSI & PEMBELIAN PAKET DEVELOPER (GOLD / PLATINUM / DIAMOND) UNTUK ADMIN & DIREKSI
+    if (pathname === '/api/billing/summary' && req.method === 'GET') {
+      const tenantRows = await sql`
+        SELECT tenant_id, company_name, plan_code, status, updated_at
+        FROM sales_os.tenants
+        WHERE tenant_id = ${user.tenantId}
+        LIMIT 1
+      `;
+      const overrideRows = await sql`
+        SELECT overridden_plan
+        FROM sales_os.developer_plan_overrides
+        WHERE developer_id = ${user.tenantId}
+        LIMIT 1
+      `.catch(() => []);
+      const basePlan = String(tenantRows[0]?.plan_code || 'platinum').toLowerCase();
+      const activePlan = overrideRows[0]?.overridden_plan
+        ? String(overrideRows[0].overridden_plan).toLowerCase()
+        : basePlan;
+      const invoiceRows = await sql`
+        SELECT * FROM sales_os.payment_invoices
+        WHERE tenant_id = ${user.tenantId}
+        ORDER BY created_at DESC
+        LIMIT 100
+      `;
+      sendJson(res, 200, {
+        ok: true,
+        tenant: {
+          tenantId: user.tenantId,
+          companyName: String(tenantRows[0]?.company_name || 'Developer Sales OS'),
+          planCode: activePlan,
+          status: String(tenantRows[0]?.status || 'ACTIVE'),
+        },
+        plans: Object.entries(PLAN_CATALOG_CONFIG).map(([code, meta]) => ({
+          code,
+          label: meta.label,
+          priceIdr: meta.priceIdr,
+          initialAic: meta.initialAic,
+        })),
+        invoices: invoiceRows,
+      });
+      return;
+    }
+
+    if (pathname === '/api/billing/subscribe-plan' && req.method === 'POST') {
+      if (!['ADMIN', 'DIREKSI', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya Admin, Direksi, atau IT yang dapat membeli paket langganan.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const rawPlan = String(body.planCode || '').trim().toLowerCase();
+      if (!['gold', 'platinum', 'diamond'].includes(rawPlan)) {
+        sendJson(res, 400, { ok: false, error: 'Pilih paket valid: gold, platinum, atau diamond.' });
+        return;
+      }
+      const planCode = rawPlan as OnboardingPlanCode;
+      const planMeta = PLAN_CATALOG_CONFIG[planCode];
+      const tenantRows = await sql`
+        SELECT company_name FROM sales_os.tenants WHERE tenant_id = ${user.tenantId} LIMIT 1
+      `;
+      const companyName = String(tenantRows[0]?.company_name || body.companyName || 'Developer Properti');
+      const created = await paymentGateway.createInvoice({
+        tenantId: user.tenantId,
+        projectId: String(body.projectId || user.projectId || 'the-park-sukoharjo'),
+        invoiceType: 'PLAN_SUBSCRIPTION',
+        referenceCode: `PLAN-${planCode.toUpperCase()}`,
+        description: `Pembelian Paket ${planMeta.label} · 3 Bulan (${companyName})`,
+        amountIdr: planMeta.priceIdr,
+        aicAmount: planMeta.initialAic,
+        customerName: String(body.customerName || user.name || companyName),
+        createdBy: user.email,
+      });
+
+      const autoSettle = body.autoSettle !== false;
+      let finalInvoice = created;
+      if (autoSettle) {
+        const settled = await paymentGateway.settleInvoice({
+          tenantId: user.tenantId,
+          invoiceNo: String(created.invoice_no),
+          targetStatus: 'PAID',
+          actorEmail: user.email,
+        });
+        if (settled.ok && settled.invoice) {
+          finalInvoice = settled.invoice;
+        }
+      }
+
+      sendJson(res, 201, {
+        ok: true,
+        planCode,
+        planLabel: planMeta.label,
+        amountIdr: planMeta.priceIdr,
+        initialAic: planMeta.initialAic,
+        invoice: finalInvoice,
+      });
       return;
     }
 
@@ -8519,7 +8622,7 @@ async function ensureSeOpsTables(): Promise<void> {
       project_id TEXT NOT NULL DEFAULT 'the-park-sukoharjo',
       invoice_no TEXT NOT NULL UNIQUE,
       provider TEXT NOT NULL DEFAULT 'SANDBOX_DUMMY_PG',
-      invoice_type TEXT NOT NULL CHECK (invoice_type IN ('AIC_TOPUP', 'BOOKING_FEE')),
+      invoice_type TEXT NOT NULL CHECK (invoice_type IN ('AIC_TOPUP', 'BOOKING_FEE', 'PLAN_SUBSCRIPTION')),
       reference_code TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       amount_idr BIGINT NOT NULL CHECK (amount_idr > 0),
@@ -8534,6 +8637,15 @@ async function ensureSeOpsTables(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `;
+  await sql`
+    ALTER TABLE sales_os.payment_invoices
+      DROP CONSTRAINT IF EXISTS payment_invoices_invoice_type_check
+  `;
+  await sql`
+    ALTER TABLE sales_os.payment_invoices
+      ADD CONSTRAINT payment_invoices_invoice_type_check
+      CHECK (invoice_type IN ('AIC_TOPUP', 'BOOKING_FEE', 'PLAN_SUBSCRIPTION'))
   `;
   await sql`
     CREATE TABLE IF NOT EXISTS sales_os.smart_links (
