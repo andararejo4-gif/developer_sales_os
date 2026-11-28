@@ -75,11 +75,16 @@ export const PublicHomepageV3: React.FC<PublicHomepageV3Props> = ({ onEnterDashb
     }
   };
 
+  const openRegistrationPage = (planCode?: 'gold' | 'platinum' | 'diamond') => {
+    const plan = planCode || selectedWizardPlan || 'platinum';
+    window.location.href = `/daftar/${plan}`;
+  };
+
   return (
     <div className="theme-journey-v3 min-h-screen bg-[#F6FAF7] text-[#0B3D2E] font-sans selection:bg-[#C6F432] selection:text-[#0B3D2E]">
       <RailNavV3
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-        onOpenWizard={() => setIsWizardOpen(true)}
+        onOpenWizard={() => openRegistrationPage('platinum')}
         onOpenLogin={() => setIsLoginOpen(true)}
         onScrollTo={scrollToSection}
       />
@@ -87,7 +92,7 @@ export const PublicHomepageV3: React.FC<PublicHomepageV3Props> = ({ onEnterDashb
       {/* Full-width Main Content under Sticky Top Navbar */}
       <main className="min-w-0">
         <ChapterIntroAndCaseV3
-          onOpenWizard={() => setIsWizardOpen(true)}
+          onOpenWizard={() => openRegistrationPage('platinum')}
           onOpenLoveLetter={() => setIsLoveLetterOpen(true)}
           onScrollToCaseStudy={() => scrollToSection('studi-kasus')}
           onScrollToMap={() => scrollToSection('peta-demo')}
@@ -102,12 +107,12 @@ export const PublicHomepageV3: React.FC<PublicHomepageV3Props> = ({ onEnterDashb
         <SwimlaneAndPricingV3
           onOpenWizard={(planCode) => {
             if (planCode) setSelectedWizardPlan(planCode);
-            setIsWizardOpen(true);
+            openRegistrationPage(planCode);
           }}
         />
 
         <FaqAndFooterV3
-          onOpenWizard={() => setIsWizardOpen(true)}
+          onOpenWizard={() => openRegistrationPage('platinum')}
         />
       </main>
 

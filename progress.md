@@ -3,6 +3,13 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-151 | 2026-11-28 | Halaman Pendaftaran Terpisah `/daftar/:plan` (Gold/Platinum/Diamond) — Antislop UI & Mobile-First
+- Status: selesai & live di `hades`
+- Ubah: `src/components/OnboardingRegistrationPage.tsx` (baru; halaman penuh 2-kolom editorial di desktop + reflow kartu & sticky action bar di HP/tablet, plan switcher Gold/Platinum/Diamond, 5 langkah OCR/GPS/Unit/Bayar Midtrans, draft persistence `dsos_onboarding_draft_v1`), `src/App.tsx` (rute lazy `/daftar` & `/daftar/:plan`), `src/components/v3/PublicHomepageV3.tsx` (arahkan seluruh tombol Beli Paket & Buat Surat Cinta ke `/daftar/:plan`).
+- Alasan/keputusan: Mengganti modal pendaftaran yang sempit menjadi halaman terpisah yang rapi, responsif penuh di HP/tablet/desktop (`antislop-ui` & `antislop-layoutmobile`), dan terhubung langsung ke checkout Midtrans `/checkout/:invoiceNo`.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`), `bun test` (269 pass, 0 fail), deploy `dist/*` ke `hades`, & smoke `GET /daftar/platinum` (`200`).
+- Berikutnya: -
+
 ## P-150 | 2026-11-28 | Fix Double-Stringify Backslash Explosion pada State Input Log Panggilan & `/api/state`
 - Status: selesai & live di `hades`
 - Ubah: `server/index.ts` (unwrap string JSON ter-escape ganda di `GET /api/state` & `PUT /api/state`), `src/lib/db/remote-state.ts` (`unwrapRemoteValue` saat hidrasi ke `localStorage`), `src/lib/navigation/router.ts` (`unwrapDoubleEncodedString` di `loadPersistedState`).

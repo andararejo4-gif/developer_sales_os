@@ -28,6 +28,7 @@ const DailyRouteViewer = lazy(() => import('./components/DailyRouteViewer').then
 const ProjectWebsitePreview = lazy(() => import('./components/ProjectWebsitePreview').then((m) => ({ default: m.ProjectWebsitePreview })));
 const PublicProjectSitePage = lazy(() => import('./components/PublicProjectSitePage').then((m) => ({ default: m.PublicProjectSitePage })));
 const PaymentCheckoutPage = lazy(() => import('./components/PaymentCheckoutPage').then((m) => ({ default: m.PaymentCheckoutPage })));
+const OnboardingRegistrationPage = lazy(() => import('./components/OnboardingRegistrationPage').then((m) => ({ default: m.OnboardingRegistrationPage })));
 const ProfilePage = lazy(() => import('./components/ProfilePage').then((m) => ({ default: m.ProfilePage })));
 const CrmPipelineView = lazy(() => import('./components/CrmPipelineView').then((m) => ({ default: m.CrmPipelineView })));
 const CommissionSettingsModal = lazy(() => import('./components/CommissionSettingsModal').then((m) => ({ default: m.CommissionSettingsModal })));
@@ -1164,6 +1165,12 @@ export default function App() {
     else if (tab === 'rute') openView('rute');
     else if (tab === 'lapangan') openView('lapangan');
   };
+
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/daftar')) {
+    const planSeg = decodeURIComponent(window.location.pathname.replace(/^\/daftar\/?/, '').split('/')[0] || '').toLowerCase();
+    const validPlan = planSeg === 'gold' || planSeg === 'platinum' || planSeg === 'diamond' ? planSeg : undefined;
+    return <OnboardingRegistrationPage initialPlan={validPlan} />;
+  }
 
   if (typeof window !== 'undefined' && window.location.pathname.startsWith('/checkout/')) {
     const invNo = decodeURIComponent(window.location.pathname.replace(/^\/checkout\//, '').split('/')[0] || '');
