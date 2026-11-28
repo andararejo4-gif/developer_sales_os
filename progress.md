@@ -5,7 +5,7 @@ Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewa
 
 ## P-145 | 2026-11-28 | Penutupan Kebocoran Lintas Tenant pada Field Ops, Live Location & Laporan Harian
 - Status: selesai
-- Ubah: `server/index.ts` (tambah isolasi `tenantId` pada `liveSeLocationsMap` di `/api/se/live-location`, serta filter `EXISTS app_users.tenant_id = user.tenantId` pada `GET /api/se/field-logs`, `GET /api/dashboard/summary`, dan `GET /api/sm/daily-report` untuk `se_field_logs` & `se_daily_notes`)
+- Ubah: `server/index.ts` (tambah isolasi `tenantId` pada `liveSeLocationsMap` di `/api/se/live-location`, filter `EXISTS app_users.tenant_id = user.tenantId` pada `GET /api/se/field-logs`, `GET /api/dashboard/summary`, dan `GET /api/sm/daily-report`, tambah `tenant_id` pada `isPhoneSuppressed`/`addPhoneToSuppression`/`removePhoneFromSuppression`, serta hapus dead helper `getAuthenticatedUser`)
 - Alasan/keputusan: Mencegah data GPS live, absensi/foto lapangan, dan catatan harian SE bocor ke manager/admin tenant lain.
 - Verifikasi: `rtk bun run build` & `rtk bun test tests/security-penetration-suite.test.ts`
 - Berikutnya: -

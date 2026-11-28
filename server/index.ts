@@ -298,13 +298,14 @@ function cleanPhoneWa(phone: string): string {
   return cleaned;
 }
 
-async function isPhoneSuppressed(phone: string): Promise<boolean> {
+async function isPhoneSuppressed(phone: string, tenantId: string): Promise<boolean> {
   const cleaned = cleanPhoneWa(phone);
   if (!cleaned) return false;
   try {
     const rows = await sql`
       SELECT id FROM sales_os.wa_suppression_list
-      WHERE phone_number = ${cleaned} OR phone_number = ${phone}
+      WHERE tenant_id = ${tenantId}
+        AND (phone_number = ${cleaned} OR phone_number = ${phone})
       LIMIT 1
     `;
     return rows.length > 0;
@@ -314,6 +315,7 @@ async function isPhoneSuppressed(phone: string): Promise<boolean> {
 }
 
 async function addPhoneToSuppression(params: {
+  tenantId: string;
   phoneNumber: string;
   leadId?: string;
   leadName?: string;
@@ -325,9 +327,9 @@ async function addPhoneToSuppression(params: {
   try {
     await sql`
       INSERT INTO sales_os.wa_suppression_list (
-        phone_number, lead_id, lead_name, reason, notes, opted_out_at
+        tenant_id, phone_number, lead_id, lead_name, reason, notes, opted_out_at
       ) VALUES (
-        ${cleaned}, ${params.leadId || null}, ${params.leadName || null},
+        ${params.tenantId}, ${cleaned}, ${params.leadId || null}, ${params.leadName || null},
         ${params.reason || 'USER_OPT_OUT'}, ${params.notes || 'Dicatat otomatis oleh sistem'}, NOW()
       )
       ON CONFLICT (phone_number) DO UPDATE SET
@@ -340,10 +342,14 @@ async function addPhoneToSuppression(params: {
   }
 }
 
-async function removePhoneFromSuppression(phoneNumber: string): Promise<void> {
+async function removePhoneFromSuppression(phoneNumber: string, tenantId: string): Promise<void> {
   const cleaned = cleanPhoneWa(phoneNumber);
   try {
-    await sql`DELETE FROM sales_os.wa_suppression_list WHERE phone_number = ${cleaned} OR phone_number = ${phoneNumber}`;
+    await sql`
+      DELETE FROM sales_os.wa_suppression_list
+      WHERE tenant_id = ${tenantId}
+        AND (phone_number = ${cleaned} OR phone_number = ${phoneNumber})
+    `;
   } catch (err) {
     console.warn('[Suppression] Gagal menghapus nomor:', err);
   }
@@ -469,30 +475,7 @@ async function topUpTenantAic(params: {
   return newBalance;
 }
 
-function getAuthenticatedUser(req: http.IncomingMessage): {
-  email: string;
-  name: string;
-  role: RoleKey;
-  tenantId: string;
-} {
-  const headerEmail = String(req.headers['x-user-email'] || '').trim().toLowerCase();
-  const headerRole = String(req.headers['x-user-role'] || 'SE').trim().toUpperCase() as RoleKey;
-  const headerTenant = String(req.headers['x-tenant-id'] || 'andara_rejo_makmur').trim().toLowerCase();
-
-  const matchedRole = (Object.keys(USERS_BY_ROLE) as RoleKey[]).find(
-    (r) => USERS_BY_ROLE[r].email.toLowerCase() === headerEmail
-  );
-
-  const role: RoleKey = matchedRole || (headerRole in USERS_BY_ROLE ? headerRole : 'SE');
-  const profile = USERS_BY_ROLE[role];
-  return {
-    email: headerEmail || profile.email.toLowerCase(),
-    name: profile.name,
-    role,
-    tenantId: headerTenant || 'andara_rejo_makmur',
-  };
 }
-
 async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, any>> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
@@ -1818,7 +1801,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (action === 'REMOVE') {
-        await removePhoneFromSuppression(phoneNumber);
+        await removePhoneFromSuppression(phoneNumber, user.tenantId);
         await recordAuditLog({
           tenantId: user.tenantId,
           actorEmail: user.email,
@@ -1834,6 +1817,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       await addPhoneToSuppression({
+        tenantId: user.tenantId,
         phoneNumber,
         leadName: body.leadName,
         reason: body.reason || 'MANUAL_ADMIN_ADD',
@@ -2197,11 +2181,12 @@ const server = http.createServer(async (req, res) => {
 
       // Kepatuhan UU PDP (Temuan T3 / F92): Deteksi Opt-Out pada pesan masuk & suppression list
       const customerOptedOut = isOptOutKeyword(lastCustomerMessage);
-      const isSuppressed = (await isPhoneSuppressed(phoneWa)) || customerOptedOut;
+      const isSuppressed = (await isPhoneSuppressed(phoneWa, user.tenantId)) || customerOptedOut;
       const waConsent = customerOptedOut ? 'REVOKED' : isSuppressed ? 'REVOKED' : 'PENDING';
 
       if (customerOptedOut) {
         await addPhoneToSuppression({
+          tenantId: user.tenantId,
           phoneNumber: phoneWa,
           leadName: fullName,
           reason: 'USER_OPT_OUT',
@@ -2552,11 +2537,12 @@ const server = http.createServer(async (req, res) => {
 
         // Kepatuhan UU PDP (Temuan T3 / F92): Deteksi Opt-Out pada update/chat baru
         const incomingOptOut = isOptOutKeyword(String(body.lastCustomerMessage || ''));
-        const isSuppressed = (await isPhoneSuppressed(String(prev.phone_wa))) || incomingOptOut;
+        const isSuppressed = (await isPhoneSuppressed(String(prev.phone_wa), user.tenantId)) || incomingOptOut;
         const nextWaConsent = incomingOptOut ? 'REVOKED' : isSuppressed ? 'REVOKED' : (prev.wa_consent || 'PENDING');
 
         if (incomingOptOut) {
           await addPhoneToSuppression({
+            tenantId: user.tenantId,
             phoneNumber: String(prev.phone_wa),
             leadId: String(prev.id),
             leadName: nextFullName,
