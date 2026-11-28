@@ -6,3 +6,11 @@ dist
 *.log
 .DS_Store
 server/.baileys-sessions
+dist-server.mjs
+*.apk
+android/local.properties
+android/.gradle
+android/build
+android/app/build
+android/app/src/main/assets/public
+android/capacitor-cordova-android-plugins/build

@@ -3,6 +3,13 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-153 | 2026-11-28 | Dokumentasi Lengkap README.md, Sinkronisasi Proyek Android & Push Final ke GitHub
+- Status: selesai & pushed ke `origin/main`
+- Ubah: `README.md` (dokumentasi lengkap arsitektur, `.env` template tanpa secret, alur Midtrans & `/daftar/:plan` + `/checkout/:invoiceNo`, konsep & panduan langkah demi langkah build APK Android Capacitor ~5,32 MB, optimasi performa, & deploy `hades`), `.gitignore` (abaikan `dist-server.mjs`, `*.apk`, `android/local.properties`, `android/app/build`, `android/app/src/main/assets/public`), serta commit sumber proyek native `android/` ke GitHub.
+- Alasan/keputusan: Memastikan seluruh dokumentasi teknis, konsep build APK Android, dan sumber proyek native tersimpan aman dan terukur di GitHub tanpa membocorkan secret atau biner build besar.
+- Verifikasi: `rtk git status`, verifikasi tidak ada `.env`/`.apk`/secret ter-stage, & `git push origin main` sukses.
+- Berikutnya: -
+
 ## P-152 | 2026-11-28 | Optimasi Kecepatan Absensi/GPS SM (Pisah Stream Foto dari JSON + Cache Instan + Skeleton Per Card)
 - Status: selesai & live di `hades`
 - Ubah: `server/index.ts` (tambah endpoint `GET /api/se/field-logs/:id/photo` dengan `Cache-Control: private, max-age=86400`; optimasi `GET /api/se/field-logs` pakai `Promise.all` & kirim URL foto ringan alih-alih blob base64 di JSON list), `src/components/FieldOpsModal.tsx` (cache instan `sessionStorage` + state `isLoadingFieldLogs`), `src/components/field/SmFieldMonitoringView.tsx` (animasi skeleton per card `animate-pulse` untuk tab Absensi & GPS + `loading="lazy"` pada thumbnail foto).

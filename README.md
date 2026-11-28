@@ -1,128 +1,153 @@
 # Developer Sales OS
 
-> Platform Web Multi-Tenant untuk Pengembang Perumahan: Mengubah Dokumen Mentah (Brosur, Pricelist, Koordinat) Menjadi Mesin Penjualan Otonom.
+> Platform SaaS Multi-Tenant untuk Pengembang Perumahan: Mengubah Dokumen Mentah (Brosur, Pricelist, Koordinat GPS) Menjadi Mesin Penjualan Otonom lintas Web, PWA (Android & iOS), dan APK Android Native.
 
-- **Domain Target**: `developerproperti.giivepro.com`
-- **Tenant Percontohan**: PT Andara Rejo Makmur · The Park Townhouse Sukoharjo (30 Unit, 3 Cluster)
-- **Desain Sistem**: *Warm Terracotta & Sandstone* (terinspirasi estetika openrouter.ai)
-- **Font**: *Plus Jakarta Sans*
+- **Domain Produksi**: `https://developerproperti.giivepro.com`
+- **Unduh APK Android**: `https://developerproperti.giivepro.com/download/DeveloperSalesOS.apk` (~5,32 MB)
+- **Tenant Percontohan**: PT Andara Rejo Makmur · The Park Townhouse Sukoharjo
+- **Stack**: React 19 + TypeScript + Vite 8 (Rolldown) + Tailwind CSS + PWA Workbox · Backend Bun/Node + PostgreSQL (RLS) · Midtrans Snap API · Capacitor Android
 
 ---
 
-## 1. Panduan Menjalankan Lokal
+## 1. Menjalankan Secara Lokal
 
-Pastikan [Bun](https://bun.sh) (v1.4+) atau Node.js (v20+) terinstal.
+Prasyarat: **Bun v1.4+** (atau Node.js v20+) dan **PostgreSQL** (`sales_os`).
 
 ```bash
-# 1. Masuk ke direktori
-cd "developer_sales_os"
+# 1. Instal dependensi
+npm install
 
-# 2. Salin environment
+# 2. Salin konfigurasi environment & isi kredensial lokal (JANGAN commit .env)
 cp .env.example .env
 
-# 3. Jalankan server pengembangan
-bun dev
-# atau: npm run dev
+# 3. Jalankan backend API (:3040) dan frontend Vite (:5173)
+bun run server/index.ts
+npm run dev
 ```
 
-Buka peramban di `http://localhost:5173` atau `http://localhost:3000`.
+### Variabel `.env` Utama (Template Tanpa Secret)
+```env
+APP_URL=http://localhost:5173
+PUBLIC_APP_URL=https://developerproperti.giivepro.com
+API_PORT=3040
+DATABASE_URL=postgres://postgres:password@127.0.0.1:5435/sales_os
+
+# AI Router (Server-Only)
+AI_ROUTER_URL=https://9router.giivepro.com/v1
+AI_ROUTER_API_KEY=<isi-api-key>
+AI_ROUTER_MODEL=andararejomakmurjosjis
+
+# Payment Gateway Midtrans (Sandbox / Production)
+PAYMENT_PROVIDER=midtrans
+MIDTRANS_IS_PRODUCTION=false
+MIDTRANS_MERCHANT_ID=<merchant-id>
+MIDTRANS_SERVER_KEY=<SB-Mid-server-...>
+MIDTRANS_CLIENT_KEY=<SB-Mid-client-...>
+```
 
 ---
 
-## 2. Menjalankan Pengujian Otomatis
-
-Seluruh pengujian unit, guardrail validator, dan isolasi tenant dijalankan melalui runner bawaan Bun:
+## 2. Pengujian Otomatis & Build Produksi
 
 ```bash
+# Jalankan seluruh 269 unit & integration test (53 file)
 bun test
-```
 
-Rangkaian 67 uji otomatis melingkupi 15 file:
-- `tests/love-letter-validator.test.ts`: Uji kepatuhan 99 poin, larangan overpromise, dan format estimasi jarak.
-- `tests/tenant-isolation.test.ts`: Pembuktian bahwa pengguna Tenant A tidak dapat mengakses data Tenant B.
-- `tests/plans-config.test.ts`: Validasi paket (Gold, Platinum, Diamond) berbasis flag dinamis dengan harga `null` ("Hubungi kami").
-- `tests/knowledge-base.test.ts`: 20 Pertanyaan Uji Penerimaan Fase 1A (15 terjawab bersumber & 5 di luar data), Kartu Produk 1 halaman, dan kuis kelulusan 10 soal SE baru minimal 80%.
-- `tests/effective-features.test.ts`: Adaptasi dinamis hierarki peran dan fitur berdasarkan kuesioner onboarding.
-- `tests/demo-teaser.test.ts`: Verifikasi server-side teaser 25% untuk akun Demo 30 hari & larangan etis desakan palsu.
-- `tests/market-research.test.ts`: 5 Persona terstruktur, fasilitas publik radius 500m-25km, matriks kompetitor, dan SVG market share.
-- `tests/sales-targets.test.ts`: Skenario sold-out 100%, reverse funnel leads, dan pembagian kuota per SE.
-- `tests/content-calendar.test.ts`: Kalender 30 hari x 3 slot (90 slot), dual-track official vs sales in-house, dan live URL paste.
-- `tests/playbook-routes.test.ts`: Playbook role SE/TL/SM, reverse-funnel math, BANT >= 7 threshold, dan rute harian GPS.
-- `tests/website-generator.test.ts`: Kalkulator simulasi angsuran anuitas KPR, disclaimer non-binding, dan ekspor standalone single-page HTML.
-- `tests/crm-pipeline.test.ts`: Pipeline 7 tahap canonical, penandaan bawahan `Nama (SE - TL)`, checklist follow-up strictly date-driven, dan aturan bagi komisi 100%.
-- `tests/export-token-exclusion.test.ts`: Pembuktian guardrail `assertNoTokenLeakage` bebas 100% dari kebocoran token AI pada DOCX/PDF/HTML ekspor.
-
----
-
-## 3. Menjalankan Kompilasi Build
-
-```bash
+# Build frontend (code-splitting + PWA Workbox)
 npm run build
-# atau: bun run build
-```
 
-Hasil kompilasi siap produksi akan tersimpan di direktori `/dist`.
+# Build bundle server produksi
+bun build server/index.ts --outfile dist-server.mjs --target node
+```
 
 ---
 
-## 4. Panduan Deploy ke VPS Ubuntu (PM2 & Nginx Wildcard)
+## 3. Alur Pendaftaran, Pembayaran Midtrans & Penguncian Akses
 
-Untuk mendistribusikan ke server VPS Ubuntu dengan port terpisah dari aplikasi lain:
+1. **Halaman Pendaftaran Terpisah (`/daftar/gold`, `/daftar/platinum`, `/daftar/diamond`)**:
+   - Komponen `src/components/OnboardingRegistrationPage.tsx` (mobile-first, 2-kolom editorial di desktop, kartu unit tanpa horizontal scroll di HP).
+   - Draft otomatis tersimpan di `localStorage` (`dsos_onboarding_draft_v1`) sehingga aman bila halaman ter-refresh di langkah mana pun.
+2. **Payment-Gated Unlock (Kunci Surat Cinta & Login Sebelum Lunas)**:
+   - Sebelum pembayaran berstatus `PAID`, `POST /api/onboarding/create-checkout` hanya menyimpan `pending_owner_payload` di `sales_os.onboarding_sessions` (migrasi `0039`) tanpa membuat akun di `sales_os.app_users`.
+   - Dokumen Surat Cinta 99 Keunggulan (`.docx` & PDF) dan akses login baru terbuka otomatis oleh `finalizeOnboardingAfterPayment()` setelah invoice berstatus `PAID`.
+3. **Halaman Checkout Khusus 2-Kolom (`/checkout/:invoiceNo`)**:
+   - Komponen `src/components/PaymentCheckoutPage.tsx` digunakan seragam untuk Onboarding Paket, Top-up AIC, dan Booking Fee.
+   - Mendukung webhook otomatis `POST /api/payments/midtrans/webhook` (verifikasi **SHA-512** `order_id + status_code + gross_amount + server_key` + cek nominal) dan sinkronisasi manual `POST /api/payments/checkout/:invoiceNo/sync` ke Midtrans Core API.
+   - Set **Payment Notification URL** di Dashboard Midtrans ke:
+     `https://developerproperti.giivepro.com/api/payments/midtrans/webhook`
+
+---
+
+## 4. Konsep & Panduan Build APK Android (Capacitor Live-Sync)
+
+### 4.1 Konsep Arsitektur (Kenapa 1 Codebase & Ukuran APK Hanya ~5,3 MB)
+- **Single Codebase Web + Mobile**: Aplikasi tidak ditulis ulang dari nol dengan Kotlin/Flutter. Seluruh UI React + Vite + PWA dibungkus shell native Android menggunakan **Capacitor** (`capacitor.config.ts`, package ID `com.andararejomakmur.devsalesos`).
+- **Live-Sync ke Produksi (`server.url`)**: `capacitor.config.ts` mengarahkan WebView native ke `https://developerproperti.giivepro.com` (dengan whitelist navigasi Midtrans & WhatsApp). Dampaknya:
+  - Setiap kali ada perbaikan bug atau fitur baru yang di-deploy ke web produksi, **isi APK Android otomatis ikut terupdate** tanpa mengharuskan tim lapangan mengunduh ulang file `.apk`.
+  - Ukuran APK tetap super ringan (**~5,32 MB**) karena aset media uji/server tidak ikut dimasukkan ke dalam paket APK.
+- **Izin Native & Banner Pintar**:
+  - `android/app/src/main/AndroidManifest.xml` mendeklarasikan izin `INTERNET`, `CAMERA`, `ACCESS_FINE_LOCATION`, dan `ACCESS_COARSE_LOCATION`.
+  - `PwaInstallBanner.tsx` otomatis menampilkan tombol **Unduh APK** (`/download/DeveloperSalesOS.apk`) pada browser Android, panduan **Share → Add to Home Screen** pada Safari iOS (karena Apple tidak mengizinkan instalasi `.ipa` bebas dari web tanpa App Store/TestFlight), dan otomatis tersembunyi saat dibuka dari dalam APK native.
+
+### 4.2 Prasyarat Toolchain Lokal (Windows)
+- **Eclipse Temurin JDK 21 LTS** (misal `%LOCALAPPDATA%\Android\jdk-21\jdk-21.x`)
+- **Android SDK Commandline Tools** (`%LOCALAPPDATA%\Android\Sdk`) dengan paket `platform-tools`, `platforms;android-36`, dan `build-tools;36.0.0`
+- File lokal `android/local.properties` (otomatis di-gitignore):
+  ```properties
+  sdk.dir=C:\\Users\\<user>\\AppData\\Local\\Android\\Sdk
+  ```
+
+### 4.3 Langkah Build APK Lokal (PowerShell)
+```powershell
+# 1. Build web terbaru & sinkronisasi ke proyek Android
+npm run build
+npx cap sync android
+
+# 2. Hapus folder media uji dari aset APK agar ukuran tetap ~5 MB
+Remove-Item -Recurse -Force `
+  "android\app\src\main\assets\public\generated-media", `
+  "android\app\src\main\assets\public\card-samples", `
+  "android\app\src\main\assets\public\brand" -ErrorAction SilentlyContinue
+
+# 3. Set JAVA_HOME & ANDROID_HOME lalu kompilasi APK bersih
+$env:JAVA_HOME = "$env:LOCALAPPDATA\Android\jdk-21\jdk-21.0.13.1+2"
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+$env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+
+Push-Location android
+.\gradlew.bat clean assembleDebug
+Pop-Location
+
+# 4. Output APK siap distribusi:
+# android\app\build\outputs\apk\debug\app-debug.apk (~5,32 MB)
+
+# 5. Upload APK ke server produksi (hades)
+ssh hades "mkdir -p /var/www/developer-sales-os/download"
+scp android\app\build\outputs\apk\debug\app-debug.apk hades:/var/www/developer-sales-os/download/DeveloperSalesOS.apk
+```
+
+---
+
+## 5. Optimasi Performa & Keamanan Produksi
+
+- **Code-Splitting (-89% Bundle Awal)**: 32 halaman/modal berat memakai `React.lazy` + 6 `manualChunks` (`vendor-react`, `vendor-lucide`, `vendor-docx`, `vendor-leaflet`, `vendor-motion`, `vendor-qrcode`), menurunkan entry JS dari `615 KB` → `68,6 KB gzip`.
+- **PWA Workbox Aktif**: Service Worker caching untuk JS/CSS/font + runtime `CacheFirst` gambar (14 hari) & `NetworkOnly` untuk `/api/`.
+- **Absensi & GPS Cepat**: `GET /api/se/field-logs` tidak lagi menyertakan blob foto base64; foto dilayani terpisah melalui `GET /api/se/field-logs/:id/photo` (`Cache-Control: private, max-age=86400`), didukung cache `sessionStorage` dan 6 skeleton card (`animate-pulse`).
+- **Isolasi Multi-Tenant**: PostgreSQL Row-Level Security (`0038_enable_tenant_rls.sql`) aktif pada 12 tabel inti + 2FA TOTP RFC 6238.
+
+---
+
+## 6. Deploy ke Server Produksi (`hades`)
 
 ```bash
-# 1. Masuk ke server & clone repository
-cd /var/www/developer_sales_os
+# 1. Backup DB sebelum migrasi
+ssh hades 'set -a && . ~/developer-sales-os-api/.env && set +a && pg_dump "$DATABASE_URL" -Fc -f ~/db-backup/sales_os-$(date +%Y%m%d).dump'
 
-# 2. Instalasi dependensi
-bun install --frozen-lockfile
+# 2. Upload frontend, backend, dan migrasi baru
+scp -r dist/index.html dist/sw.js dist/manifest.webmanifest dist/assets/ hades:/var/www/developer-sales-os/
+scp dist-server.mjs hades:~/developer-sales-os-api/dist-server.mjs
+scp db/migrations/003*.sql hades:~/developer-sales-os-api/db/migrations/
 
-# 3. Build artefak
-bun run build
-
-# 4. Jalankan aplikasi via PM2 (port terpisah, misal 3040)
-pm2 start "bun preview --port 3040 --host" --name "developer-sales-os"
-pm2 save
+# 3. Terapkan migrasi (bila ada) & restart PM2
+ssh hades 'cd ~/developer-sales-os-api && set -a && . ./.env && set +a && pm2 restart developer-sales-os-api --update-env && curl -sS https://developerproperti.giivepro.com/api/health'
 ```
-
-### Konfigurasi Nginx & Wildcard DNS Subdomain
-Untuk melayani subdomain website proyek otomatis (seperti `thepark.developerproperti.giivepro.com`):
-1. **DNS Wildcard**: Tambahkan A Record `*.developerproperti.giivepro.com` mengarah ke IP VPS.
-2. **SSL Wildcard**: Terbitkan sertifikat Let's Encrypt wildcard via Certbot DNS Challenge:
-   ```bash
-   certbot certonly --manual --preferred-challenges dns -d "developerproperti.giivepro.com" -d "*.developerproperti.giivepro.com"
-   ```
-3. **Nginx Block**:
-   ```nginx
-   server {
-       server_name developerproperti.giivepro.com *.developerproperti.giivepro.com;
-       listen 443 ssl http2;
-       ssl_certificate /etc/letsencrypt/live/developerproperti.giivepro.com/fullchain.pem;
-       ssl_certificate_key /etc/letsencrypt/live/developerproperti.giivepro.com/privkey.pem;
-
-       location / {
-           proxy_pass http://127.0.0.1:3040;
-           proxy_set_header Host $host;
-           proxy_set_header X-Real-IP $remote_addr;
-           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-           proxy_set_header X-Forwarded-Proto $scheme;
-       }
-   }
-   ```
-
----
-
-## 5. Struktur Database & Migrasi SQL
-
-Skema database PostgreSQL murni: `sales_os`.
-File migrasi berurutan di `/db/migrations`:
-- `0001_sales_os_core_schema.sql`: Skema multi-tenant, tabel `tenants`, `plans`, `plan_features`, `users`, `projects`, `clusters`, `units`, `project_files`, `love_letters`, `jobs`, `ai_usage`, `approvals`, dan `audit_logs`.
-- `0002_sales_os_seed_plans_and_the_park.sql`: Data awal paket Gold, Platinum, Diamond, Superadmin Giivepro, Tenant PT Andara Rejo Makmur, 3 Cluster (Nagoya, Osaka, Tokyo), dan 30 Unit The Park Townhouse Sukoharjo.
-- `0003_sales_os_phase1a_knowledge_base.sql`: Tabel `product_sources`, `kb_facts`, `location_facts`, `kb_chunks`, `kb_changes`, `product_quiz_results`.
-- `0004_sales_os_phase1b_org_and_members.sql`: Tabel `org_profile`, `org_roles`, `project_members`, `project_assignment_requests`, `hook_events`.
-- `0005_sales_os_phase2_market_research_and_targets.sql`: Tabel `market_research`, `sales_targets`, dan `project_pipeline_stages`.
-- `0006_sales_os_phase3_content_calendar.sql`: Tabel `content_calendars` dan `calendar_slots` (90 slot per bulan).
-- `0007_sales_os_phase4_playbook_and_routes.sql`: Tabel `project_playbooks` dan `daily_routes`.
-- `0008_sales_os_phase5_project_websites.sql`: Tabel `project_websites`.
-- `0009_sales_os_phase6_crm_pipeline_and_superadmin.sql`: Tabel `project_leads` (7 stage), `commission_rules`, dan initial seed data.
-
-Dokumentasi detail diagram relasi entitas dapat dibaca di [`ERD.md`](./ERD.md) dan keputusan arsitektur di [`DECISIONS.md`](./DECISIONS.md).
