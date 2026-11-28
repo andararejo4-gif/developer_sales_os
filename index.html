@@ -11,6 +11,9 @@
     <script>
       (function () {
         try {
+          if (localStorage.getItem('devos_theme') === 'dark') {
+            document.documentElement.classList.add('dark');
+          }
           var CLEAN_KEY = 'devos_sw_clean_20261123_v3';
           if (localStorage.getItem(CLEAN_KEY) !== '1') {
             localStorage.setItem(CLEAN_KEY, '1');

@@ -34,6 +34,170 @@
   }
 }
 
+/* ============================================================================
+   Dark Theme Override (html.dark)
+   ============================================================================ */
+html.dark {
+  color-scheme: dark;
+  --color-sandstone: #121110;
+  --color-surface: #1c1a17;
+  --color-espresso: #f5f2eb;
+  --color-warmmuted: #a8a29e;
+  --color-terracotta: #d97706;
+  --color-olive: #84cc16;
+  --color-warmborder: #2e2a25;
+}
+
+html.dark body {
+  background-color: #121110;
+  color: #f5f2eb;
+}
+
+html.dark .bg-white,
+html.dark .bg-white\/95,
+html.dark .bg-white\/90,
+html.dark .bg-white\/80 {
+  background-color: #1c1a17 !important;
+}
+
+html.dark .bg-espresso {
+  background-color: #292524 !important;
+  color: #f5f2eb !important;
+}
+
+html.dark .bg-amber-50,
+html.dark .bg-amber-50\/70,
+html.dark .bg-amber-50\/80 {
+  background-color: rgba(217, 119, 6, 0.14) !important;
+}
+
+html.dark .bg-emerald-50,
+html.dark .bg-emerald-50\/80 {
+  background-color: rgba(16, 185, 129, 0.14) !important;
+}
+
+html.dark .bg-rose-50 {
+  background-color: rgba(244, 63, 94, 0.14) !important;
+}
+
+html.dark .text-emerald-950,
+html.dark .text-emerald-900,
+html.dark .text-emerald-800 {
+  color: #a7f3d0 !important;
+}
+
+html.dark .text-amber-900,
+html.dark .text-amber-800 {
+  color: #fde68a !important;
+}
+
+html.dark .text-rose-900,
+html.dark .text-rose-800 {
+  color: #fecdd3 !important;
+}
+
+html.dark input:not([type='checkbox']):not([type='radio']),
+html.dark select,
+html.dark textarea {
+  background-color: #161412;
+  color: #f5f2eb;
+  border-color: #3a342d;
+}
+
+html.dark .leaflet-popup-content-wrapper,
+html.dark .leaflet-popup-tip {
+  background-color: #1c1a17;
+  color: #f5f2eb;
+  border-color: #2e2a25;
+}
+
+/* ============================================================================
+   Animasi Riak Air 3D Smooth dari Pusat Tombol Tema (View Transitions)
+   ============================================================================ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 9999;
+  animation: theme-radial-reveal 1350ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes theme-radial-reveal {
+  0% {
+    clip-path: circle(0px at var(--theme-tx, 50%) var(--theme-ty, 50%));
+  }
+  100% {
+    clip-path: circle(var(--theme-tr, 150vmax) at var(--theme-tx, 50%) var(--theme-ty, 50%));
+  }
+}
+
+.theme-teardrop-wave {
+  position: fixed;
+  pointer-events: none;
+  z-index: 10000;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0.08);
+  background: radial-gradient(
+    circle,
+    transparent 56%,
+    rgba(255, 255, 255, 0.28) 67%,
+    rgba(217, 119, 6, 0.22) 76%,
+    rgba(28, 25, 23, 0.18) 86%,
+    transparent 96%
+  );
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.18),
+    inset 0 4px 12px rgba(255, 255, 255, 0.45),
+    inset 0 -6px 14px rgba(0, 0, 0, 0.2);
+  backdrop-filter: brightness(1.04) contrast(1.03);
+  will-change: transform, opacity;
+  animation: theme-teardrop-ripple 1550ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.theme-teardrop-wave--2 {
+  width: 150px;
+  height: 150px;
+  animation-delay: 180ms;
+  animation-duration: 1650ms;
+}
+
+.theme-teardrop-wave--3 {
+  width: 120px;
+  height: 120px;
+  animation-delay: 360ms;
+  animation-duration: 1750ms;
+}
+
+@keyframes theme-teardrop-ripple {
+  0% {
+    opacity: 0.92;
+    transform: translate(-50%, -50%) scale(0.08);
+  }
+  50% {
+    opacity: 0.58;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(11.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-new(root),
+  .theme-teardrop-wave {
+    animation: none !important;
+  }
+}
+
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }

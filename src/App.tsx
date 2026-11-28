@@ -112,6 +112,7 @@ import {
   MapPin,
   Megaphone,
   MessageSquare,
+  Moon,
   Percent,
   PhoneCall,
   Plus,
@@ -122,6 +123,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Sun,
   TrendingUp,
   Users,
   UserPlus,
@@ -234,6 +236,57 @@ export default function App() {
     : user.avatarText;
 
   // Multi-Project State (Universal untuk seluruh role: SE, TL, SM, DM, ADMIN, DIREKSI, IT)
+  const [isDarkTheme, setIsDarkTheme] = useState<boolean>(
+    () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  );
+  const [themeWave, setThemeWave] = useState<{ x: number; y: number; key: number } | null>(null);
+  const toggleTheme = (e?: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = e?.currentTarget?.getBoundingClientRect();
+    const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+    const y = rect ? rect.top + rect.height / 2 : 32;
+    const endRadius = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y)
+    );
+
+    const rootStyle = document.documentElement.style;
+    rootStyle.setProperty('--theme-tx', `${x}px`);
+    rootStyle.setProperty('--theme-ty', `${y}px`);
+    rootStyle.setProperty('--theme-tr', `${endRadius}px`);
+
+    const waveKey = Date.now();
+    setThemeWave({ x, y, key: waveKey });
+    window.setTimeout(() => {
+      setThemeWave((cur) => (cur?.key === waveKey ? null : cur));
+    }, 2200);
+
+    const applyNext = () => {
+      setIsDarkTheme((prev) => {
+        const next = !prev;
+        document.documentElement.classList.toggle('dark', next);
+        try {
+          localStorage.setItem('devos_theme', next ? 'dark' : 'light');
+        } catch {
+          /* abaikan bila storage diblokir */
+        }
+        return next;
+      });
+    };
+
+    const prefersReduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const docWithVt = document as Document & {
+      startViewTransition?: (cb: () => void) => void;
+    };
+
+    if (!prefersReduced && typeof docWithVt.startViewTransition === 'function') {
+      docWithVt.startViewTransition(applyNext);
+    } else {
+      applyNext();
+    }
+  };
+
   const [projects, setProjects] = useState<CompanyProject[]>(() => loadAllProjects());
   const [activeProjectId, setActiveProjectId] = useState<string>(() => loadSavedProjectId());
   const [showNewProjectModal, setShowNewProjectModal] = useState<boolean>(false);
@@ -2248,6 +2301,15 @@ export default function App() {
                 <span className="hidden sm:inline">Panel Multi-Tenant Core</span>
               </button>
             )}
+            <button
+              type="button"
+              onClick={(e) => toggleTheme(e)}
+              aria-label={isDarkTheme ? 'Aktifkan Light Theme' : 'Aktifkan Dark Theme'}
+              title={isDarkTheme ? 'Beralih ke Light Theme' : 'Beralih ke Dark Theme'}
+              className="h-10 w-10 rounded-xl border border-warmborder bg-surface hover:bg-sandstone text-espresso flex items-center justify-center transition-colors cursor-pointer shrink-0 shadow-2xs"
+            >
+              {isDarkTheme ? <Sun className="size-4 text-amber-400" /> : <Moon className="size-4 text-espresso" />}
+            </button>
             {role === 'SE' ? (
               <div className="shrink-0">
                 <SeNotificationBell
@@ -2299,6 +2361,15 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={(e) => toggleTheme(e)}
+              aria-label={isDarkTheme ? 'Aktifkan Light Theme' : 'Aktifkan Dark Theme'}
+              title={isDarkTheme ? 'Beralih ke Light Theme' : 'Beralih ke Dark Theme'}
+              className="h-10 w-10 rounded-xl border border-warmborder bg-surface hover:bg-sandstone text-espresso flex items-center justify-center transition-colors cursor-pointer shrink-0 shadow-2xs"
+            >
+              {isDarkTheme ? <Sun className="size-4 text-amber-400" /> : <Moon className="size-4 text-espresso" />}
+            </button>
             {role === 'SE' ? (
               <SeNotificationBell
                 quickStatus={seRealData?.quickStatus}
@@ -5312,6 +5383,28 @@ export default function App() {
         <div className="fixed bottom-20 md:bottom-6 right-4 z-50 bg-espresso text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg border border-white/10 animate-fade-in">
           {toast}
         </div>
+      )}
+      {themeWave && (
+        <>
+          <span
+            key={`${themeWave.key}-1`}
+            aria-hidden="true"
+            className="theme-teardrop-wave"
+            style={{ left: `${themeWave.x}px`, top: `${themeWave.y}px` }}
+          />
+          <span
+            key={`${themeWave.key}-2`}
+            aria-hidden="true"
+            className="theme-teardrop-wave theme-teardrop-wave--2"
+            style={{ left: `${themeWave.x}px`, top: `${themeWave.y}px` }}
+          />
+          <span
+            key={`${themeWave.key}-3`}
+            aria-hidden="true"
+            className="theme-teardrop-wave theme-teardrop-wave--3"
+            style={{ left: `${themeWave.x}px`, top: `${themeWave.y}px` }}
+          />
+        </>
       )}
     </div>
   );

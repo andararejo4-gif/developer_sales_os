@@ -3,6 +3,13 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-143 | 2026-11-28 | Dark Theme & Toggle Light/Dark
+- Status: selesai
+- Ubah: `index.html` (inisialisasi class `dark` dari `localStorage.devos_theme`), `src/index.css` (override token `html.dark`, permukaan kartu/modal/input/Leaflet, serta animasi riak air 3D smooth `theme-radial-reveal` + 3 cincin konsentris `theme-teardrop-wave`), `src/App.tsx` (state `isDarkTheme`, `toggleTheme` dari pusat koordinat tombol, & tombol toggle `Sun`/`Moon`)
+- Alasan/keputusan: Memberikan dukungan Dark Theme menyeluruh dengan override token CSS tanpa mengubah puluhan komponen satu per satu.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build`)
+- Berikutnya: -
+
 ## P-142 | 2026-11-28 | Skrip & Checklist Eksekusi Load Test (QA-05) & DR Drill (INF-12 / REL-02)
 - Status: selesai
 - Ubah: `scripts/load-test.ts` (baru; runner konkurensi + p50/p95/p99 + error rate), `scripts/dr-drill.ts` (baru; snapshot tabel inti + `pg_dump` + uji restore non-destruktif ke `dr_drill_verify`), `docs/LOAD_TEST_AND_DR_DRILL_CHECKLIST.md` (baru; panduan & form bukti eksekusi), `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx` (perbarui bukti & catatan `QA-05`, `INF-12`, `REL-02`; status tetap `Siap review`)
