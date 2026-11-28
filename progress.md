@@ -3,6 +3,20 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-142 | 2026-11-28 | Skrip & Checklist Eksekusi Load Test (QA-05) & DR Drill (INF-12 / REL-02)
+- Status: selesai
+- Ubah: `scripts/load-test.ts` (baru; runner konkurensi + p50/p95/p99 + error rate), `scripts/dr-drill.ts` (baru; snapshot tabel inti + `pg_dump` + uji restore non-destruktif ke `dr_drill_verify`), `docs/LOAD_TEST_AND_DR_DRILL_CHECKLIST.md` (baru; panduan & form bukti eksekusi), `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx` (perbarui bukti & catatan `QA-05`, `INF-12`, `REL-02`; status tetap `Siap review`)
+- Alasan/keputusan: Memfasilitasi tim IT/QA mengeksekusi load test dan DR drill nyata sebelum menutup item `QA-05`, `INF-12`, dan `REL-02` di checklist V2.
+- Verifikasi: `rtk bun run scripts/load-test.ts --base-url=http://127.0.0.1:3040 --concurrency=5 --duration=3` (smoke test lokal)
+- Berikutnya: Jalankan di lingkungan staging/produksi dengan `pg_dump`/`psql` terpasang dan catat hasilnya ke `docs/LOAD_TEST_AND_DR_DRILL_CHECKLIST.md`.
+
+## P-141 | 2026-11-28 | Penyesuaian Status Checklist V2: 61 Item Gate/UAT/DR/Load/Mobile ke Siap Review
+- Status: selesai
+- Ubah: `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx` (61 item: `GATE-00..05`, `UT-01..40`, `REL-01..10`, `MOB-09`, `INF-12`, `QA-05`, `QA-06`, `QA-08` disesuaikan dari `Selesai`/`Disetujui` menjadi `Status=Siap review`, `Hasil uji=Perlu ulang`, `Persetujuan reviewer=Belum ditinjau`, `Bukti lengkap?=Tidak`; total `02_Backlog`: **721 Selesai, 61 Siap review**)
+- Alasan/keputusan: Menyelaraskan klaim checklist dengan kondisi nyata bahwa gate komersial, pengesahan pejabat, UAT bertanda tangan, uji perangkat fisik, load test, DR, dan review DoD independen belum dieksekusi.
+- Verifikasi: Readback Python `openpyxl` (`Adjusted: 61`, `{'Selesai': 721, 'Siap review': 61}`)
+- Berikutnya: Tunggu eksekusi UAT bertanda tangan, uji perangkat fisik, load test, DR, dan tanda tangan `13_Pengesahan` sebelum mengubah 61 item tersebut ke `Selesai`.
+
 ## P-140 | 2026-11-28 | Halaman Transaksi & Invoice Paket Developer (Admin & Direksi)
 - Status: selesai
 - Ubah: `db/migrations/0039_plan_subscription_invoices.sql` (baru; tipe `PLAN_SUBSCRIPTION`), `server/payment-gateway.ts` (settlement paket + kuota AIC), `server/tenant-guard.ts`, `server/index.ts` (`GET /api/billing/summary`, `POST /api/billing/subscribe-plan`, update constraint `payment_invoices`), `src/lib/navigation/router.ts` (rute `/transaksi`), `src/components/billing/TransactionsInvoicesPage.tsx` (baru; halaman transaksi + beli paket + `InvoiceDetailModal`), `src/components/OnboardingWizardModal.tsx` (popup invoice resmi sesaat setelah aktivasi paket), `src/App.tsx` (menu & akses halaman transaksi di role `ADMIN` & `DIREKSI`), `tests/transactions-invoices.test.ts` (baru)
