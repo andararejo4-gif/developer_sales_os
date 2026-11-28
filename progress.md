@@ -3,6 +3,13 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-147 | 2026-11-28 | Optimasi Build Web App / PWA Android & iOS (Code-Splitting 89% Lebih Ringan + Workbox Aktif)
+- Status: selesai & live di `hades`
+- Ubah: `vite.config.ts` (hapus `selfDestroying: true`, aktifkan Workbox PWA caching + runtime image cache, tambah `manualChunks` pisah `vendor-react`, `vendor-lucide`, `vendor-docx`, `vendor-leaflet`, `vendor-motion`, `vendor-qrcode`), `src/App.tsx` (lazy-load 32 halaman/modal berat via `React.lazy`), `src/main.tsx` (bungkus `<Suspense>` + pasang `PwaInstallBanner`), `src/components/mobile/PwaInstallBanner.tsx` (baru; prompt install Android & panduan iOS Safari), `index.html` (meta PWA iOS/Android `apple-mobile-web-app-capable`, `black-translucent`, hapus script SW-unregister lama), dan Nginx `hades` (`Permissions-Policy` izinkan `camera=(self)` untuk foto lapangan HP).
+- Alasan/keputusan: Menjadikan 1 build Web App / PWA super ringan dan cepat di Android maupun iOS (entry bundle turun dari 615 KB gzip → 68 KB gzip, ~9x lebih kecil).
+- Verifikasi: `npm run build` (`index-*.js` 68,19 KB gzip), `bun test` (269 pass, 0 fail di 53 file), deploy `dist/*` ke `hades`, & verifikasi live `/`, `/sw.js`, `/manifest.webmanifest`.
+- Berikutnya: -
+
 ## P-146 | 2026-11-28 | Halaman Checkout Khusus 2-Kolom (/checkout/:invoiceNo), Kunci Surat Cinta/Login Sebelum Lunas & Draft Persistence
 - Status: selesai & siap deploy ke `hades`
 - Ubah: `db/migrations/0039_onboarding_pending_payload.sql` (kolom `pending_owner_payload`), `server/payment-gateway.ts` (`finishUrl` ke `/checkout/:invoiceNo`), `server/tenant-guard.ts` (`createOnboardingCheckout` & `finalizeOnboardingAfterPayment` — akun & Surat Cinta hanya aktif setelah `PAID`), `server/index.ts` (`POST /api/onboarding/create-checkout`, `GET /api/payments/checkout/:invoiceNo`, `POST /api/payments/checkout/:invoiceNo/sync`, hook webhook Midtrans), `src/components/PaymentCheckoutPage.tsx` (baru; desain split 2-kolom gelap/terang), `src/App.tsx` (rute `/checkout/:invoiceNo`), `src/components/OnboardingWizardModal.tsx` (simpan draft `dsos_onboarding_draft_v1` anti-refresh, kunci Surat Cinta & login sebelum `PAID`, arahkan ke `/checkout/:invoiceNo`), `src/components/operations/R2OperationsWorkbench.tsx` (tautan `/checkout/:invoiceNo`).

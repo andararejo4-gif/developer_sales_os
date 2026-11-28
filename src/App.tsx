@@ -1,44 +1,43 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { hydrateAllRemoteState } from './lib/db/remote-state';
-import { PublicHomepageV3 } from './components/v3/PublicHomepageV3';
-import { AddSeModal } from './components/AddSeModal';
 import { loadSeTeamList } from './lib/auth/se-management';
-import { AddDeveloperUserModal } from './components/it/AddDeveloperUserModal';
 import {
   loadDeveloperUsers,
   toggleDeveloperUserStatus,
   type DeveloperTeamUser,
   IT_MANAGEABLE_ROLES,
 } from './lib/auth/developer-user-management';
-import { MarketResearchViewer } from './components/MarketResearchViewer';
-import { SalesTargetViewer } from './components/SalesTargetViewer';
-import { JalurProyek } from './components/JalurProyek';
-import { ContentCalendarViewer } from './components/ContentCalendarViewer';
-import { KnowledgeBaseViewer } from './components/KnowledgeBaseViewer';
-import { LoveLetterViewerModal } from './components/LoveLetterViewerModal';
-import { PlaybookViewer } from './components/PlaybookViewer';
-import { DailyRouteViewer } from './components/DailyRouteViewer';
-import { ProjectWebsitePreview } from './components/ProjectWebsitePreview';
-import { PublicProjectSitePage } from './components/PublicProjectSitePage';
-import { PaymentCheckoutPage } from './components/PaymentCheckoutPage';
-import { ProfilePage } from './components/ProfilePage';
+import type { ItAdminSection } from './components/superadmin/ItCommandCenterDashboard';
 import {
   RoleNotificationBell,
   buildRoleGreetingAndNotifications,
   type RoleNotifAction,
 } from './components/RoleNotificationCenter';
-import { CrmPipelineView } from './components/CrmPipelineView';
-import { CommissionSettingsModal } from './components/CommissionSettingsModal';
-import { SuperadminPanel } from './components/SuperadminPanel';
-import { PlatformExecutiveDashboard } from './components/superadmin/PlatformExecutiveDashboard';
-import {
-  ItCommandCenterDashboard,
-  type ItAdminSection,
-} from './components/superadmin/ItCommandCenterDashboard';
-import { FieldOpsModal } from './components/FieldOpsModal';
-import { PipelinePage } from './components/PipelinePage';
-import { CompanyBankAccountsModal } from './components/company/CompanyBankAccountsModal';
-import { CompanyAuditLogsModal } from './components/company/CompanyAuditLogsModal';
+
+const PublicHomepageV3 = lazy(() => import('./components/v3/PublicHomepageV3').then((m) => ({ default: m.PublicHomepageV3 })));
+const AddSeModal = lazy(() => import('./components/AddSeModal').then((m) => ({ default: m.AddSeModal })));
+const AddDeveloperUserModal = lazy(() => import('./components/it/AddDeveloperUserModal').then((m) => ({ default: m.AddDeveloperUserModal })));
+const MarketResearchViewer = lazy(() => import('./components/MarketResearchViewer').then((m) => ({ default: m.MarketResearchViewer })));
+const SalesTargetViewer = lazy(() => import('./components/SalesTargetViewer').then((m) => ({ default: m.SalesTargetViewer })));
+const JalurProyek = lazy(() => import('./components/JalurProyek').then((m) => ({ default: m.JalurProyek })));
+const ContentCalendarViewer = lazy(() => import('./components/ContentCalendarViewer').then((m) => ({ default: m.ContentCalendarViewer })));
+const KnowledgeBaseViewer = lazy(() => import('./components/KnowledgeBaseViewer').then((m) => ({ default: m.KnowledgeBaseViewer })));
+const LoveLetterViewerModal = lazy(() => import('./components/LoveLetterViewerModal').then((m) => ({ default: m.LoveLetterViewerModal })));
+const PlaybookViewer = lazy(() => import('./components/PlaybookViewer').then((m) => ({ default: m.PlaybookViewer })));
+const DailyRouteViewer = lazy(() => import('./components/DailyRouteViewer').then((m) => ({ default: m.DailyRouteViewer })));
+const ProjectWebsitePreview = lazy(() => import('./components/ProjectWebsitePreview').then((m) => ({ default: m.ProjectWebsitePreview })));
+const PublicProjectSitePage = lazy(() => import('./components/PublicProjectSitePage').then((m) => ({ default: m.PublicProjectSitePage })));
+const PaymentCheckoutPage = lazy(() => import('./components/PaymentCheckoutPage').then((m) => ({ default: m.PaymentCheckoutPage })));
+const ProfilePage = lazy(() => import('./components/ProfilePage').then((m) => ({ default: m.ProfilePage })));
+const CrmPipelineView = lazy(() => import('./components/CrmPipelineView').then((m) => ({ default: m.CrmPipelineView })));
+const CommissionSettingsModal = lazy(() => import('./components/CommissionSettingsModal').then((m) => ({ default: m.CommissionSettingsModal })));
+const SuperadminPanel = lazy(() => import('./components/SuperadminPanel').then((m) => ({ default: m.SuperadminPanel })));
+const PlatformExecutiveDashboard = lazy(() => import('./components/superadmin/PlatformExecutiveDashboard').then((m) => ({ default: m.PlatformExecutiveDashboard })));
+const ItCommandCenterDashboard = lazy(() => import('./components/superadmin/ItCommandCenterDashboard').then((m) => ({ default: m.ItCommandCenterDashboard })));
+const FieldOpsModal = lazy(() => import('./components/FieldOpsModal').then((m) => ({ default: m.FieldOpsModal })));
+const PipelinePage = lazy(() => import('./components/PipelinePage').then((m) => ({ default: m.PipelinePage })));
+const CompanyBankAccountsModal = lazy(() => import('./components/company/CompanyBankAccountsModal').then((m) => ({ default: m.CompanyBankAccountsModal })));
+const CompanyAuditLogsModal = lazy(() => import('./components/company/CompanyAuditLogsModal').then((m) => ({ default: m.CompanyAuditLogsModal })));
 import { MobileBottomNav, type MobileNavTab } from './components/mobile/MobileBottomNav';
 import { MobileMoreSheet } from './components/mobile/MobileMoreSheet';
 import { calculateSalesTargetPlan } from './lib/sales-target/calculator';
@@ -61,8 +60,8 @@ import {
   exportDailyReportExcel,
   exportDailyReportPdf,
 } from './lib/exporters/daily-report-exporter';
-import { SmDailyReportPanel } from './components/SmDailyReportPanel';
-import { SeDailyReportDetailPanel } from './components/SeDailyReportDetailPanel';
+const SmDailyReportPanel = lazy(() => import('./components/SmDailyReportPanel').then((m) => ({ default: m.SmDailyReportPanel })));
+const SeDailyReportDetailPanel = lazy(() => import('./components/SeDailyReportDetailPanel').then((m) => ({ default: m.SeDailyReportDetailPanel })));
 import {
   loadAuthSession,
   logoutFromServer,
@@ -130,16 +129,17 @@ import {
   Share2,
   Wrench,
 } from 'lucide-react';
-import { SecureDocumentVaultPage } from './components/SecureDocumentVaultPage';
-import { ReferralProgramPage } from './components/ReferralProgramPage';
-import { CustomerComplaintsPage } from './components/CustomerComplaintsPage';
-import { BankSubmissionWorkflowPage } from './components/BankSubmissionWorkflowPage';
-import { OrgUserManagementModal } from './components/OrgUserManagementModal';
-import { OrgUserManagementPage } from './components/OrgUserManagementPage';
-import { R2OperationsWorkbench } from './components/operations/R2OperationsWorkbench';
 import { fetchPlanOverridesFromDb, getDeveloperPlan } from './lib/plans/plan-override';
-import { ItKnowledgeAiPanel } from './components/it/ItKnowledgeAiPanel';
-import { ExecutiveControlTowerPage } from './components/ExecutiveControlTowerPage';
+
+const SecureDocumentVaultPage = lazy(() => import('./components/SecureDocumentVaultPage').then((m) => ({ default: m.SecureDocumentVaultPage })));
+const ReferralProgramPage = lazy(() => import('./components/ReferralProgramPage').then((m) => ({ default: m.ReferralProgramPage })));
+const CustomerComplaintsPage = lazy(() => import('./components/CustomerComplaintsPage').then((m) => ({ default: m.CustomerComplaintsPage })));
+const BankSubmissionWorkflowPage = lazy(() => import('./components/BankSubmissionWorkflowPage').then((m) => ({ default: m.BankSubmissionWorkflowPage })));
+const OrgUserManagementModal = lazy(() => import('./components/OrgUserManagementModal').then((m) => ({ default: m.OrgUserManagementModal })));
+const OrgUserManagementPage = lazy(() => import('./components/OrgUserManagementPage').then((m) => ({ default: m.OrgUserManagementPage })));
+const R2OperationsWorkbench = lazy(() => import('./components/operations/R2OperationsWorkbench').then((m) => ({ default: m.R2OperationsWorkbench })));
+const ItKnowledgeAiPanel = lazy(() => import('./components/it/ItKnowledgeAiPanel').then((m) => ({ default: m.ItKnowledgeAiPanel })));
+const ExecutiveControlTowerPage = lazy(() => import('./components/ExecutiveControlTowerPage').then((m) => ({ default: m.ExecutiveControlTowerPage })));
 import {
   AD_CAMPAIGNS,
   BOOKING_TRANSACTIONS,
