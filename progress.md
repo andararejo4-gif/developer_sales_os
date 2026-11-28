@@ -3,6 +3,13 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-146 | 2026-11-28 | Halaman Checkout Khusus 2-Kolom (/checkout/:invoiceNo), Kunci Surat Cinta/Login Sebelum Lunas & Draft Persistence
+- Status: selesai & siap deploy ke `hades`
+- Ubah: `db/migrations/0039_onboarding_pending_payload.sql` (kolom `pending_owner_payload`), `server/payment-gateway.ts` (`finishUrl` ke `/checkout/:invoiceNo`), `server/tenant-guard.ts` (`createOnboardingCheckout` & `finalizeOnboardingAfterPayment` — akun & Surat Cinta hanya aktif setelah `PAID`), `server/index.ts` (`POST /api/onboarding/create-checkout`, `GET /api/payments/checkout/:invoiceNo`, `POST /api/payments/checkout/:invoiceNo/sync`, hook webhook Midtrans), `src/components/PaymentCheckoutPage.tsx` (baru; desain split 2-kolom gelap/terang), `src/App.tsx` (rute `/checkout/:invoiceNo`), `src/components/OnboardingWizardModal.tsx` (simpan draft `dsos_onboarding_draft_v1` anti-refresh, kunci Surat Cinta & login sebelum `PAID`, arahkan ke `/checkout/:invoiceNo`), `src/components/operations/R2OperationsWorkbench.tsx` (tautan `/checkout/:invoiceNo`).
+- Alasan/keputusan: Mengganti tombol simulasi dummy di onboarding menjadi checkout Midtrans Sandbox resmi, mengunci Surat Cinta & login sebelum pembayaran lunas, serta menjaga data form wizard tetap aman bila halaman di-refresh.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`), `bun build server/index.ts --outfile dist-server.mjs --target node`, `bun test` (53 files), dan deploy + smoke live di `hades`.
+- Berikutnya: -
+
 ## P-145 | 2026-11-28 | Integrasi Payment Gateway Midtrans Sandbox (Snap API, Webhook SHA-512 & Status Sync)
 - Status: selesai di lokal (kredensial Sandbox terpasang di `.env` lokal; perlu disalin ke `.env` `hades` saat deploy)
 - Ubah: `.env` (`PAYMENT_PROVIDER=midtrans`, `MIDTRANS_IS_PRODUCTION=false`, `MIDTRANS_MERCHANT_ID`, `MIDTRANS_SERVER_KEY`, `MIDTRANS_CLIENT_KEY`), `server/payment-gateway.ts` (`MidtransPaymentAdapter`, `getActivePaymentGateway`, `verifyMidtransSignature` SHA-512, `mapMidtransStatus`, `handleMidtransWebhook`, `checkMidtransTransactionStatus`), `server/index.ts` (webhook publik `POST /api/payments/midtrans/webhook`, `GET /api/payments/config`, `POST /api/payments/check-status`, `/api/payments/invoices` & `/api/payments/dummy-settle` pakai `getActivePaymentGateway()`), `src/components/operations/R2OperationsWorkbench.tsx` (tombol `Bayar via Midtrans` & `Cek Status`), `tests/payment-gateway.test.ts` (3 test Midtrans).

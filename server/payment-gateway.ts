@@ -16,6 +16,7 @@ export interface CreateInvoiceInput {
   unitCode?: string;
   customerName?: string;
   customerPhone?: string;
+  finishUrl?: string;
   createdBy: string;
 }
 
@@ -254,7 +255,8 @@ export class MidtransPaymentAdapter extends SandboxDummyPaymentAdapter {
     const cleanAmount = Math.max(1000, Math.round(input.amountIdr));
     const invoiceNo = `INV-MID-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
     const authHeader = `Basic ${Buffer.from(`${cfg.serverKey}:`).toString('base64')}`;
-    const finishUrl = String(process.env.PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:5173');
+    const baseAppUrl = String(process.env.PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:5173').replace(/\/+$/, '');
+    const finishUrl = input.finishUrl || `${baseAppUrl}/checkout/${encodeURIComponent(invoiceNo)}`;
 
     const snapPayload = {
       transaction_details: {

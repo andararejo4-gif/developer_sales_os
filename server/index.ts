@@ -30,6 +30,8 @@ import {
 import { generateGroundedLoveLetter } from './love-letter-generator';
 import {
   activateOnboardingWithDummyPayment,
+  createOnboardingCheckout,
+  finalizeOnboardingAfterPayment,
   CrossTenantViolationError,
   resolveStrictTenantId,
   resolveTenantByProjectSlug,
@@ -1479,6 +1481,7 @@ const server = http.createServer(async (req, res) => {
       pathname.startsWith('/c/') ||
       pathname.startsWith('/api/se/media/') ||
       pathname === '/api/se/social/callback' ||
+      pathname.startsWith('/api/payments/checkout/') ||
       (pathname === '/api/payments/midtrans/webhook' && req.method === 'POST');
 
     let user: {
@@ -3868,10 +3871,97 @@ const server = http.createServer(async (req, res) => {
       try {
         const body = await readJsonBody(req);
         const result = await handleMidtransWebhook(body);
+        if (result.ok && result.invoice?.invoice_no && result.invoice?.status === 'PAID') {
+          await finalizeOnboardingAfterPayment(String(result.invoice.invoice_no)).catch((e) =>
+            console.warn('[Midtrans Webhook] finalizeOnboardingAfterPayment error:', e)
+          );
+        }
         sendJson(res, result.status || 200, result);
       } catch (err: any) {
         sendJson(res, 400, { ok: false, error: err?.message || 'Webhook Midtrans gagal diproses.' });
       }
+      return;
+    }
+
+    // 14C. PUBLIC DEDICATED CHECKOUT PAGE DATA & STATUS SYNC (/checkout/:invoiceNo)
+    if (pathname.startsWith('/api/payments/checkout/') && req.method === 'GET') {
+      const invoiceNo = decodeURIComponent(pathname.replace('/api/payments/checkout/', '')).trim();
+      const invRows = await sql`
+        SELECT invoice_no, provider, invoice_type, reference_code, description,
+               amount_idr, aic_amount, unit_code, customer_name, created_by,
+               status, checkout_url, paid_at, created_at, project_id
+        FROM sales_os.payment_invoices
+        WHERE invoice_no = ${invoiceNo}
+        LIMIT 1
+      `;
+      if (invRows.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Invoice pembayaran tidak ditemukan.' });
+        return;
+      }
+      const inv = invRows[0];
+      const sessRows = await sql`
+        SELECT id, selected_plan, company_name, project_name, slug, city, province,
+               status, activated_tenant_id, love_letter_points
+        FROM sales_os.onboarding_sessions
+        WHERE invoice_no = ${invoiceNo}
+        LIMIT 1
+      `;
+      const sess = sessRows[0] || null;
+      const isPaid = inv.status === 'PAID';
+      sendJson(res, 200, {
+        ok: true,
+        invoice: inv,
+        onboarding: sess
+          ? {
+              sessionId: sess.id,
+              selectedPlan: sess.selected_plan,
+              companyName: sess.company_name,
+              projectName: sess.project_name,
+              slug: sess.slug,
+              city: sess.city,
+              province: sess.province,
+              status: sess.status,
+              activatedTenantId: isPaid ? sess.activated_tenant_id : null,
+              pointsCount: Array.isArray(sess.love_letter_points) ? sess.love_letter_points.length : 0,
+              loveLetterPoints: isPaid ? sess.love_letter_points : [],
+            }
+          : null,
+      });
+      return;
+    }
+
+    if (pathname.startsWith('/api/payments/checkout/') && pathname.endsWith('/sync') && req.method === 'POST') {
+      const invoiceNo = decodeURIComponent(
+        pathname.replace('/api/payments/checkout/', '').replace(/\/sync$/, '')
+      ).trim();
+      const invRows = await sql`
+        SELECT tenant_id, invoice_no, status FROM sales_os.payment_invoices WHERE invoice_no = ${invoiceNo} LIMIT 1
+      `;
+      if (invRows.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Invoice tidak ditemukan.' });
+        return;
+      }
+      const inv = invRows[0];
+      let syncRes: any = { ok: true, pending: inv.status === 'PENDING' };
+      if (inv.status !== 'PAID') {
+        syncRes = await checkMidtransTransactionStatus(String(inv.tenant_id), invoiceNo);
+      }
+      const activation = await finalizeOnboardingAfterPayment(invoiceNo);
+      const updatedInvRows = await sql`
+        SELECT invoice_no, provider, invoice_type, reference_code, description,
+               amount_idr, aic_amount, unit_code, customer_name, created_by,
+               status, checkout_url, paid_at, created_at, project_id
+        FROM sales_os.payment_invoices
+        WHERE invoice_no = ${invoiceNo}
+        LIMIT 1
+      `;
+      sendJson(res, 200, {
+        ok: true,
+        invoice: updatedInvRows[0] || null,
+        pending: updatedInvRows[0]?.status !== 'PAID',
+        midtransStatus: syncRes?.midtransStatus || updatedInvRows[0]?.status,
+        activation: activation.paid ? activation : null,
+      });
       return;
     }
 
@@ -3941,6 +4031,31 @@ const server = http.createServer(async (req, res) => {
         files: Array.isArray(body.files) ? body.files : [],
       });
       sendJson(res, 200, { ok: true, ...result });
+      return;
+    }
+
+    if (pathname === '/api/onboarding/create-checkout' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const sessionId = String(body.sessionId || '').trim();
+      const ownerEmail = String(body.ownerEmail || '').trim();
+      if (!sessionId || !ownerEmail) {
+        sendJson(res, 400, { ok: false, error: 'sessionId dan ownerEmail wajib diisi.' });
+        return;
+      }
+      try {
+        const result = await createOnboardingCheckout({
+          sessionId,
+          ownerEmail,
+          ownerName: String(body.ownerName || 'Admin IT Tim'),
+          ownerPassword: String(body.ownerPassword || ''),
+          clusterCoords: Array.isArray(body.clusterCoords) ? body.clusterCoords : [],
+          verifiedUnits: Array.isArray(body.verifiedUnits) ? body.verifiedUnits : [],
+          loveLetterPoints: Array.isArray(body.loveLetterPoints) ? body.loveLetterPoints : [],
+        });
+        sendJson(res, result.ok ? 200 : 400, result);
+      } catch (err: any) {
+        sendJson(res, 502, { ok: false, error: err?.message || 'Gagal membuat checkout Midtrans.' });
+      }
       return;
     }
 

@@ -421,6 +421,12 @@ export const R2OperationsWorkbench: React.FC<R2OperationsWorkbenchProps> = ({
                     {inv.status === 'PENDING' && String(inv.checkout_url || '').startsWith('https://') && (
                       <>
                         <a
+                          href={`/checkout/${encodeURIComponent(inv.invoice_no)}`}
+                          className="px-2.5 py-1 rounded bg-espresso text-white text-[11px] font-semibold"
+                        >
+                          Halaman Checkout
+                        </a>
+                        <a
                           href={inv.checkout_url}
                           target="_blank"
                           rel="noreferrer"
@@ -431,7 +437,7 @@ export const R2OperationsWorkbench: React.FC<R2OperationsWorkbenchProps> = ({
                         <button
                           type="button"
                           onClick={() => handleCheckMidtransStatus(inv.invoice_no)}
-                          className="px-2.5 py-1 rounded bg-espresso text-white text-[11px] font-semibold cursor-pointer"
+                          className="px-2.5 py-1 rounded bg-olive text-white text-[11px] font-semibold cursor-pointer"
                         >
                           Cek Status
                         </button>

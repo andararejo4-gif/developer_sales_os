@@ -20,6 +20,7 @@ import { PlaybookViewer } from './components/PlaybookViewer';
 import { DailyRouteViewer } from './components/DailyRouteViewer';
 import { ProjectWebsitePreview } from './components/ProjectWebsitePreview';
 import { PublicProjectSitePage } from './components/PublicProjectSitePage';
+import { PaymentCheckoutPage } from './components/PaymentCheckoutPage';
 import { ProfilePage } from './components/ProfilePage';
 import {
   RoleNotificationBell,
@@ -1163,6 +1164,11 @@ export default function App() {
     else if (tab === 'rute') openView('rute');
     else if (tab === 'lapangan') openView('lapangan');
   };
+
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/checkout/')) {
+    const invNo = decodeURIComponent(window.location.pathname.replace(/^\/checkout\//, '').split('/')[0] || '');
+    return <PaymentCheckoutPage invoiceNo={invNo} />;
+  }
 
   if (typeof window !== 'undefined' && window.location.pathname.startsWith('/p/')) {
     const slug = decodeURIComponent(window.location.pathname.replace(/^\/p\//, '').split('/')[0] || 'the-park-sukoharjo');

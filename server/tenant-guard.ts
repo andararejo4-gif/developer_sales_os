@@ -4,7 +4,7 @@ import path from 'node:path';
 import { sql } from './db';
 import { hashPassword } from './auth';
 import { runPythonExtractor } from './truth-engine';
-import { paymentGateway } from './payment-gateway';
+import { paymentGateway, getActivePaymentGateway } from './payment-gateway';
 import { grantTopupLotAtomic } from './aic-ledger';
 import type { RoleKey } from '../src/data';
 
@@ -423,5 +423,245 @@ export async function activateOnboardingWithDummyPayment(params: {
     planCode,
     invoiceNo: String(invoice.invoice_no),
     initialAic: planMeta.initialAic,
+  };
+}
+
+/** Buat invoice Midtrans Sandbox untuk onboarding tanpa membuat akun/tenant sebelum status PAID. */
+export async function createOnboardingCheckout(params: {
+  sessionId: string;
+  ownerEmail: string;
+  ownerName: string;
+  ownerPassword: string;
+  clusterCoords: Array<{ namaCluster: string; koordinat: string }>;
+  verifiedUnits: OnboardingExtractedUnit[];
+  loveLetterPoints?: unknown[];
+}) {
+  const cleanEmail = params.ownerEmail.trim().toLowerCase();
+  if (!cleanEmail || !cleanEmail.includes('@')) {
+    return { ok: false, error: 'Email Admin/IT tim wajib valid.' };
+  }
+  if (!params.ownerPassword || params.ownerPassword.trim().length < 6) {
+    return { ok: false, error: 'Password Admin/IT tim minimal 6 karakter.' };
+  }
+
+  const sessRows = await sql`
+    SELECT * FROM sales_os.onboarding_sessions WHERE id = ${params.sessionId}::uuid LIMIT 1
+  `;
+  if (sessRows.length === 0) {
+    return { ok: false, error: 'Sesi onboarding tidak ditemukan.' };
+  }
+  const sess = sessRows[0];
+
+  if (sess.status === 'ACTIVATED' && sess.activated_tenant_id && sess.invoice_no) {
+    return {
+      ok: true,
+      alreadyActivated: true,
+      invoiceNo: String(sess.invoice_no),
+      checkoutPath: `/checkout/${encodeURIComponent(String(sess.invoice_no))}`,
+    };
+  }
+
+  // Jika sudah ada invoice PENDING sebelumnya untuk sesi ini, pakai ulang agar tidak duplikat
+  if (sess.status === 'INVOICED' && sess.invoice_no) {
+    const existingInv = await sql`
+      SELECT * FROM sales_os.payment_invoices WHERE invoice_no = ${String(sess.invoice_no)} LIMIT 1
+    `;
+    if (existingInv.length > 0 && existingInv[0].status === 'PENDING') {
+      return {
+        ok: true,
+        invoice: existingInv[0],
+        invoiceNo: String(existingInv[0].invoice_no),
+        checkoutPath: `/checkout/${encodeURIComponent(String(existingInv[0].invoice_no))}`,
+      };
+    }
+  }
+
+  const planCode = (sess.selected_plan || 'platinum') as OnboardingPlanCode;
+  const planMeta = PLAN_CATALOG_CONFIG[planCode] || PLAN_CATALOG_CONFIG.platinum;
+  const pendingTenantId = generateUniqueTenantId(String(sess.company_name));
+  const projectId = String(sess.slug);
+  const passwordHash = hashPassword(params.ownerPassword.trim());
+
+  const gateway = getActivePaymentGateway();
+  const invoice = await gateway.createInvoice({
+    tenantId: pendingTenantId,
+    projectId,
+    invoiceType: 'AIC_TOPUP',
+    referenceCode: `PLAN-${planCode.toUpperCase()}`,
+    description: `Paket ${planMeta.label} (${sess.company_name})`,
+    amountIdr: planMeta.priceIdr,
+    aicAmount: planMeta.initialAic,
+    customerName: params.ownerName.trim() || 'Admin IT Tim',
+    createdBy: cleanEmail,
+  });
+
+  const pendingPayload = {
+    pendingTenantId,
+    ownerEmail: cleanEmail,
+    ownerName: params.ownerName.trim() || 'Admin IT Tim',
+    passwordHash,
+    clusterCoords: params.clusterCoords || [],
+    verifiedUnits: params.verifiedUnits || [],
+    loveLetterPoints: params.loveLetterPoints || [],
+  };
+
+  await sql`
+    UPDATE sales_os.onboarding_sessions
+    SET status = 'INVOICED',
+        invoice_no = ${String(invoice.invoice_no)},
+        cluster_coords = ${JSON.stringify(params.clusterCoords || [])}::jsonb,
+        extracted_units = ${JSON.stringify(params.verifiedUnits || [])}::jsonb,
+        love_letter_points = ${JSON.stringify(params.loveLetterPoints || [])}::jsonb,
+        pending_owner_payload = ${JSON.stringify(pendingPayload)}::jsonb,
+        updated_at = NOW()
+    WHERE id = ${params.sessionId}::uuid
+  `;
+
+  return {
+    ok: true,
+    invoice,
+    invoiceNo: String(invoice.invoice_no),
+    checkoutPath: `/checkout/${encodeURIComponent(String(invoice.invoice_no))}`,
+  };
+}
+
+/** Aktifkan tenant, Surat Cinta, dan akun login HANYA setelah invoice berstatus PAID. */
+export async function finalizeOnboardingAfterPayment(invoiceNo: string) {
+  const invRows = await sql`
+    SELECT * FROM sales_os.payment_invoices WHERE invoice_no = ${invoiceNo} LIMIT 1
+  `;
+  if (invRows.length === 0) {
+    return { ok: false, paid: false, error: 'Invoice tidak ditemukan.' };
+  }
+  const inv = invRows[0];
+  if (inv.status !== 'PAID') {
+    return { ok: false, paid: false, status: String(inv.status), error: 'Pembayaran belum lunas.' };
+  }
+
+  const sessRows = await sql`
+    SELECT * FROM sales_os.onboarding_sessions WHERE invoice_no = ${invoiceNo} LIMIT 1
+  `;
+  if (sessRows.length === 0) {
+    return { ok: true, paid: true, isOnboarding: false };
+  }
+  const sess = sessRows[0];
+  if (sess.status === 'ACTIVATED' && sess.activated_tenant_id) {
+    const regRows = await sql`
+      SELECT love_letter_points FROM sales_os.projects_registry
+      WHERE tenant_id = ${String(sess.activated_tenant_id)} LIMIT 1
+    `;
+    return {
+      ok: true,
+      paid: true,
+      isOnboarding: true,
+      alreadyActivated: true,
+      tenantId: String(sess.activated_tenant_id),
+      projectId: String(sess.slug),
+      slug: String(sess.slug),
+      planCode: String(sess.selected_plan || 'platinum'),
+      invoiceNo,
+      initialAic: Number(inv.aic_amount || 0),
+      loveLetterPoints: regRows[0]?.love_letter_points || sess.love_letter_points || [],
+      ownerEmail: sess.pending_owner_payload?.ownerEmail || String(inv.created_by || ''),
+    };
+  }
+
+  const pending = (sess.pending_owner_payload || {}) as {
+    pendingTenantId?: string;
+    ownerEmail?: string;
+    ownerName?: string;
+    passwordHash?: string;
+    clusterCoords?: Array<{ namaCluster: string; koordinat: string }>;
+    verifiedUnits?: OnboardingExtractedUnit[];
+    loveLetterPoints?: unknown[];
+  };
+
+  const planCode = (sess.selected_plan || 'platinum') as OnboardingPlanCode;
+  const planMeta = PLAN_CATALOG_CONFIG[planCode] || PLAN_CATALOG_CONFIG.platinum;
+  const tenantId = pending.pendingTenantId || String(inv.tenant_id) || generateUniqueTenantId(String(sess.company_name));
+  const projectId = String(sess.slug);
+  const cleanEmail = String(pending.ownerEmail || inv.created_by || '').trim().toLowerCase();
+  const ownerName = String(pending.ownerName || inv.customer_name || 'Admin IT Tim').trim();
+  const passwordHash = pending.passwordHash || hashPassword('Andara2026!');
+  const loveLetterPoints = pending.loveLetterPoints || sess.love_letter_points || [];
+  const clusterCoords = pending.clusterCoords || sess.cluster_coords || [];
+  const verifiedUnits = (pending.verifiedUnits || sess.extracted_units || []) as OnboardingExtractedUnit[];
+
+  await sql`
+    INSERT INTO sales_os.tenants (tenant_id, company_name, plan_code, status, owner_email)
+    VALUES (${tenantId}, ${sess.company_name}, ${planCode}, 'ACTIVE', ${cleanEmail})
+    ON CONFLICT (tenant_id) DO NOTHING
+  `;
+  await sql`
+    INSERT INTO sales_os.projects_registry (
+      tenant_id, project_id, slug, project_name, developer_name, city, province, location_label, cluster_coords, love_letter_points
+    ) VALUES (
+      ${tenantId}, ${projectId}, ${sess.slug}, ${sess.project_name}, ${sess.company_name},
+      ${sess.city || ''}, ${sess.province || ''}, ${`${sess.city || ''}, ${sess.province || ''}`},
+      ${JSON.stringify(clusterCoords)}::jsonb,
+      ${JSON.stringify(loveLetterPoints)}::jsonb
+    )
+    ON CONFLICT (slug) DO NOTHING
+  `;
+
+  // Pastikan kuota AIC awal masuk ke wallet & lot jika belum dicatat oleh settleInvoice
+  await grantTopupLotAtomic({
+    tenantId,
+    billableEventId: `pg_topup_${invoiceNo}`,
+    lotCode: `PG-${invoiceNo}`,
+    amountAic: planMeta.initialAic,
+    expiresAt: new Date(Date.now() + 90 * 86400_000).toISOString(),
+    actorEmail: cleanEmail,
+    actorRole: 'SYSTEM',
+  }).catch(() => {});
+
+  await sql`
+    INSERT INTO sales_os.app_users (email, name, role, tenant_id, project_id, password_hash, is_active)
+    VALUES (${cleanEmail}, ${ownerName}, 'IT', ${tenantId}, ${projectId}, ${passwordHash}, true)
+    ON CONFLICT (email) DO UPDATE SET
+      tenant_id = EXCLUDED.tenant_id,
+      project_id = EXCLUDED.project_id,
+      password_hash = EXCLUDED.password_hash,
+      role = 'IT',
+      is_active = true
+  `;
+
+  for (const u of verifiedUnits) {
+    await sql`
+      INSERT INTO sales_os.project_units (
+        tenant_id, project_id, unit_code, cluster, unit_type, lt_sqm, lb_sqm,
+        price_cash, price_kpr, status
+      ) VALUES (
+        ${tenantId}, ${projectId}, ${u.unit}, ${u.tipe || 'Utama'}, ${u.tipe || 'Standard'},
+        ${Number(u.lt || 72)}, ${Number(u.lb || 60)},
+        ${Number(u.keras || 650_000_000)}, ${Number(u.kpr || 683_000_000)}, 'available'
+      )
+      ON CONFLICT DO NOTHING
+    `;
+  }
+
+  await fs.mkdir(getIsolatedStorageDir(tenantId, projectId), { recursive: true });
+
+  await sql`
+    UPDATE sales_os.onboarding_sessions
+    SET status = 'ACTIVATED',
+        activated_tenant_id = ${tenantId},
+        updated_at = NOW()
+    WHERE id = ${sess.id}::uuid
+  `;
+
+  return {
+    ok: true,
+    paid: true,
+    isOnboarding: true,
+    alreadyActivated: false,
+    tenantId,
+    projectId,
+    slug: String(sess.slug),
+    planCode,
+    invoiceNo,
+    initialAic: planMeta.initialAic,
+    loveLetterPoints,
+    ownerEmail: cleanEmail,
   };
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X,
   FileText,
@@ -12,12 +12,12 @@ import {
   ShieldCheck,
   Plus,
   Trash2,
+  Lock,
 } from 'lucide-react';
 import type { LoveLetterPoint } from '../lib/love-letter/points-data';
 import { validateLoveLetter } from '../lib/love-letter/validator';
 import { generateLoveLetterDocx } from '../lib/love-letter/docx-exporter';
 import { generateLoveLetterHtml } from '../lib/love-letter/html-exporter';
-import { loginWithServer } from '../lib/auth/dummy-accounts';
 
 interface WizardProps {
   isOpen: boolean;
@@ -53,6 +53,18 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+const ONBOARDING_DRAFT_KEY = 'dsos_onboarding_draft_v1';
+
+function loadOnboardingDraft() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(ONBOARDING_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 export const OnboardingWizardModal: React.FC<WizardProps> = ({
   isOpen,
   selectedPlan = 'platinum',
@@ -60,48 +72,108 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({
   onOpenFullViewer,
   onEnterDashboard,
 }) => {
-  const [currentStep, setCurrentStep] = useState<number>(1);
+  const initialDraft = loadOnboardingDraft();
+  const [currentStep, setCurrentStep] = useState<number>(Number(initialDraft?.currentStep || 1));
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [brosurFile, setBrosurFile] = useState<File | null>(null);
   const [pricelistFile, setPricelistFile] = useState<File | null>(null);
-  const [onboardingSessionId, setOnboardingSessionId] = useState<string | null>(null);
-  const [ocrPreview, setOcrPreview] = useState<string>('');
-  const [activationResult, setActivationResult] = useState<{
+  const [onboardingSessionId, setOnboardingSessionId] = useState<string | null>(
+    initialDraft?.onboardingSessionId || null
+  );
+  const [ocrPreview, setOcrPreview] = useState<string>(initialDraft?.ocrPreview || '');
+  const [pendingInvoiceNo, setPendingInvoiceNo] = useState<string | null>(
+    initialDraft?.pendingInvoiceNo || null
+  );
+  const [activationResult] = useState<{
     tenantId: string;
     slug: string;
     invoiceNo: string;
     initialAic: number;
   } | null>(null);
 
-  const [formData, setFormData] = useState({
-    developerName: 'PT Andara Rejo Makmur',
-    projectName: 'The Park Townhouse Sukoharjo',
-    city: 'Sukoharjo',
-    province: 'Jawa Tengah',
-    ownerName: 'Admin IT Tim',
-    ownerEmail: '',
-    ownerPassword: '',
-    facilities: 'One gate system, security 24 jam, cctv kawasan, underground utilities, children play area, zen garden',
-  });
+  const [formData, setFormData] = useState(
+    initialDraft?.formData || {
+      developerName: 'PT Andara Rejo Makmur',
+      projectName: 'The Park Townhouse Sukoharjo',
+      city: 'Sukoharjo',
+      province: 'Jawa Tengah',
+      ownerName: 'Admin IT Tim',
+      ownerEmail: '',
+      ownerPassword: '',
+      facilities: 'One gate system, security 24 jam, cctv kawasan, underground utilities, children play area, zen garden',
+    }
+  );
 
-  const [clusters, setClusters] = useState<Array<{ name: string; lat: string; lng: string }>>([
-    { name: 'Cluster Utama / Nagoya', lat: '-7.6738726546957565', lng: '110.84397833605674' },
-    { name: 'Cluster Osaka', lat: '-7.670296745443235', lng: '110.83933117795694' },
-    { name: 'Cluster Tokyo', lat: '-7.670599344181913', lng: '110.83923919943206' },
-  ]);
+  const [clusters, setClusters] = useState<Array<{ name: string; lat: string; lng: string }>>(
+    Array.isArray(initialDraft?.clusters) && initialDraft.clusters.length > 0
+      ? initialDraft.clusters
+      : [
+          { name: 'Cluster Utama / Nagoya', lat: '-7.6738726546957565', lng: '110.84397833605674' },
+          { name: 'Cluster Osaka', lat: '-7.670296745443235', lng: '110.83933117795694' },
+          { name: 'Cluster Tokyo', lat: '-7.670599344181913', lng: '110.83923919943206' },
+        ]
+  );
 
-  const [extractedUnits, setExtractedUnits] = useState<ExtractedUnitRow[]>([
-    { unit: 'A.01', tipe: 'Diamond (Nagoya)', lt: 90, lb: 75, keras: 850000000, tempo24: 950000000, kpr: 900000000, status: 'terverifikasi' },
-    { unit: 'B.01', tipe: 'Gold (Osaka)', lt: 72, lb: 60, keras: 680000000, tempo24: 760000000, kpr: 720000000, status: 'terverifikasi' },
-    { unit: 'C.10 (Hook)', tipe: 'Emerald Plus', lt: 78, lb: 50, keras: null, tempo24: null, kpr: null, status: 'perlu dicek' },
+  const [extractedUnits, setExtractedUnits] = useState<ExtractedUnitRow[]>(
+    Array.isArray(initialDraft?.extractedUnits) && initialDraft.extractedUnits.length > 0
+      ? initialDraft.extractedUnits
+      : [
+          { unit: 'A.01', tipe: 'Diamond (Nagoya)', lt: 90, lb: 75, keras: 850000000, tempo24: 950000000, kpr: 900000000, status: 'terverifikasi' },
+          { unit: 'B.01', tipe: 'Gold (Osaka)', lt: 72, lb: 60, keras: 680000000, tempo24: 760000000, kpr: 720000000, status: 'terverifikasi' },
+          { unit: 'C.10 (Hook)', tipe: 'Emerald Plus', lt: 78, lb: 50, keras: null, tempo24: null, kpr: null, status: 'perlu dicek' },
+        ]
+  );
+  const [generatedPoints, setGeneratedPoints] = useState<Array<LoveLetterPoint & { sourceTag?: string }>>(
+    Array.isArray(initialDraft?.generatedPoints) ? initialDraft.generatedPoints : []
+  );
+  const [gapRecommendations, setGapRecommendations] = useState<string[]>(
+    Array.isArray(initialDraft?.gapRecommendations) ? initialDraft.gapRecommendations : []
+  );
+  const [poisCount, setPoisCount] = useState<number>(Number(initialDraft?.poisCount || 0));
+  const [aiEnriched, setAiEnriched] = useState<boolean>(Boolean(initialDraft?.aiEnriched));
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || activationResult) return;
+    try {
+      localStorage.setItem(
+        ONBOARDING_DRAFT_KEY,
+        JSON.stringify({
+          currentStep,
+          selectedPlan,
+          onboardingSessionId,
+          pendingInvoiceNo,
+          ocrPreview,
+          formData,
+          clusters,
+          extractedUnits,
+          generatedPoints,
+          gapRecommendations,
+          poisCount,
+          aiEnriched,
+          savedAt: new Date().toISOString(),
+        })
+      );
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [
+    currentStep,
+    selectedPlan,
+    onboardingSessionId,
+    pendingInvoiceNo,
+    ocrPreview,
+    formData,
+    clusters,
+    extractedUnits,
+    generatedPoints,
+    gapRecommendations,
+    poisCount,
+    aiEnriched,
+    activationResult,
   ]);
-  const [generatedPoints, setGeneratedPoints] = useState<Array<LoveLetterPoint & { sourceTag?: string }>>([]);
-  const [gapRecommendations, setGapRecommendations] = useState<string[]>([]);
-  const [poisCount, setPoisCount] = useState<number>(0);
-  const [aiEnriched, setAiEnriched] = useState<boolean>(false);
 
   const validationResult = validateLoveLetter(generatedPoints);
   const planMeta = PLAN_PRICING_LABEL[selectedPlan] || PLAN_PRICING_LABEL.platinum;
@@ -186,8 +258,12 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({
   };
 
   const handleActivateWithDummyPg = async () => {
-    if (!formData.ownerEmail.trim()) {
-      setErrorMsg('Masukkan Email Admin/IT pertama tim pada Langkah 1 atau di bawah ini sebelum aktivasi.');
+    if (!formData.ownerEmail.trim() || !formData.ownerEmail.includes('@')) {
+      setErrorMsg('Masukkan Email Admin/IT tim yang valid pada Langkah 1 sebelum melakukan pembayaran.');
+      return;
+    }
+    if (!formData.ownerPassword.trim() || formData.ownerPassword.trim().length < 6) {
+      setErrorMsg('Masukkan Password Admin/IT tim minimal 6 karakter pada Langkah 1 sebelum melakukan pembayaran.');
       return;
     }
     setErrorMsg(null);
@@ -209,21 +285,24 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({
           }),
         });
         const exJson = await exRes.json();
-        if (exRes.ok && exJson.session?.id) sessId = String(exJson.session.id);
+        if (exRes.ok && exJson.session?.id) {
+          sessId = String(exJson.session.id);
+          setOnboardingSessionId(sessId);
+        }
       }
       if (!sessId) {
         setErrorMsg('Sesi onboarding tidak ditemukan.');
         return;
       }
 
-      const res = await fetch('/api/onboarding/activate', {
+      const res = await fetch('/api/onboarding/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: sessId,
           ownerEmail: formData.ownerEmail.trim(),
           ownerName: formData.ownerName.trim() || 'Admin IT Tim',
-          ownerPassword: formData.ownerPassword.trim() || 'Andara2026!',
+          ownerPassword: formData.ownerPassword.trim(),
           clusterCoords: clusters.map((c, idx) => ({
             namaCluster: c.name.trim() || `Cluster ${idx + 1}`,
             koordinat: `${c.lat.trim()}, ${c.lng.trim()}`,
@@ -233,23 +312,14 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({
         }),
       });
       const json = await res.json();
-      if (res.ok && json.ok) {
-        setActivationResult({
-          tenantId: String(json.tenantId),
-          slug: String(json.slug),
-          invoiceNo: String(json.invoiceNo),
-          initialAic: Number(json.initialAic || 0),
-        });
-        // Auto-login sesi tim baru agar saat klik Selesai langsung masuk Dashboard proyek sendiri
-        await loginWithServer(
-          formData.ownerEmail.trim(),
-          formData.ownerPassword.trim() || 'Andara2026!'
-        ).catch(() => {});
+      if (res.ok && json.ok && json.checkoutPath) {
+        setPendingInvoiceNo(String(json.invoiceNo || ''));
+        window.location.href = String(json.checkoutPath);
       } else {
-        setErrorMsg(json.error || 'Aktivasi paket & pembayaran dummy gagal.');
+        setErrorMsg(json.error || 'Gagal membuat transaksi pembayaran Midtrans.');
       }
     } catch {
-      setErrorMsg('Gagal menghubungi server aktivasi.');
+      setErrorMsg('Gagal menghubungi server pembayaran.');
     } finally {
       setIsProcessing(false);
     }
@@ -675,55 +745,69 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({
                 </div>
               )}
 
-              {generatedPoints.length > 0 && (
-                <div className="border border-warmborder rounded-xl p-3 max-h-44 overflow-y-auto space-y-2 bg-sandstone/20">
-                  <div className="text-[11px] font-bold text-warmmuted uppercase">
-                    Preview Poin Faktual ({formData.projectName})
-                  </div>
-                  {generatedPoints.slice(0, 12).map((pt) => (
-                    <div key={pt.number} className="p-2 rounded-lg bg-white border border-warmborder text-xs">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-bold text-espresso">
-                          #{pt.number} {pt.title}
-                        </span>
-                        {pt.sourceTag && (
-                          <span className="px-1.5 py-0.5 rounded bg-sandstone text-[9px] font-mono text-warmmuted shrink-0">
-                            {pt.sourceTag}
-                          </span>
-                        )}
+              {activationResult ? (
+                <>
+                  {generatedPoints.length > 0 && (
+                    <div className="border border-warmborder rounded-xl p-3 max-h-44 overflow-y-auto space-y-2 bg-sandstone/20">
+                      <div className="text-[11px] font-bold text-warmmuted uppercase">
+                        Preview Poin Faktual ({formData.projectName})
                       </div>
-                      <p className="text-[11px] text-warmmuted mt-0.5">{pt.narrative}</p>
+                      {generatedPoints.slice(0, 12).map((pt) => (
+                        <div key={pt.number} className="p-2 rounded-lg bg-white border border-warmborder text-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-espresso">
+                              #{pt.number} {pt.title}
+                            </span>
+                            {pt.sourceTag && (
+                              <span className="px-1.5 py-0.5 rounded bg-sandstone text-[9px] font-mono text-warmmuted shrink-0">
+                                {pt.sourceTag}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-warmmuted mt-0.5">{pt.narrative}</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+
+                  <div className="p-4 rounded-xl bg-espresso text-white space-y-3">
+                    <p className="text-xs font-bold text-amber-400">Unduh Artefak Surat Cinta 99 Keunggulan:</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        onClick={handleDownloadDocx}
+                        className="h-10 px-4 rounded-xl bg-terracotta text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Download className="size-4" />
+                        <span>Unduh Word (.docx)</span>
+                      </button>
+                      <button
+                        onClick={handleDownloadPdf}
+                        className="h-10 px-4 rounded-xl bg-white/10 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer border border-white/20"
+                      >
+                        <Download className="size-4" />
+                        <span>Cetak / Simpan PDF</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="p-4 rounded-xl border border-amber-300 bg-amber-50/70 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-espresso">
+                    <Lock className="size-4 text-amber-700" />
+                    <span>Surat Cinta ({generatedPoints.length} Poin) &amp; Akses Login Terkunci</span>
+                  </div>
+                  <p className="text-[11px] text-espresso/80 leading-relaxed">
+                    Selesaikan pembayaran paket terlebih dahulu melalui halaman checkout Midtrans untuk membuka dokumen Surat Cinta 99 Keunggulan (.docx &amp; PDF) dan mengaktifkan akses login dashboard tim Anda.
+                  </p>
                 </div>
               )}
 
-              <div className="p-4 rounded-xl bg-espresso text-white space-y-3">
-                <p className="text-xs font-bold text-amber-400">Unduh Artefak Surat Cinta 99 Keunggulan:</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <button
-                    onClick={handleDownloadDocx}
-                    className="h-10 px-4 rounded-xl bg-terracotta text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Download className="size-4" />
-                    <span>Unduh Word (.docx)</span>
-                  </button>
-                  <button
-                    onClick={handleDownloadPdf}
-                    className="h-10 px-4 rounded-xl bg-white/10 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer border border-white/20"
-                  >
-                    <Download className="size-4" />
-                    <span>Cetak / Simpan PDF</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Checkout Paket via Dummy Payment Gateway */}
+              {/* Checkout Paket via Midtrans Sandbox */}
               <div className="p-4 rounded-xl border border-warmborder bg-sandstone/40 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-bold text-espresso flex items-center gap-1.5">
                     <CreditCard className="size-4 text-terracotta" />
-                    <span>Aktivasi Paket {planMeta.name} (Mode Dummy Payment Gateway)</span>
+                    <span>Pembayaran Paket {planMeta.name} (Midtrans Sandbox)</span>
                   </div>
                   <span className="text-xs font-extrabold text-espresso">{planMeta.price}</span>
                 </div>
@@ -732,19 +816,29 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({
                   <div className="p-3 rounded-lg bg-olive/10 border border-olive/30 text-xs text-olive space-y-1">
                     <div className="font-bold">Tim &amp; Workspace Terisolasi Aktif!</div>
                     <div>Tenant ID: <span className="font-mono font-bold">{activationResult.tenantId}</span></div>
-                    <div>Invoice Dummy: <span className="font-mono">{activationResult.invoiceNo}</span> (PAID)</div>
+                    <div>Invoice: <span className="font-mono">{activationResult.invoiceNo}</span> (PAID)</div>
                     <div>Kuota AIC Awal: <strong>{activationResult.initialAic.toLocaleString('id-ID')} AIC</strong></div>
                     <div>Website Publik: <span className="font-mono">/site/{activationResult.slug}</span></div>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    disabled={isProcessing}
-                    onClick={handleActivateWithDummyPg}
-                    className="w-full h-10 rounded-xl bg-olive hover:bg-olive/90 text-white text-xs font-bold cursor-pointer disabled:opacity-60"
-                  >
-                    {isProcessing ? 'Memproses Aktivasi & Tenant...' : 'Buat Invoice & Simulasi Bayar Lunas (Aktifkan Tim)'}
-                  </button>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      disabled={isProcessing}
+                      onClick={handleActivateWithDummyPg}
+                      className="w-full h-11 rounded-xl bg-olive hover:bg-olive/90 text-white text-xs font-bold cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      <span>{isProcessing ? 'Menyiapkan Halaman Pembayaran...' : 'Lanjut ke Halaman Pembayaran Midtrans →'}</span>
+                    </button>
+                    {pendingInvoiceNo && (
+                      <a
+                        href={`/checkout/${encodeURIComponent(pendingInvoiceNo)}`}
+                        className="block text-center text-[11px] font-semibold text-terracotta underline"
+                      >
+                        Lanjutkan Invoice Tertunda ({pendingInvoiceNo})
+                      </a>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -752,7 +846,7 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({
         </div>
 
         <div className="p-5 border-t border-warmborder bg-sandstone/40 flex items-center justify-between">
-          {currentStep > 1 && currentStep < 5 ? (
+          {currentStep > 1 && (
             <button
               onClick={() => setCurrentStep((prev) => prev - 1)}
               className="px-4 py-2 rounded-xl text-xs font-semibold text-espresso hover:bg-white cursor-pointer flex items-center gap-1.5"
@@ -760,8 +854,6 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({
               <ArrowLeft className="size-3.5" />
               <span>Sebelumnya</span>
             </button>
-          ) : (
-            <div />
           )}
 
           {currentStep === 1 && (
@@ -806,7 +898,7 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({
             </button>
           )}
 
-          {currentStep === 5 && (
+          {currentStep === 5 && activationResult && (
             <div className="flex items-center gap-2 ml-auto">
               {onOpenFullViewer && (
                 <button
@@ -822,13 +914,13 @@ export const OnboardingWizardModal: React.FC<WizardProps> = ({
               <button
                 onClick={() => {
                   onClose();
-                  if (activationResult && onEnterDashboard) {
+                  if (onEnterDashboard) {
                     onEnterDashboard('IT');
                   }
                 }}
                 className="px-4 py-2 rounded-xl bg-espresso text-white text-xs font-bold cursor-pointer"
               >
-                {activationResult ? 'Masuk ke Dashboard Tim →' : 'Selesai'}
+                Masuk ke Dashboard Tim →
               </button>
             </div>
           )}
