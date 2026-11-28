@@ -68,6 +68,47 @@ export function CrmPipelineView({
   const [selectedLead, setSelectedLead] = useState<ProjectLead | null>(null);
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [dataSourceMode, setDataSourceMode] = useState<'db' | 'local'>('local');
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/pipeline/leads?projectId=${encodeURIComponent(projectId)}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (!active || !json?.ok || !Array.isArray(json.leads)) return;
+        const mapped: ProjectLead[] = json.leads.map((row: any) => ({
+          id: String(row.id),
+          projectId: String(row.project_id || projectId),
+          fullName: String(row.full_name || '-'),
+          phoneWhatsapp: String(row.phone_wa || ''),
+          source: String(row.source || 'WhatsApp Inbound'),
+          stage: (row.stage || 'LEAD_BARU') as LeadStage,
+          unitOfInterest: String(row.unit_interest || '-'),
+          assignedSeName: String(row.owner_se_name || row.owner_se_email || 'SE'),
+          nextActionPlan: String(row.next_action || ''),
+          notes: String(row.sales_notes || ''),
+          createdAt: String(row.created_at || new Date().toISOString()),
+          updatedAt: String(row.updated_at || new Date().toISOString()),
+          bant: {
+            budget: Number(row.bant_b || 0),
+            authority: Number(row.bant_a || 0),
+            need: Number(row.bant_n || 0),
+            timeline: Number(row.bant_t || 0),
+            totalScore: Number(row.bant_total || 0),
+          },
+        }));
+        if (mapped.length > 0) {
+          setLeads(mapped);
+        }
+        setDataSourceMode('db');
+      })
+      .catch(() => {
+        // Fallback ke cache lokal bila belum login / offline
+      });
+    return () => {
+      active = false;
+    };
+  }, [projectId]);
 
   useEffect(() => {
     savePersistedState(`devos_crm_tab_${projectId}`, viewMode);
@@ -82,26 +123,42 @@ export function CrmPipelineView({
 
   const followUpChecklist = getFollowUpChecklist(projectId);
 
-  const handleStageMove = (leadId: string, nextStage: LeadStage) => {
-    const updated = moveLeadStage(leadId, nextStage);
-    if (updated) {
-      setLeads(getProjectLeads(projectId));
-      setToastMessage(`Status prospek diperbarui ke ${nextStage}`);
+  const handleStageMove = async (leadId: string, nextStage: LeadStage) => {
+    setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, stage: nextStage } : l)));
+    moveLeadStage(leadId, nextStage);
+    try {
+      const res = await fetch(`/api/pipeline/leads/${encodeURIComponent(leadId)}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: nextStage }),
+      });
+      if (res.ok) setDataSourceMode('db');
+    } catch {
+      /* fallback cache lokal bila offline */
     }
+    setToastMessage(`Status prospek diperbarui ke ${nextStage}`);
   };
 
-  const handleAddLeadSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddLeadSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const fullName = String(fd.get('fullName') || '');
+    const phoneWhatsapp = String(fd.get('phone') || '');
+    const source = String(fd.get('source') || 'Input Manual');
+    const unitOfInterest = String(fd.get('unit') || '');
+    const nextActionPlan = String(fd.get('action') || '');
+    const notes = String(fd.get('notes') || '');
+
     const created = addProjectLead({
       projectId,
-      fullName: fd.get('fullName') as string,
-      phoneWhatsapp: fd.get('phone') as string,
-      source: fd.get('source') as string,
-      unitOfInterest: fd.get('unit') as string,
-      assignedSeName: fd.get('se') as string,
-      nextActionPlan: fd.get('action') as string,
-      notes: fd.get('notes') as string,
+      fullName,
+      phoneWhatsapp,
+      source,
+      unitOfInterest,
+      assignedSeName: String(fd.get('se') || ''),
+      nextActionPlan,
+      notes,
       bant: {
         budget: Number(fd.get('b') || 7),
         authority: Number(fd.get('a') || 7),
@@ -116,7 +173,28 @@ export function CrmPipelineView({
       },
     });
 
-    setLeads(getProjectLeads(projectId));
+    setLeads((prev) => [created, ...prev]);
+    try {
+      const res = await fetch('/api/pipeline/leads', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName,
+          phoneWa: phoneWhatsapp,
+          source,
+          unitInterest: unitOfInterest,
+          nextAction: nextActionPlan,
+          salesNotes: notes,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json?.ok) {
+        setDataSourceMode('db');
+      }
+    } catch {
+      /* fallback cache lokal bila offline */
+    }
     setShowAddLeadModal(false);
     setToastMessage(`Lead baru "${created.fullName}" berhasil ditambahkan.`);
   };
@@ -146,6 +224,9 @@ export function CrmPipelineView({
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-terracotta/10 text-terracotta border border-terracotta/20 shrink-0">
                   {leads.length} Leads
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${dataSourceMode === 'db' ? 'bg-lime-100 text-olive' : 'bg-amber-100 text-terracotta'}`}>
+                  {dataSourceMode === 'db' ? 'Sinkron DB' : 'Cache Lokal'}
                 </span>
               </div>
               <p className="text-xs text-warmmuted mt-0.5 leading-relaxed">

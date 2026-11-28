@@ -73,12 +73,40 @@ export async function hydrateAllRemoteState(
     if (!data?.ok || !data.items || typeof data.items !== 'object') return {};
 
     if (window.localStorage) {
+      // 1. Hydrate from PostgreSQL DB -> localStorage cache
       for (const [k, v] of Object.entries(data.items)) {
         if (!k || k === AUTH_STORAGE_KEY || v === undefined) continue;
         try {
           window.localStorage.setItem(k, typeof v === 'string' && k.startsWith('devos_hook_cooldown_') ? v : JSON.stringify(v));
         } catch {
           /* abaikan quota */
+        }
+      }
+
+      // 2. Backfill any existing devos_* browser localStorage keys that are not yet in PostgreSQL DB
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const localKey = window.localStorage.key(i);
+        if (
+          !localKey ||
+          !localKey.startsWith('devos_') ||
+          localKey === AUTH_STORAGE_KEY ||
+          localKey === 'devos_registration_draft_v1' ||
+          Object.prototype.hasOwnProperty.call(data.items, localKey)
+        ) {
+          continue;
+        }
+        try {
+          const rawVal = window.localStorage.getItem(localKey);
+          if (rawVal === null) continue;
+          let parsedVal: unknown = rawVal;
+          try {
+            parsedVal = JSON.parse(rawVal);
+          } catch {
+            parsedVal = rawVal;
+          }
+          void saveRemoteState(localKey, parsedVal, projectId);
+        } catch {
+          /* abaikan */
         }
       }
     }

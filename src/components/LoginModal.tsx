@@ -64,15 +64,28 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [otpCode, setOtpCode] = useState("");
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [attemptInfo, setAttemptInfo] = useState<{
+    remainingAttempts?: number;
+    maxAttempts?: number;
+    isLastAttempt?: boolean;
+  } | null>(null);
 
   if (!isOpen) return null;
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    setAttemptInfo(null);
     const result = await loginWithServer(email, password);
     if (!result.ok) {
       setErrorMsg(result.error);
+      if (typeof result.remainingAttempts === 'number') {
+        setAttemptInfo({
+          remainingAttempts: result.remainingAttempts,
+          maxAttempts: result.maxAttempts ?? 5,
+          isLastAttempt: result.isLastAttempt,
+        });
+      }
       return;
     }
 
@@ -226,9 +239,26 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         {/* Form Body */}
         <div className="p-5 overflow-y-auto flex-1">
           {errorMsg && (
-            <div className="flex items-center gap-2 p-3 mb-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
-              <AlertCircle className="size-4 shrink-0" />
-              <span>{errorMsg}</span>
+            <div
+              className={`flex items-start gap-2 p-3 mb-4 rounded-xl border text-xs font-semibold ${
+                attemptInfo?.isLastAttempt
+                  ? 'bg-amber-50 border-amber-400 text-amber-900'
+                  : 'bg-rose-50 border-rose-200 text-rose-700'
+              }`}
+            >
+              <AlertCircle className="size-4 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span>{errorMsg}</span>
+                {typeof attemptInfo?.remainingAttempts === 'number' && (
+                  <div className="text-[11px] font-bold">
+                    {attemptInfo.isLastAttempt
+                      ? 'Kesempatan terakhir! 1 percobaan tersisa sebelum akun dikunci sementara 5 menit.'
+                      : attemptInfo.remainingAttempts === 0
+                        ? 'Akun dikunci sementara selama 5 menit.'
+                        : `Sisa percobaan login: ${attemptInfo.remainingAttempts} dari ${attemptInfo.maxAttempts ?? 5}.`}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

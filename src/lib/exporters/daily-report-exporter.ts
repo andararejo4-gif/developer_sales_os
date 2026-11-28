@@ -296,6 +296,45 @@ export function exportDailyReportPdf(params: DailyReportExportParams): void {
   win.document.close();
 }
 
+export interface SmSeDetailPayload {
+  fieldLogs: Array<{
+    logType: string;
+    title: string;
+    locationLabel: string;
+    lat: number | null;
+    lng: number | null;
+    photoDataUrl?: string | null;
+    createdAt: string;
+  }>;
+  leads: Array<{
+    fullName: string;
+    unitInterest: string;
+    source: string;
+    stage: string;
+    bantTotal: number;
+    createdAt: string;
+  }>;
+  dailyNotes: Array<{
+    reportDate: string;
+    dialCount: number;
+    connectedCallCount: number;
+    canvassingContacts: number;
+    canvassingBrochures: number;
+    canvassingLeads: number;
+    postedReels: number;
+    postedWaStatus: number;
+    postedStories: number;
+    hambatan: string;
+  }>;
+  manualActivities?: Array<{
+    id: string;
+    activityDate: string;
+    category: string;
+    note: string;
+    createdAt: string;
+  }>;
+}
+
 export interface SmTeamSeReportRow {
   seName: string;
   seEmail: string;
@@ -309,14 +348,23 @@ export interface SmTeamSeReportRow {
   leadsToday: number;
   bookingsCount: number;
   hambatanBantuan: string;
+  details?: SmSeDetailPayload;
 }
 
 export interface SmDailyReportExportParams {
+  reportMode?: 'sm' | 'se';
   projectName: string;
   smName: string;
   smEmail: string;
   dateLabel: string;
   smActivities: Array<{ action: string; entity: string; created_at: string }>;
+  smManualActivities?: Array<{
+    id: string;
+    activityDate: string;
+    category: string;
+    note: string;
+    createdAt: string;
+  }>;
   teamTotals: {
     totalSe: number;
     checkedInCount: number;
@@ -349,10 +397,50 @@ export function exportSmDailyReportExcel(params: SmDailyReportExportParams): voi
     )
     .join('');
 
+  const seDetailRowsHtml = params.seReports
+    .flatMap((r) => {
+      const logs = (r.details?.fieldLogs || []).map(
+        (l) => {
+          const coordText = l.lat != null && l.lng != null ? `${Number(l.lat).toFixed(5)}, ${Number(l.lng).toFixed(5)}` : '-';
+          return `
+      <tr>
+        <td style="border:1px solid #d1d5db;padding:6px;">${escapeHtml(r.seName)}</td>
+        <td style="border:1px solid #d1d5db;padding:6px;">${new Date(l.createdAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}</td>
+        <td style="border:1px solid #d1d5db;padding:6px;">${escapeHtml(l.logType)}</td>
+        <td style="border:1px solid #d1d5db;padding:6px;">${escapeHtml(l.title || '-')}</td>
+        <td style="border:1px solid #d1d5db;padding:6px;">${escapeHtml(l.locationLabel || '-')} (Koordinat: ${escapeHtml(coordText)})${l.photoDataUrl ? ' [Ada Bukti Foto]' : ''}</td>
+      </tr>`;
+        }
+      );
+      const leads = (r.details?.leads || []).map(
+        (ld) => `
+      <tr>
+        <td style="border:1px solid #d1d5db;padding:6px;">${escapeHtml(r.seName)}</td>
+        <td style="border:1px solid #d1d5db;padding:6px;">${ld.createdAt ? new Date(ld.createdAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) : '-'}</td>
+        <td style="border:1px solid #d1d5db;padding:6px;">LEAD (${escapeHtml(ld.stage)})</td>
+        <td style="border:1px solid #d1d5db;padding:6px;">${escapeHtml(ld.fullName)} — ${escapeHtml(ld.unitInterest)} (BANT ${ld.bantTotal})</td>
+        <td style="border:1px solid #d1d5db;padding:6px;">${escapeHtml(ld.source)}</td>
+      </tr>`
+      );
+      const manuals = (r.details?.manualActivities || []).map(
+        (m) => `
+      <tr>
+        <td style="border:1px solid #d1d5db;padding:6px;">${escapeHtml(r.seName)}</td>
+        <td style="border:1px solid #d1d5db;padding:6px;">${escapeHtml(m.activityDate)}</td>
+        <td style="border:1px solid #d1d5db;padding:6px;">KANTOR (${escapeHtml(m.category)})</td>
+        <td style="border:1px solid #d1d5db;padding:6px;">${escapeHtml(m.note)}</td>
+        <td style="border:1px solid #d1d5db;padding:6px;">Aktivitas Manual Kantor</td>
+      </tr>`
+      );
+      return [...logs, ...leads, ...manuals];
+    })
+    .join('');
+
+  const isSeOnly = params.reportMode === 'se';
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8" /></head><body>
-    <h2>LAPORAN HARIAN SALES MANAGER & TIM SE — ${escapeHtml(params.projectName)}</h2>
-    <p><strong>Sales Manager:</strong> ${escapeHtml(params.smName)} (${escapeHtml(params.smEmail)}) | <strong>Tanggal:</strong> ${escapeHtml(params.dateLabel)}</p>
-    <p><strong>Aktivitas SM Hari Ini:</strong> ${params.smActivities.length} aksi tercatat | <strong>Total SE:</strong> ${params.teamTotals.totalSe} | <strong>Absen Hadir:</strong> ${params.teamTotals.checkedInCount} | <strong>GPS:</strong> ${params.teamTotals.totalGpsLogs} | <strong>Call:</strong> ${params.teamTotals.totalCalls} | <strong>Leads:</strong> ${params.teamTotals.totalLeadsToday} | <strong>Booking:</strong> ${params.teamTotals.totalBookingsToday}</p>
+    <h2>${isSeOnly ? 'LAPORAN HARIAN SALES EXECUTIVE (DETAIL AKTIVITAS)' : 'LAPORAN HARIAN SALES MANAGER & TIM SE'} — ${escapeHtml(params.projectName)}</h2>
+    <p><strong>${isSeOnly ? 'Sales Executive' : 'Sales Manager'}:</strong> ${escapeHtml(params.smName)} (${escapeHtml(params.smEmail)}) | <strong>Tanggal:</strong> ${escapeHtml(params.dateLabel)}</p>
+    <p>${isSeOnly ? '' : `<strong>Aktivitas SM Hari Ini:</strong> ${params.smActivities.length} aksi tercatat | <strong>Total SE:</strong> ${params.teamTotals.totalSe} | `}<strong>Absen Hadir:</strong> ${params.teamTotals.checkedInCount} | <strong>GPS:</strong> ${params.teamTotals.totalGpsLogs} | <strong>Call:</strong> ${params.teamTotals.totalCalls} | <strong>Leads:</strong> ${params.teamTotals.totalLeadsToday} | <strong>Booking:</strong> ${params.teamTotals.totalBookingsToday}</p>
     <table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:12px;">
       <thead><tr style="background:#112236;color:#FFFFFF;">
         <th style="border:1px solid #112236;padding:6px;">No</th>
@@ -368,13 +456,24 @@ export function exportSmDailyReportExcel(params: SmDailyReportExportParams): voi
       </tr></thead>
       <tbody>${seRowsHtml}</tbody>
     </table>
+    <h3 style="margin-top:16px;">RINCIAN AKTIVITAS DETAIL PER SE (ABSEN, GPS, CALL &amp; LEAD)</h3>
+    <table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:12px;">
+      <thead><tr style="background:#1E293B;color:#FFFFFF;">
+        <th style="border:1px solid #1E293B;padding:6px;">Nama SE</th>
+        <th style="border:1px solid #1E293B;padding:6px;">Waktu (WIB)</th>
+        <th style="border:1px solid #1E293B;padding:6px;">Jenis</th>
+        <th style="border:1px solid #1E293B;padding:6px;">Aktivitas / Prospek</th>
+        <th style="border:1px solid #1E293B;padding:6px;">Lokasi / Sumber</th>
+      </tr></thead>
+      <tbody>${seDetailRowsHtml || '<tr><td colspan="5" style="border:1px solid #d1d5db;padding:6px;text-align:center;">Belum ada rincian aktivitas SE pada periode ini.</td></tr>'}</tbody>
+    </table>
   </body></html>`;
 
   const blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `laporan-harian-sm-${new Date().toISOString().slice(0, 10)}.xls`;
+  a.download = `${isSeOnly ? 'laporan-harian-se-detail' : 'laporan-harian-sm'}-${new Date().toISOString().slice(0, 10)}.xls`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -382,6 +481,7 @@ export function exportSmDailyReportExcel(params: SmDailyReportExportParams): voi
 }
 
 export function exportSmDailyReportPdf(params: SmDailyReportExportParams): void {
+  const isSeOnly = params.reportMode === 'se';
   const seRowsHtml = params.seReports
     .map(
       (r, idx) => `
@@ -413,6 +513,116 @@ export function exportSmDailyReportPdf(params: SmDailyReportExportParams): void 
         </tr>`
           )
           .join('');
+
+  const perSeDetailBlocksHtml = params.seReports
+    .map((r) => {
+      const notes = r.details?.dailyNotes || [];
+      const logs = r.details?.fieldLogs || [];
+      const leads = r.details?.leads || [];
+
+      const notesHtml =
+        notes.length === 0
+          ? '<tr><td colspan="5" style="text-align:center;color:#64748B;">Belum ada catatan harian tertulis.</td></tr>'
+          : notes
+              .map(
+                (n) => `
+          <tr>
+            <td>${escapeHtml(n.reportDate || '-')}</td>
+            <td style="text-align:center;">${n.dialCount} dial / ${n.connectedCallCount} tersambung</td>
+            <td style="text-align:center;">${n.canvassingContacts} kontak / ${n.canvassingBrochures} brosur / ${n.canvassingLeads} lead</td>
+            <td style="text-align:center;">${n.postedReels} reels / ${n.postedWaStatus} WA / ${n.postedStories} story</td>
+            <td>${escapeHtml(n.hambatan || '-')}</td>
+          </tr>`
+              )
+              .join('');
+
+      const logsHtml =
+        logs.length === 0
+          ? '<tr><td colspan="5" style="text-align:center;color:#64748B;">Belum ada log lapangan (absen/GPS/call).</td></tr>'
+          : logs
+              .slice(0, 25)
+              .map((l) => {
+                const coordStr =
+                  l.lat != null && l.lng != null
+                    ? `${Number(l.lat).toFixed(5)}, ${Number(l.lng).toFixed(5)}`
+                    : '-';
+                const locDisplay = l.locationLabel
+                  ? `${escapeHtml(l.locationLabel)}<br/><span style="font-size:6.8pt;color:#475569;font-family:Consolas,monospace;">Koordinat: ${escapeHtml(coordStr)}</span>`
+                  : `<span style="font-family:Consolas,monospace;">${escapeHtml(coordStr)}</span>`;
+                const photoCell = l.photoDataUrl
+                  ? `<img src="${l.photoDataUrl}" alt="Bukti" style="width:52px;height:52px;object-fit:cover;border-radius:4px;border:1px solid #CBD5E1;display:block;" />`
+                  : '<span style="color:#94A3B8;font-size:7pt;">-</span>';
+                return `
+          <tr>
+            <td>${new Date(l.createdAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })} WIB</td>
+            <td style="font-weight:700;">${escapeHtml(l.logType)}</td>
+            <td>${escapeHtml(l.title || '-')}</td>
+            <td>${locDisplay}</td>
+            <td style="text-align:center;">${photoCell}</td>
+          </tr>`;
+              })
+              .join('');
+
+      const leadsHtml =
+        leads.length === 0
+          ? '<tr><td colspan="5" style="text-align:center;color:#64748B;">Belum ada prospek/lead pada periode ini.</td></tr>'
+          : leads
+              .slice(0, 20)
+              .map(
+                (ld) => `
+          <tr>
+            <td><strong>${escapeHtml(ld.fullName)}</strong></td>
+            <td>${escapeHtml(ld.unitInterest)}</td>
+            <td>${escapeHtml(ld.source)}</td>
+            <td style="text-align:center;font-weight:700;">${escapeHtml(ld.stage)}</td>
+            <td style="text-align:center;">${ld.bantTotal}</td>
+          </tr>`
+              )
+              .join('');
+
+      const manuals = r.details?.manualActivities || [];
+      const manualsHtml =
+        manuals.length === 0
+          ? '<tr><td colspan="3" style="text-align:center;color:#64748B;">Belum ada catatan aktivitas kantor / non-lead.</td></tr>'
+          : manuals
+              .map(
+                (m) => `
+          <tr>
+            <td style="width:90px;">${escapeHtml(m.activityDate)}</td>
+            <td style="width:140px;font-weight:700;">${escapeHtml(m.category)}</td>
+            <td>${escapeHtml(m.note)}</td>
+          </tr>`
+              )
+              .join('');
+
+      return `
+      <div style="border:1px solid #CBD5E1;border-radius:3px;padding:8px 10px;margin-bottom:10px;page-break-inside:avoid;">
+        <div style="font-weight:800;color:#112236;font-size:8.6pt;margin-bottom:6px;border-bottom:1px solid #E2E8F0;padding-bottom:4px;">
+          ${escapeHtml(r.seName)} <span style="font-weight:400;color:#64748B;font-size:7.6pt;">(${escapeHtml(r.seEmail)}) — ${logs.length} log lapangan · ${leads.length} lead · ${notes.length} catatan harian · ${manuals.length} aktivitas kantor</span>
+        </div>
+        <div style="font-size:7.4pt;font-weight:700;color:#475569;margin:4px 0;">A. Catatan Harian Playbook (Call, Canvassing, Konten &amp; Hambatan)</div>
+        <table>
+          <thead><tr><th>Tanggal</th><th>Telepon</th><th>Canvassing</th><th>Konten</th><th>Hambatan</th></tr></thead>
+          <tbody>${notesHtml}</tbody>
+        </table>
+        <div style="font-size:7.4pt;font-weight:700;color:#475569;margin:4px 0;">B. Rincian Log Lapangan (Absen, GPS, Call, Koordinat &amp; Bukti Foto)${logs.length > 25 ? ` — menampilkan 25 dari ${logs.length} log` : ''}</div>
+        <table>
+          <thead><tr><th style="width:105px;">Waktu</th><th style="width:68px;">Tipe</th><th>Aktivitas</th><th>Lokasi &amp; Titik Koordinat</th><th style="width:64px;text-align:center;">Foto</th></tr></thead>
+          <tbody>${logsHtml}</tbody>
+        </table>
+        <div style="font-size:7.4pt;font-weight:700;color:#475569;margin:4px 0;">C. Daftar Prospek / Lead Ditangani</div>
+        <table>
+          <thead><tr><th>Nama Prospek</th><th>Unit Minat</th><th>Sumber</th><th>Stage</th><th>BANT</th></tr></thead>
+          <tbody>${leadsHtml}</tbody>
+        </table>
+        <div style="font-size:7.4pt;font-weight:700;color:#475569;margin:4px 0;">D. Catatan Aktivitas Harian Kantor / Non-Lead</div>
+        <table>
+          <thead><tr><th>Tanggal</th><th>Kategori</th><th>Uraian Kegiatan</th></tr></thead>
+          <tbody>${manualsHtml}</tbody>
+        </table>
+      </div>`;
+    })
+    .join('');
 
   const html = `<!doctype html>
 <html lang="id">
@@ -456,38 +666,55 @@ export function exportSmDailyReportPdf(params: SmDailyReportExportParams): void 
 </head>
 <body>
   <div class="hero-banner">
-    <div class="hero-kicker">ANDARA GROUP • DIVISI SALES &amp; MARKETING &nbsp;|&nbsp; LAPORAN RESMI DIREKSI</div>
-    <h1 class="hero-title">LAPORAN HARIAN SALES MANAGER &amp; TIM SE</h1>
-    <p class="hero-sub">${escapeHtml(params.projectName)} · Agregasi Aktivitas SM, Absensi, GPS, Call, Canvassing, Konten &amp; Pipeline SE</p>
+    <div class="hero-kicker">ANDARA GROUP • DIVISI SALES &amp; MARKETING &nbsp;|&nbsp; ${isSeOnly ? 'LAPORAN HARIAN SALES EXECUTIVE' : 'LAPORAN RESMI DIREKSI'}</div>
+    <h1 class="hero-title">${isSeOnly ? 'LAPORAN HARIAN SALES EXECUTIVE (DETAIL AKTIVITAS)' : 'LAPORAN HARIAN SALES MANAGER &amp; TIM SE'}</h1>
+    <p class="hero-sub">${escapeHtml(params.projectName)} · ${isSeOnly ? 'Absensi, GPS, Titik Koordinat, Bukti Foto, Call, Canvassing, Konten &amp; Pipeline SE' : 'Agregasi Aktivitas SM, Absensi, GPS, Call, Canvassing, Konten &amp; Pipeline SE'}</p>
   </div>
   <div class="meta-strip">
     <div><div class="meta-label">TANGGAL LAPORAN</div><div class="meta-val">${escapeHtml(params.dateLabel)}</div></div>
-    <div><div class="meta-label">SALES MANAGER</div><div class="meta-val">${escapeHtml(params.smName)}</div></div>
-    <div><div class="meta-label">TIM SE AKTIF</div><div class="meta-val">${params.teamTotals.checkedInCount} / ${params.teamTotals.totalSe} Hadir</div></div>
-    <div><div class="meta-label">LEAD &amp; BOOKING TIM</div><div class="meta-val">${params.teamTotals.totalLeadsToday} Lead • ${params.teamTotals.totalBookingsToday} Booking</div></div>
+    <div><div class="meta-label">${isSeOnly ? 'SALES EXECUTIVE' : 'SALES MANAGER'}</div><div class="meta-val">${escapeHtml(params.smName)}</div></div>
+    <div><div class="meta-label">${isSeOnly ? 'ABSENSI &amp; GPS' : 'TIM SE AKTIF'}</div><div class="meta-val">${isSeOnly ? `${params.teamTotals.totalGpsLogs} GPS • ${params.teamTotals.totalCalls} Call` : `${params.teamTotals.checkedInCount} / ${params.teamTotals.totalSe} Hadir`}</div></div>
+    <div><div class="meta-label">${isSeOnly ? 'LEAD &amp; BOOKING' : 'LEAD &amp; BOOKING TIM'}</div><div class="meta-val">${params.teamTotals.totalLeadsToday} Lead • ${params.teamTotals.totalBookingsToday} Booking</div></div>
   </div>
-  <div class="sec-header"><span class="sec-num">01</span><span class="sec-title">RINGKASAN KINERJA TIM (SM + SELURUH SE)</span></div>
+  <div class="sec-header"><span class="sec-num">01</span><span class="sec-title">${isSeOnly ? 'RINGKASAN KINERJA HARIAN SE' : 'RINGKASAN KINERJA TIM (SM + SELURUH SE)'}</span></div>
   <div class="kpi-grid">
-    <div class="kpi-card"><div class="kpi-label">ABSENSI SE</div><div class="kpi-val">${params.teamTotals.checkedInCount} / ${params.teamTotals.totalSe}</div><div class="kpi-sub">Check-In tervalidasi hari ini</div></div>
+    <div class="kpi-card"><div class="kpi-label">ABSENSI SE</div><div class="kpi-val">${params.teamTotals.checkedInCount} / ${params.teamTotals.totalSe}</div><div class="kpi-sub">Check-In tervalidasi</div></div>
     <div class="kpi-card gold"><div class="kpi-label">TITIK GPS &amp; CALL</div><div class="kpi-val">${params.teamTotals.totalGpsLogs} / ${params.teamTotals.totalCalls}</div><div class="kpi-sub">${params.teamTotals.totalGpsLogs} GPS • ${params.teamTotals.totalCalls} Call</div></div>
     <div class="kpi-card blue"><div class="kpi-label">CANVASSING &amp; KONTEN</div><div class="kpi-val">${params.teamTotals.totalCanvassing} / ${params.teamTotals.totalContentPosted}</div><div class="kpi-sub">Kontak lapangan &amp; posting</div></div>
-    <div class="kpi-card green"><div class="kpi-label">AKTIVITAS SM</div><div class="kpi-val">${params.smActivities.length} Aksi</div><div class="kpi-sub">Supervisi, approval &amp; kontrol</div></div>
+    <div class="kpi-card green"><div class="kpi-label">${isSeOnly ? 'LEAD &amp; BOOKING' : 'AKTIVITAS SM'}</div><div class="kpi-val">${isSeOnly ? `${params.teamTotals.totalLeadsToday} / ${params.teamTotals.totalBookingsToday}` : `${params.smActivities.length} Aksi`}</div><div class="kpi-sub">${isSeOnly ? 'Prospek &amp; booking tercatat' : 'Supervisi, approval &amp; kontrol'}</div></div>
   </div>
-  <div class="sec-header"><span class="sec-num">02</span><span class="sec-title">REKAPITULASI AKTIVITAS SELURUH SE DI BAWAH SM</span></div>
+  <div class="sec-header"><span class="sec-num">02</span><span class="sec-title">${isSeOnly ? 'REKAPITULASI CAPAIAN SALES EXECUTIVE' : 'REKAPITULASI AKTIVITAS SELURUH SE DI BAWAH SM'}</span></div>
   <table>
     <thead><tr><th>No</th><th>Sales Executive</th><th>Absen</th><th>GPS &amp; Lokasi</th><th>Call</th><th>Canv.</th><th>Konten</th><th>Lead</th><th>Booking</th></tr></thead>
     <tbody>${seRowsHtml}</tbody>
   </table>
-  <div class="sec-header"><span class="sec-num">03</span><span class="sec-title">LOG AKTIVITAS SALES MANAGER (${escapeHtml(params.smName)})</span></div>
+  <div class="sec-header"><span class="sec-num">03</span><span class="sec-title">${isSeOnly ? 'RINCIAN AKTIVITAS, FOTO &amp; TITIK KOORDINAT' : 'RINCIAN AKTIVITAS DETAIL PER SALES EXECUTIVE'}</span></div>
+  ${perSeDetailBlocksHtml || '<p style="font-size:8pt;color:#64748B;">Belum ada data detail SE pada periode ini.</p>'}
+  ${
+    isSeOnly
+      ? ''
+      : `<div class="sec-header"><span class="sec-num">04</span><span class="sec-title">LOG AKTIVITAS &amp; CATATAN HARIAN SALES MANAGER (${escapeHtml(params.smName)})</span></div>
   <table>
-    <thead><tr><th style="width:90px;">Waktu</th><th style="width:180px;">Aksi</th><th>Modul / Entitas</th></tr></thead>
-    <tbody>${smRowsHtml}</tbody>
-  </table>
+    <thead><tr><th style="width:90px;">Waktu</th><th style="width:180px;">Aksi / Kategori</th><th>Modul / Uraian Kegiatan</th></tr></thead>
+    <tbody>${
+      (params.smManualActivities || [])
+        .map(
+          (m) => `
+        <tr>
+          <td>${escapeHtml(m.activityDate)}</td>
+          <td><strong>${escapeHtml(m.category)}</strong></td>
+          <td>${escapeHtml(m.note)}</td>
+        </tr>`
+        )
+        .join('') + (params.smActivities.length > 0 ? smRowsHtml : params.smManualActivities?.length ? '' : smRowsHtml)
+    }</tbody>
+  </table>`
+  }
   <div class="signoff-box">
-    <div class="signoff-head">LEMBAR PENGESAHAN LAPORAN HARIAN SM &amp; TIM SE • ${escapeHtml(params.dateLabel)}</div>
+    <div class="signoff-head">${isSeOnly ? 'LEMBAR PENGESAHAN LAPORAN HARIAN SALES EXECUTIVE' : 'LEMBAR PENGESAHAN LAPORAN HARIAN SM &amp; TIM SE'} • ${escapeHtml(params.dateLabel)}</div>
     <div class="signoff-grid">
-      <div class="signoff-col"><div>Disusun oleh,</div><div><strong>Sales Manager</strong></div><div class="signoff-space"></div><div class="signoff-name">${escapeHtml(params.smName)}</div></div>
-      <div class="signoff-col"><div>Diterima &amp; Disahkan oleh,</div><div><strong>Direksi Andara Group</strong></div><div class="signoff-space"></div><div class="signoff-name">Direksi</div></div>
+      <div class="signoff-col"><div>Disusun oleh,</div><div><strong>${isSeOnly ? 'Sales Executive' : 'Sales Manager'}</strong></div><div class="signoff-space"></div><div class="signoff-name">${escapeHtml(params.smName)}</div></div>
+      <div class="signoff-col"><div>${isSeOnly ? 'Diketahui oleh,' : 'Diterima &amp; Disahkan oleh,'}</div><div><strong>${isSeOnly ? 'Sales Manager' : 'Direksi Andara Group'}</strong></div><div class="signoff-space"></div><div class="signoff-name">${isSeOnly ? 'Sales Manager' : 'Direksi'}</div></div>
     </div>
   </div>
   <script>window.onload = function() { setTimeout(function() { window.print(); }, 250); };</script>

@@ -98,6 +98,9 @@ export const RegistrationAndOnboardingWizard: React.FC<RegistrationProps> = ({
 
   const effectiveFeatures = computeEffectiveFeatures('diamond', companyProfile, rolesConfig);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const canProceedStep1 = 
     accountData.name.trim() !== '' && 
     accountData.email.trim() !== '' && 
@@ -107,14 +110,41 @@ export const RegistrationAndOnboardingWizard: React.FC<RegistrationProps> = ({
     companyProfile.company_name.trim() !== '' && 
     companyProfile.employee_count_range !== undefined;
 
-  const handleSubmitAll = () => {
-    localStorage.removeItem(DRAFT_STORAGE_KEY);
-    onCompleteRegistration({
-      account: accountData,
-      profile: companyProfile,
-      roles: rolesConfig,
-      effectiveFeatures
-    });
+  const handleSubmitAll = async () => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyName: companyProfile.company_name,
+          name: accountData.name,
+          email: accountData.email,
+          phone: accountData.phone,
+          password: accountData.password,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) {
+        setSubmitError(json.error || `Registrasi gagal (HTTP ${res.status})`);
+        setIsSubmitting(false);
+        return;
+      }
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      onCompleteRegistration({
+        account: accountData,
+        profile: companyProfile,
+        roles: rolesConfig,
+        effectiveFeatures,
+        session: json.session,
+        token: json.token,
+      });
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Gagal menghubungi server registrasi.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -386,8 +416,13 @@ export const RegistrationAndOnboardingWizard: React.FC<RegistrationProps> = ({
                 </div>
               </div>
 
+              {submitError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 font-semibold">
+                  {submitError}
+                </div>
+              )}
               <p className="text-[11px] text-warmmuted italic">
-                *Begitu Anda menekan tombol di bawah, akun tenant dibuat dan Anda akan langsung diarahkan ke wizard pembuatan proyek pertama untuk mengunggah berkas dan mendapatkan Surat Cinta 99 Keunggulan.
+                *Begitu Anda menekan tombol di bawah, akun tenant dibuat di PostgreSQL dan Anda akan langsung diarahkan ke wizard pembuatan proyek pertama.
               </p>
             </div>
           )}
@@ -398,7 +433,8 @@ export const RegistrationAndOnboardingWizard: React.FC<RegistrationProps> = ({
           {step > 1 ? (
             <button
               onClick={() => setStep(prev => prev - 1)}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-espresso hover:bg-white flex items-center gap-1.5 cursor-pointer"
+              disabled={isSubmitting}
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-espresso hover:bg-white flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <ArrowLeft className="size-3.5" />
               <span>Sebelumnya</span>
@@ -429,11 +465,12 @@ export const RegistrationAndOnboardingWizard: React.FC<RegistrationProps> = ({
 
           {step === 3 && (
             <button
+              disabled={isSubmitting}
               onClick={handleSubmitAll}
-              className="px-6 py-2.5 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 flex items-center gap-1.5 ml-auto cursor-pointer shadow-xs"
+              className="px-6 py-2.5 rounded-xl bg-terracotta text-white text-xs font-bold hover:bg-terracotta/90 flex items-center gap-1.5 ml-auto cursor-pointer shadow-xs disabled:opacity-60"
             >
               <Sparkles className="size-4 text-amber-300" />
-              <span>Buat Akun &amp; Lanjut Proyek Pertama</span>
+              <span>{isSubmitting ? 'Mendaftarkan Tenant ke DB...' : 'Buat Akun & Lanjut Proyek Pertama'}</span>
             </button>
           )}
         </div>

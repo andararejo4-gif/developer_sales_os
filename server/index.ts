@@ -62,6 +62,60 @@ import {
   upsertProjectPoiRisk,
 } from './r2-domain-services';
 import {
+  normalizeAndQuarantineListings,
+  validateAndBuildStp,
+  validateAndBuildSwotAction,
+} from '../src/lib/market-research/m02-strategy-engine';
+import {
+  buildContentAttributionReport,
+  evaluateAssetRights,
+  matchPersonaToUnits,
+  processPublishQueueJob,
+  validateAndBuildPitchKit,
+  validateVideoTemplate,
+} from '../src/lib/content/r2-content-saleskit-engine';
+import {
+  assignLeadRoundRobinSla,
+  buildAcquisitionPlan,
+  deduplicateAndMergeContacts,
+  evaluateBantFit,
+  evaluateRoleplayCertification,
+  summarizeFieldCheckins,
+  validateBookingHoldConfirmation,
+} from '../src/lib/crm/r2-crm-field-engine';
+import {
+  auditConversationQuality,
+  buildRetargetingSuppressionList,
+  evaluateBidPacingOptimizer,
+  launchOfficialCampaign,
+  validateSearchDemandCluster,
+} from '../src/lib/ads/r3-ads-coaching-engine';
+import {
+  buildCroExperiment,
+  evaluateCreativeBrandQa,
+  evaluateDiscountMarginProposal,
+  processAppointmentReminder,
+  scheduleVirtualTour,
+  validateLocalSeoWorkflow,
+  validateVoiceoverLocalization,
+} from '../src/lib/operations/r3-wave4-creative-ops-engine';
+import {
+  buildLifecycleReactivationCohort,
+  deployMultiProjectWebBatch,
+  runBulkCreativeBatch,
+  simulatePortfolioBudgetAllocation,
+  validateOptInAiVoiceQualifier,
+} from '../src/lib/operations/r4-wave5-automation-engine';
+import {
+  executeFinal15Feature,
+  FINAL_15_META,
+  type Final15FeatureId,
+} from '../src/lib/operations/final-15-features-engine';
+import { getR1ConnectorsHealth } from './r1-connectors';
+import { getExtendedConnectorsHealth } from './r2-r4-connectors';
+import { createServiceWorkOrder } from '../src/lib/operations/mob-ops-services-engine';
+import { STANDARD_AIC_RATES } from '../src/lib/aic/meter-engine';
+import {
   calculateKantongAAmount,
   calculatePph21Estimate,
   type ContentSubmissionType,
@@ -445,8 +499,29 @@ async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, a
   }
   const raw = Buffer.concat(chunks).toString('utf8').trim();
   if (!raw) return {};
-  return JSON.parse(raw) as Record<string, any>;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw Object.assign(new Error('Payload JSON harus berupa objek.'), { statusCode: 400 });
+    }
+    return parsed as Record<string, any>;
+  } catch (err: any) {
+    if (err?.statusCode === 400) throw err;
+    throw Object.assign(new Error('Format JSON tidak valid.'), { statusCode: 400 });
+  }
 }
+
+const ALLOWED_CORS_ORIGINS = new Set([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:3040',
+  'http://127.0.0.1:3040',
+  'https://developerproperti.giivepro.com',
+  'https://demo.giivepro.com',
+  'https://sedemo.giivepro.com',
+]);
+
+const loginFailureTracker = new Map<string, { count: number; resetAt: number }>();
 
 function sendJson(
   res: http.ServerResponse,
@@ -455,9 +530,13 @@ function sendJson(
   extraHeaders: Record<string, string | string[]> = {}
 ): void {
   const body = JSON.stringify(payload);
+  const existingOrigin = res.getHeader('access-control-allow-origin');
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
-    'access-control-allow-origin': '*',
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'strict-origin-when-cross-origin',
+    ...(existingOrigin ? {} : { 'access-control-allow-origin': 'http://localhost:5173' }),
     'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     'access-control-allow-headers': 'Content-Type, Authorization, X-User-Email, X-User-Role',
     ...extraHeaders,
@@ -1161,6 +1240,15 @@ const liveSeLocationsMap = new Map<
 >();
 
 const server = http.createServer(async (req, res) => {
+  const reqOrigin = String(req.headers.origin || '').trim();
+  if (reqOrigin && ALLOWED_CORS_ORIGINS.has(reqOrigin)) {
+    res.setHeader('access-control-allow-origin', reqOrigin);
+    res.setHeader('access-control-allow-credentials', 'true');
+    res.setHeader('vary', 'Origin');
+  } else {
+    res.setHeader('access-control-allow-origin', 'https://developerproperti.giivepro.com');
+  }
+
   if (req.method === 'OPTIONS') {
     sendJson(res, 200, { ok: true });
     return;
@@ -1173,14 +1261,52 @@ const server = http.createServer(async (req, res) => {
     // 0. AUTHENTICATION ENDPOINTS (Server-side session + TOTP 2FA, F91)
     if (pathname === '/api/auth/login' && req.method === 'POST') {
       const body = await readJsonBody(req);
-      const resAuth = await startLogin(String(body.email || ''), String(body.password || ''), {
-        userAgent: String(req.headers['user-agent'] || ''),
-        ipAddress: String(req.socket?.remoteAddress || ''),
-      });
-      if (!resAuth.ok) {
-        sendJson(res, 401, { ok: false, error: resAuth.error });
+      const clientIp = String(req.socket?.remoteAddress || 'unknown');
+      const emailKey = `${clientIp}:${String(body.email || '').trim().toLowerCase()}`;
+      const ipKey = `ip:${clientIp}`;
+      const now = Date.now();
+      const recEmail = loginFailureTracker.get(emailKey);
+      const recIp = loginFailureTracker.get(ipKey);
+      if ((recEmail && recEmail.resetAt > now && recEmail.count >= 5) || (recIp && recIp.resetAt > now && recIp.count >= 10)) {
+        const lockResetAt = Math.max(recEmail?.resetAt || 0, recIp?.resetAt || 0);
+        const retryAfterSeconds = Math.max(1, Math.ceil((lockResetAt - now) / 1000));
+        sendJson(res, 429, {
+          ok: false,
+          error: `Terlalu banyak percobaan login gagal. Coba lagi dalam ${retryAfterSeconds} detik.`,
+          remainingAttempts: 0,
+          maxAttempts: 5,
+          isLastAttempt: false,
+          retryAfterSeconds,
+        });
         return;
       }
+
+      const resAuth = await startLogin(String(body.email || ''), String(body.password || ''), {
+        userAgent: String(req.headers['user-agent'] || ''),
+        ipAddress: clientIp,
+      });
+      if (!resAuth.ok) {
+        const windowEnd = now + 5 * 60 * 1000;
+        const nextEmail = recEmail && recEmail.resetAt > now ? { count: recEmail.count + 1, resetAt: recEmail.resetAt } : { count: 1, resetAt: windowEnd };
+        const nextIp = recIp && recIp.resetAt > now ? { count: recIp.count + 1, resetAt: recIp.resetAt } : { count: 1, resetAt: windowEnd };
+        loginFailureTracker.set(emailKey, nextEmail);
+        loginFailureTracker.set(ipKey, nextIp);
+        const remainingAttempts = Math.max(0, 5 - nextEmail.count);
+        const isLastAttempt = remainingAttempts === 1;
+        const msg = isLastAttempt
+          ? `${resAuth.error} Peringatan: sisa 1 kesempatan terakhir sebelum dikunci 5 menit!`
+          : `${resAuth.error} (Sisa ${remainingAttempts} dari 5 percobaan)`;
+        sendJson(res, 401, {
+          ok: false,
+          error: msg,
+          remainingAttempts,
+          maxAttempts: 5,
+          isLastAttempt,
+        });
+        return;
+      }
+      loginFailureTracker.delete(emailKey);
+      loginFailureTracker.delete(ipKey);
       if (!resAuth.requiresMfa) {
         sendJson(
           res,
@@ -3942,15 +4068,16 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      const ownerSeName = assignedSe.split('@')[0] || 'Sales Executive';
       const inserted = await sql`
         INSERT INTO sales_os.pipeline_leads (
           tenant_id, owner_se_email, owner_se_name, full_name, phone_wa, source, stage,
           unit_interest, sales_notes, wa_consent, wa_consent_updated_at, lead_quality, last_activity_at,
           creator_code, content_code, persona_code
         ) VALUES (
-          ${targetTenantId}, ${assignedSe}, ${assignedSe.split('@')[0]}, ${name}, ${phoneWa}, ${utmSource}, 'LEAD_MASUK',
+          ${targetTenantId}, ${assignedSe}, ${ownerSeName}, ${name}, ${phoneWa}, ${utmSource}, 'NEW',
           ${unitInterest}, ${'Form Website Publik (Consent v1.0)'}, 'OPT_IN', NOW(), 'WARM', NOW(),
-          ${creatorCode || null}, ${contentCode || null}, ${personaCode || null}
+          ${creatorCode || null}, ${contentCode || ''}, ${personaCode || 'P1'}
         )
         RETURNING id
       `;
@@ -4810,12 +4937,12 @@ const server = http.createServer(async (req, res) => {
         await Promise.all([
           sql`SELECT id, name, email, role, is_active FROM sales_os.app_users WHERE tenant_id = ${user.tenantId}`,
           sql`SELECT id, owner_se_email, owner_se_name, full_name, phone_wa, stage, grade, unit_interest, unit_price_idr, payment_scheme, lead_quality, spam_reason, is_in_pool, response_time_seconds, created_at, updated_at FROM sales_os.pipeline_leads WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC`,
-          sql`SELECT id, unit_code, cluster, status, price_idr FROM sales_os.project_units WHERE tenant_id = ${user.tenantId} ${projectIdParam ? sql`AND project_id = ${projectIdParam}` : sql``}`,
+          sql`SELECT id, unit_code, cluster, status, price_cash AS price_idr FROM sales_os.project_units WHERE tenant_id = ${user.tenantId} ${projectIdParam ? sql`AND project_id = ${projectIdParam}` : sql``}`,
           sql`SELECT id, applicant_name, unit_code, target_bank, plafond_amount, status, created_at FROM sales_os.bank_applications WHERE tenant_id = ${user.tenantId}`,
           sql`SELECT id, lead_name, doc_type, status FROM sales_os.vault_documents WHERE tenant_id = ${user.tenantId}`,
           sql`SELECT id, se_email, se_name, log_type, location_label, created_at FROM sales_os.se_field_logs ORDER BY created_at DESC LIMIT 200`,
           sql`SELECT * FROM sales_os.escalation_requests WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC`,
-          sql`SELECT id, actor_name, actor_role, summary, action_type, created_at FROM sales_os.activity_audit_logs WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC LIMIT 30`,
+          sql`SELECT id, actor_name, actor_role, summary, action AS action_type, created_at FROM sales_os.activity_audit_logs WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC LIMIT 30`,
           sql`SELECT * FROM sales_os.ad_campaigns WHERE tenant_id = ${user.tenantId} ORDER BY created_at DESC`,
         ]);
 
@@ -5441,8 +5568,76 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (pathname === '/api/sm/daily-report' && req.method === 'GET') {
-      if (!['SM', 'TL', 'ADMIN', 'DIREKSI', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role)) {
+    if (pathname === '/api/daily-report/manual-activity' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const activityDate = String(body.activityDate || toWibDateStr(new Date())).slice(0, 10);
+      const category = String(body.category || 'Kantor / Administrasi').trim().slice(0, 80) || 'Kantor / Administrasi';
+      const note = String(body.note || '').trim().slice(0, 1000);
+      if (!note) {
+        sendJson(res, 400, { ok: false, error: 'Catatan aktivitas harian tidak boleh kosong.' });
+        return;
+      }
+      await sql`
+        CREATE TABLE IF NOT EXISTS sales_os.daily_manual_activities (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id TEXT NOT NULL,
+          user_email TEXT NOT NULL,
+          user_name TEXT NOT NULL,
+          user_role TEXT NOT NULL,
+          activity_date DATE NOT NULL DEFAULT CURRENT_DATE,
+          category TEXT NOT NULL DEFAULT 'Kantor / Administrasi',
+          activity_note TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      const inserted = await sql`
+        INSERT INTO sales_os.daily_manual_activities (
+          tenant_id, user_email, user_name, user_role, activity_date, category, activity_note
+        ) VALUES (
+          ${user.tenantId}, ${user.email}, ${user.name}, ${user.role}, ${activityDate}::date, ${category}, ${note}
+        )
+        RETURNING id, activity_date, category, activity_note, created_at
+      `;
+      sendJson(res, 201, {
+        ok: true,
+        activity: {
+          id: String(inserted[0].id),
+          activityDate: String(inserted[0].activity_date).slice(0, 10),
+          category: String(inserted[0].category),
+          note: String(inserted[0].activity_note),
+          createdAt: String(inserted[0].created_at),
+        },
+      });
+      return;
+    }
+
+    if (pathname === '/api/daily-report/manual-activity' && req.method === 'DELETE') {
+      const id = String(parsedUrl.searchParams.get('id') || '').trim();
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'Parameter id wajib diisi.' });
+        return;
+      }
+      const deleted = await sql`
+        DELETE FROM sales_os.daily_manual_activities
+        WHERE id = ${id}::uuid
+          AND tenant_id = ${user.tenantId}
+          AND LOWER(user_email) = LOWER(${user.email})
+        RETURNING id
+      `;
+      if (deleted.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Catatan aktivitas tidak ditemukan.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if ((pathname === '/api/sm/daily-report' || pathname === '/api/se/daily-report') && req.method === 'GET') {
+      const isSeEndpoint = pathname === '/api/se/daily-report';
+      const allowedRoles = isSeEndpoint
+        ? ['SE', 'SM', 'TL', 'ADMIN', 'DIREKSI', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT']
+        : ['SM', 'TL', 'ADMIN', 'DIREKSI', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT'];
+      if (!allowedRoles.includes(user.role)) {
         sendJson(res, 403, { ok: false, error: 'Hanya role manajemen yang dapat mengakses Laporan Harian SM & Tim SE.' });
         return;
       }
@@ -5450,48 +5645,122 @@ const server = http.createServer(async (req, res) => {
       const rawStart = String(parsedUrl.searchParams.get('startDate') || parsedUrl.searchParams.get('date') || todayWib).slice(0, 10);
       const rawEnd = String(parsedUrl.searchParams.get('endDate') || rawStart).slice(0, 10);
       const [startDate, endDate] = rawStart <= rawEnd ? [rawStart, rawEnd] : [rawEnd, rawStart];
+      const restrictToSelfSe = isSeEndpoint && user.role === 'SE';
 
-      const [seUsers, dailyNotes, fieldLogs, leadsInRange, smAuditLogs] = await Promise.all([
-        sql`
-          SELECT email, name, project_id, phone
-          FROM sales_os.app_users
-          WHERE tenant_id = ${user.tenantId}
-            AND role = 'SE'
-            AND is_active = TRUE
-          ORDER BY name ASC
-        `,
-        sql`
-          SELECT * FROM sales_os.se_daily_notes
-          WHERE report_date >= ${startDate}::date
-            AND report_date <= ${endDate}::date
-        `,
-        sql`
-          SELECT se_email, se_name, log_type, title, location_label, lat, lng, created_at
-          FROM sales_os.se_field_logs
-          WHERE (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
-            AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
-          ORDER BY created_at ASC
-        `,
-        sql`
-          SELECT owner_se_email, stage, bant_total, booking_fee_paid, last_activity_at, created_at
-          FROM sales_os.pipeline_leads
-          WHERE tenant_id = ${user.tenantId}
-            AND COALESCE(validity_status, 'VALID') = 'VALID'
-            AND (
-              ((created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
-              OR ((last_activity_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (last_activity_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
-            )
-        `,
-        sql`
-          SELECT action, target_entity AS entity, target_id AS entity_id, summary, details, created_at
-          FROM sales_os.activity_audit_logs
-          WHERE tenant_id = ${user.tenantId}
-            AND LOWER(actor_email) = LOWER(${user.email})
-            AND (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
-            AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
-          ORDER BY created_at DESC
-          LIMIT 100
-        `,
+      await sql`
+        CREATE TABLE IF NOT EXISTS sales_os.daily_manual_activities (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id TEXT NOT NULL,
+          user_email TEXT NOT NULL,
+          user_name TEXT NOT NULL,
+          user_role TEXT NOT NULL,
+          activity_date DATE NOT NULL DEFAULT CURRENT_DATE,
+          category TEXT NOT NULL DEFAULT 'Kantor / Administrasi',
+          activity_note TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+
+      const [seUsers, dailyNotes, fieldLogs, leadsInRange, smAuditLogs, manualActivities] = await Promise.all([
+        restrictToSelfSe
+          ? sql`
+              SELECT email, name, project_id, phone
+              FROM sales_os.app_users
+              WHERE tenant_id = ${user.tenantId}
+                AND LOWER(email) = LOWER(${user.email})
+                AND is_active = TRUE
+              ORDER BY name ASC
+            `
+          : sql`
+              SELECT email, name, project_id, phone
+              FROM sales_os.app_users
+              WHERE tenant_id = ${user.tenantId}
+                AND role = 'SE'
+                AND is_active = TRUE
+              ORDER BY name ASC
+            `,
+        restrictToSelfSe
+          ? sql`
+              SELECT * FROM sales_os.se_daily_notes
+              WHERE LOWER(se_email) = LOWER(${user.email})
+                AND report_date >= ${startDate}::date
+                AND report_date <= ${endDate}::date
+            `
+          : sql`
+              SELECT * FROM sales_os.se_daily_notes
+              WHERE report_date >= ${startDate}::date
+                AND report_date <= ${endDate}::date
+            `,
+        restrictToSelfSe
+          ? sql`
+              SELECT se_email, se_name, log_type, title, location_label, lat, lng, photo_data_url, created_at
+              FROM sales_os.se_field_logs
+              WHERE LOWER(se_email) = LOWER(${user.email})
+                AND (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
+                AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
+              ORDER BY created_at ASC
+            `
+          : sql`
+              SELECT se_email, se_name, log_type, title, location_label, lat, lng, photo_data_url, created_at
+              FROM sales_os.se_field_logs
+              WHERE (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
+                AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
+              ORDER BY created_at ASC
+            `,
+        restrictToSelfSe
+          ? sql`
+              SELECT owner_se_email, full_name, unit_interest, source, stage, bant_total, booking_fee_paid, last_activity_at, created_at
+              FROM sales_os.pipeline_leads
+              WHERE tenant_id = ${user.tenantId}
+                AND LOWER(owner_se_email) = LOWER(${user.email})
+                AND COALESCE(validity_status, 'VALID') = 'VALID'
+                AND (
+                  ((created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
+                  OR ((last_activity_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (last_activity_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
+                )
+              ORDER BY COALESCE(last_activity_at, created_at) DESC
+            `
+          : sql`
+              SELECT owner_se_email, full_name, unit_interest, source, stage, bant_total, booking_fee_paid, last_activity_at, created_at
+              FROM sales_os.pipeline_leads
+              WHERE tenant_id = ${user.tenantId}
+                AND COALESCE(validity_status, 'VALID') = 'VALID'
+                AND (
+                  ((created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
+                  OR ((last_activity_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date AND (last_activity_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date)
+                )
+              ORDER BY COALESCE(last_activity_at, created_at) DESC
+            `,
+        restrictToSelfSe
+          ? Promise.resolve([])
+          : sql`
+              SELECT action, target_entity AS entity, target_id AS entity_id, summary, details, created_at
+              FROM sales_os.activity_audit_logs
+              WHERE tenant_id = ${user.tenantId}
+                AND LOWER(actor_email) = LOWER(${user.email})
+                AND (created_at AT TIME ZONE 'Asia/Jakarta')::date >= ${startDate}::date
+                AND (created_at AT TIME ZONE 'Asia/Jakarta')::date <= ${endDate}::date
+              ORDER BY created_at DESC
+              LIMIT 100
+            `,
+        restrictToSelfSe
+          ? sql`
+              SELECT id, user_email, activity_date, category, activity_note, created_at
+              FROM sales_os.daily_manual_activities
+              WHERE tenant_id = ${user.tenantId}
+                AND LOWER(user_email) = LOWER(${user.email})
+                AND activity_date >= ${startDate}::date
+                AND activity_date <= ${endDate}::date
+              ORDER BY activity_date DESC, created_at DESC
+            `
+          : sql`
+              SELECT id, user_email, activity_date, category, activity_note, created_at
+              FROM sales_os.daily_manual_activities
+              WHERE tenant_id = ${user.tenantId}
+                AND activity_date >= ${startDate}::date
+                AND activity_date <= ${endDate}::date
+              ORDER BY activity_date DESC, created_at DESC
+            `,
       ]);
 
       const notesByEmail = new Map<string, any>();
@@ -5507,6 +5776,7 @@ const server = http.createServer(async (req, res) => {
           posted_wa_status: 0,
           posted_stories: 0,
           hambatan_list: [] as string[],
+          daily_notes_rows: [] as any[],
         };
         prev.dial_count += Number(n.dial_count || 0);
         prev.connected_call_count += Number(n.connected_call_count || 0);
@@ -5519,6 +5789,18 @@ const server = http.createServer(async (req, res) => {
         if (n.hambatan_bantuan && String(n.hambatan_bantuan).trim()) {
           prev.hambatan_list.push(String(n.hambatan_bantuan).trim());
         }
+        prev.daily_notes_rows.push({
+          reportDate: n.report_date ? String(n.report_date).slice(0, 10) : '',
+          dialCount: Number(n.dial_count || 0),
+          connectedCallCount: Number(n.connected_call_count || 0),
+          canvassingContacts: Number(n.canvassing_contacts || 0),
+          canvassingBrochures: Number(n.canvassing_brochures || 0),
+          canvassingLeads: Number(n.canvassing_leads || 0),
+          postedReels: Number(n.posted_reels || 0),
+          postedWaStatus: Number(n.posted_wa_status || 0),
+          postedStories: Number(n.posted_stories || 0),
+          hambatan: n.hambatan_bantuan ? String(n.hambatan_bantuan).trim() : '',
+        });
         notesByEmail.set(email, prev);
       }
 
@@ -5573,9 +5855,47 @@ const server = http.createServer(async (req, res) => {
           visitsCount,
           bookingsCount,
           hambatanBantuan: Array.isArray(note.hambatan_list) ? note.hambatan_list.join(' | ') : '',
+          details: {
+            fieldLogs: [...myLogs].reverse().map((l: any) => ({
+              logType: String(l.log_type || ''),
+              title: String(l.title || ''),
+              locationLabel: String(l.location_label || ''),
+              lat: l.lat != null ? Number(l.lat) : null,
+              lng: l.lng != null ? Number(l.lng) : null,
+              photoDataUrl: l.photo_data_url ? String(l.photo_data_url) : null,
+              createdAt: String(l.created_at || ''),
+            })),
+            leads: myLeads.map((l: any) => ({
+              fullName: String(l.full_name || '-'),
+              unitInterest: String(l.unit_interest || '-'),
+              source: String(l.source || '-'),
+              stage: String(l.stage || '-'),
+              bantTotal: Number(l.bant_total || 0),
+              createdAt: String(l.created_at || ''),
+            })),
+            dailyNotes: Array.isArray(note.daily_notes_rows) ? note.daily_notes_rows : [],
+            manualActivities: manualActivities
+              .filter((m: any) => String(m.user_email || '').toLowerCase() === email)
+              .map((m: any) => ({
+                id: String(m.id),
+                activityDate: String(m.activity_date).slice(0, 10),
+                category: String(m.category || 'Kantor / Administrasi'),
+                note: String(m.activity_note || ''),
+                createdAt: String(m.created_at || ''),
+              })),
+          },
         };
       });
 
+      const smManualActivities = manualActivities
+        .filter((m: any) => String(m.user_email || '').toLowerCase() === user.email.toLowerCase())
+        .map((m: any) => ({
+          id: String(m.id),
+          activityDate: String(m.activity_date).slice(0, 10),
+          category: String(m.category || 'Kantor / Administrasi'),
+          note: String(m.activity_note || ''),
+          createdAt: String(m.created_at || ''),
+        }));
       const smOwnLogs = fieldLogs.filter((l: any) => String(l.se_email || '').toLowerCase() === user.email.toLowerCase());
       const teamTotals = {
         totalSe: seReports.length,
@@ -5593,13 +5913,18 @@ const server = http.createServer(async (req, res) => {
         startDate,
         endDate,
         date: startDate === endDate ? startDate : `${startDate} s.d. ${endDate}`,
-        smSummary: {
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          ownActivities: smAuditLogs,
-          ownFieldLogs: smOwnLogs,
-        },
+        ...(isSeEndpoint
+          ? {}
+          : {
+              smSummary: {
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                ownActivities: smAuditLogs,
+                ownFieldLogs: smOwnLogs,
+                manualActivities: smManualActivities,
+              },
+            }),
         teamTotals,
         seReports,
       });
@@ -6063,6 +6388,1422 @@ const server = http.createServer(async (req, res) => {
         summary: `${user.name} menggabungkan lead ganda ${duplicateId} ke ${primaryId}`,
       });
       sendJson(res, 200, { ok: true, primaryId, mergedOutId: duplicateId });
+      return;
+    }
+
+    if (pathname === '/api/connectors/health' && req.method === 'GET') {
+      if (!['IT', 'DIREKSI', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya IT / Direksi / Superadmin yang dapat melihat health konektor.' });
+        return;
+      }
+      sendJson(res, 200, { ok: true, connectors: [...getR1ConnectorsHealth(), ...getExtendedConnectorsHealth()] });
+      return;
+    }
+
+    if (pathname === '/api/ops/service-work-order' && req.method === 'POST') {
+      if (!['IT', 'ADMIN', 'SM', 'DIREKSI', 'SUPERADMIN', 'SUPERADMIN_IT'].includes(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin membuat work order layanan (S01-S18).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const wo = createServiceWorkOrder({
+        serviceId: String(body.serviceId || 'S01').toUpperCase(),
+        projectId: String(body.projectId || 'the-park-sukoharjo'),
+        assignedOperator: String(body.assignedOperator || user.email),
+        bookedHours: Number(body.bookedHours) || 8,
+        isHandoverBootstrap: Boolean(body.isHandoverBootstrap),
+      });
+      if (!wo.ok) {
+        sendJson(res, 400, { ok: false, error: wo.error });
+        return;
+      }
+      const item = await createWorkspaceItem({
+        tenantId: user.tenantId,
+        projectId: wo.data.projectId,
+        moduleKey: `SERVICE_${wo.data.serviceId}`,
+        title: `${wo.data.serviceId} · ${wo.data.serviceName}`,
+        status: wo.data.status,
+        refId: wo.data.serviceId,
+        payload: wo.data,
+        createdBy: user.email,
+      });
+      sendJson(res, 201, { ok: true, item, workOrder: wo.data });
+      return;
+    }
+
+    // M02 STRATEGI & KOMPETITOR (F08 STP, F09 7P/SWOT/Action Plan, F10 Competitor Watch)
+    const M02_EDITOR_ROLES = new Set(['DIREKSI', 'SM', 'TL', 'ADMIN', 'DIGITAL_MARKETING', 'IT', 'SUPERADMIN', 'SUPERADMIN_IT']);
+    const M02_REVIEWER_ROLES = new Set(['DIREKSI', 'SM', 'SUPERADMIN', 'SUPERADMIN_IT']);
+
+    const runMeteredM02Save = async (params: {
+      featureId: 'F08' | 'F09' | 'F10' | 'F16' | 'F17' | 'F22' | 'F23' | 'F24' | 'F26' | 'F28' | 'F29' | 'F30' | 'F34' | 'F35' | 'F36' | 'F37' | 'F38' | 'F39' | 'F40' | 'F41' | 'F42' | 'F44' | 'F45' | 'F46' | 'F53' | 'F54' | 'F58' | 'F59' | 'F60' | 'F63' | 'F65' | 'F70' | 'F71' | Final15FeatureId;
+      moduleKey: string;
+      projectId: string;
+      title: string;
+      status: string;
+      refId: string | null;
+      payload: Record<string, any>;
+      units?: number;
+      billableEventId: string;
+    }) => {
+      const rate = STANDARD_AIC_RATES[params.featureId] || 120;
+      const amountAic = rate * Math.max(1, params.units || 1);
+      const reserve = await reserveAicAtomic({
+        tenantId: user.tenantId,
+        billableEventId: params.billableEventId,
+        featureId: params.featureId,
+        amountAic,
+        actorEmail: user.email,
+        actorRole: user.role,
+        reason: `${params.featureId} · ${params.title}`,
+      });
+      if (reserve.idempotentReplay) {
+        const existing = await listWorkspaceItems({
+          tenantId: user.tenantId,
+          projectId: params.projectId,
+          moduleKey: params.moduleKey,
+        });
+        const matched = existing.find((x: any) => x.payload?.billableEventId === params.billableEventId) || existing[0] || null;
+        return { item: matched, aicCharged: 0, idempotentReplay: true, balanceAfter: reserve.balanceAfter };
+      }
+      try {
+        const item = await createWorkspaceItem({
+          tenantId: user.tenantId,
+          projectId: params.projectId,
+          moduleKey: params.moduleKey,
+          title: params.title,
+          status: params.status,
+          refId: params.refId,
+          payload: { ...params.payload, billableEventId: params.billableEventId, aicCharged: amountAic },
+          createdBy: user.email,
+        });
+        const settled = await settleAicAtomic({
+          tenantId: user.tenantId,
+          billableEventId: params.billableEventId,
+          actorEmail: user.email,
+        });
+        await appendAuditLog({
+          tenantId: user.tenantId,
+          actorEmail: user.email,
+          actorRole: user.role,
+          action: `${params.featureId}_CREATED`,
+          resourceType: 'workspace_item',
+          resourceId: String(item.id),
+          after: { projectId: params.projectId, moduleKey: params.moduleKey, amountAic },
+        });
+        return { item, aicCharged: amountAic, idempotentReplay: false, balanceAfter: settled.balanceAfter };
+      } catch (err) {
+        await refundAicAtomic({
+          tenantId: user.tenantId,
+          billableEventId: params.billableEventId,
+          actorEmail: user.email,
+          reason: `Refund gagal simpan ${params.featureId}`,
+        }).catch(() => {});
+        throw err;
+      }
+    };
+
+    if (pathname === '/api/m02/stp' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin membuat analisis STP (F08).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const validated = validateAndBuildStp({
+        projectId,
+        title: String(body.title || ''),
+        segments: Array.isArray(body.segments) ? body.segments : [],
+        priorityTargets: Array.isArray(body.priorityTargets) ? body.priorityTargets : [],
+        exclusionRationale: Array.isArray(body.exclusionRationale) ? body.exclusionRationale : [],
+        positioningStatement: String(body.positioningStatement || ''),
+        evidenceRefs: Array.isArray(body.evidenceRefs) ? body.evidenceRefs : [],
+      });
+      if (!validated.ok) {
+        sendJson(res, 400, { ok: false, error: validated.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F08-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F08',
+          moduleKey: 'F08_STP_POSITIONING',
+          projectId,
+          title: validated.data.title,
+          status: validated.data.reviewStatus,
+          refId: 'F08-STP',
+          payload: validated.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal menyimpan STP (F08).' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/m02/stp/review' && req.method === 'PATCH') {
+      if (!M02_REVIEWER_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya SM / Direksi / Superadmin yang dapat menyetujui STP (F08).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const id = String(body.id || '').trim();
+      const nextStatus = String(body.reviewStatus || '').trim().toUpperCase();
+      if (!id || !['REVIEWED', 'APPROVED'].includes(nextStatus)) {
+        sendJson(res, 400, { ok: false, error: 'id dan reviewStatus (REVIEWED/APPROVED) wajib valid.' });
+        return;
+      }
+      const existingRows = await sql`
+        SELECT * FROM sales_os.tenant_workspace_items
+        WHERE id = ${id}::uuid AND tenant_id = ${user.tenantId} AND module_key = 'F08_STP_POSITIONING'
+        LIMIT 1
+      `;
+      if (existingRows.length === 0) {
+        sendJson(res, 404, { ok: false, error: 'Analisis STP tidak ditemukan atau beda tenant.' });
+        return;
+      }
+      const prev = existingRows[0];
+      const updated = await updateWorkspaceItem({
+        tenantId: user.tenantId,
+        id,
+        status: nextStatus,
+        payload: {
+          ...(prev.payload || {}),
+          reviewStatus: nextStatus,
+          isAutomatedDecision: false,
+          reviewedBy: user.email,
+          reviewedAt: new Date().toISOString(),
+        },
+      });
+      await appendAuditLog({
+        tenantId: user.tenantId,
+        actorEmail: user.email,
+        actorRole: user.role,
+        action: `F08_${nextStatus}`,
+        resourceType: 'workspace_item',
+        resourceId: id,
+      });
+      sendJson(res, 200, { ok: true, item: updated });
+      return;
+    }
+
+    if (pathname === '/api/m02/swot-action' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin membuat strategi 7P/SWOT (F09).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const validated = validateAndBuildSwotAction({
+        projectId,
+        title: String(body.title || ''),
+        sevenP: body.sevenP || {
+          product: '', price: '', place: '', promotion: '', people: '', process: '', physicalEvidence: '',
+        },
+        swot: body.swot || { strengths: [], weaknesses: [], opportunities: [], threats: [] },
+        tows: body.tows || { so: [], wo: [], st: [], wt: [] },
+        facts: Array.isArray(body.facts) ? body.facts : [],
+        assumptions: Array.isArray(body.assumptions) ? body.assumptions : [],
+        actionPlan: Array.isArray(body.actionPlan) ? body.actionPlan : [],
+      });
+      if (!validated.ok) {
+        sendJson(res, 400, { ok: false, error: validated.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F09-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F09',
+          moduleKey: 'F09_SWOT_ACTION',
+          projectId,
+          title: validated.data.title,
+          status: 'ACTIVE',
+          refId: 'F09-SWOT',
+          payload: validated.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal menyimpan strategi 7P/SWOT (F09).' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/m02/competitor-watch' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin menjalankan Competitor Watch (F10).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const listings = Array.isArray(body.listings) ? body.listings : [];
+      if (listings.length === 0) {
+        sendJson(res, 400, { ok: false, error: 'Minimal 1 listing kompetitor wajib dikirim.' });
+        return;
+      }
+      const watchResult = normalizeAndQuarantineListings({ projectId, listings });
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F10-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F10',
+          moduleKey: 'F10_COMPETITOR_WATCH',
+          projectId,
+          title: String(body.title || `Refresh Kompetitor (${watchResult.activeListings.length} aktif / ${watchResult.quarantinedListings.length} karantina)`),
+          status: watchResult.quarantinedListings.length > 0 ? 'NEEDS_REVIEW' : 'ACTIVE',
+          refId: 'F10-WATCH',
+          payload: watchResult,
+          units: watchResult.aicUnitsCharged,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, watchResult, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal menyimpan Competitor Watch (F10).' });
+      }
+      return;
+    }
+
+    // R2 GELOMBANG 1: KONTEN & SALES KIT (F16, F17, F22, F23, F24, F26)
+    if (pathname === '/api/r2/f16/pitch-kit' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin membuat Pitch & Objection Kit (F16).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const validated = validateAndBuildPitchKit({
+        projectId,
+        title: String(body.title || ''),
+        pitch30s: String(body.pitch30s || ''),
+        pitch60s: String(body.pitch60s || ''),
+        pitch180s: String(body.pitch180s || ''),
+        objections: Array.isArray(body.objections) ? body.objections : [],
+      });
+      if (!validated.ok) {
+        sendJson(res, 400, { ok: false, error: validated.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F16-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F16',
+          moduleKey: 'F16_OBJECTION_KIT',
+          projectId,
+          title: validated.data.title,
+          status: validated.data.escalatedCount > 0 ? 'NEEDS_REVIEW' : 'ACTIVE',
+          refId: 'F16-KIT',
+          payload: validated.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal menyimpan F16.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r2/f17/unit-match' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const budgetMaxIdr = Number(body.budgetMaxIdr) || 1500000000;
+      const minBedrooms = body.minBedrooms ? Number(body.minBedrooms) : undefined;
+      const unitRows = await sql`
+        SELECT unit_code, cluster_name, status, price_cash, bedrooms
+        FROM sales_os.project_units
+        WHERE tenant_id = ${user.tenantId} AND project_id = ${projectId}
+        LIMIT 100
+      `;
+      const units = unitRows.map((u: any) => ({
+        unitCode: String(u.unit_code),
+        clusterName: String(u.cluster_name || ''),
+        status: String(u.status || 'AVAILABLE'),
+        priceCashIdr: Number(u.price_cash || 0),
+        bedrooms: Number(u.bedrooms || 2),
+      }));
+      const matched = matchPersonaToUnits({
+        projectId,
+        statedNeed: String(body.statedNeed || 'Hunian keluarga'),
+        budgetMaxIdr,
+        minBedrooms,
+        units: Array.isArray(body.unitsOverride) && units.length === 0 ? body.unitsOverride : units,
+      });
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F17-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F17',
+          moduleKey: 'F17_UNIT_MATCH',
+          projectId,
+          title: `Match Unit: ${matched.statedNeed}`,
+          status: 'ACTIVE',
+          refId: 'F17-MATCH',
+          payload: matched,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, matched, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal menjalankan F17.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r2/f22/publish-queue' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin menjadwalkan publish (F22).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const idempotencyKey = String(req.headers['idempotency-key'] || body.idempotencyKey || `F22-${projectId}-${crypto.randomUUID()}`);
+      const job = processPublishQueueJob({
+        projectId,
+        title: String(body.title || 'Konten Terjadwal'),
+        channel: String(body.channel || 'Instagram'),
+        scheduledAt: String(body.scheduledAt || new Date().toISOString()),
+        approvedByHuman: Boolean(body.approvedByHuman),
+        apiAvailable: body.apiAvailable !== false,
+        idempotencyKey,
+      });
+      if (!job.ok) {
+        sendJson(res, 400, { ok: false, error: job.error });
+        return;
+      }
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F22',
+          moduleKey: 'F22_CONTENT_APPROVAL',
+          projectId,
+          title: job.data.title,
+          status: job.data.status,
+          refId: job.data.publishReceiptId || 'EXPORT_REMINDER',
+          payload: job.data,
+          billableEventId: idempotencyKey,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F22.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r2/f23/attribution' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin membuat laporan atribusi (F23).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const periodDays = Math.max(1, Number(body.periodDays) || 30);
+      const report = buildContentAttributionReport({
+        projectId,
+        periodDays,
+        touches: Array.isArray(body.touches) ? body.touches : [],
+      });
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F23-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F23',
+          moduleKey: 'F23_CONTENT_ATTRIBUTION',
+          projectId,
+          title: `Atribusi Konten ${periodDays} Hari`,
+          status: 'ACTIVE',
+          refId: 'F23-ATTR',
+          payload: report,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, report, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F23.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r2/f24/asset-rights' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin memeriksa hak aset (F24).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const evaluated = evaluateAssetRights({
+        assetName: String(body.assetName || 'Aset Promo'),
+        hasLicense: Boolean(body.hasLicense),
+        hasModelConsent: Boolean(body.hasModelConsent),
+        hasBrandLabel: Boolean(body.hasBrandLabel),
+        expiresAt: body.expiresAt ? String(body.expiresAt) : undefined,
+        revoked: Boolean(body.revoked),
+      });
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F24-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F24',
+          moduleKey: 'F24_ASSET_RIGHTS',
+          projectId,
+          title: evaluated.assetName,
+          status: evaluated.status,
+          refId: evaluated.auditReason,
+          payload: evaluated,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, evaluated, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F24.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r2/f26/video-template' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin membuat video template (F26).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const validated = validateVideoTemplate({
+        projectId,
+        title: String(body.title || 'Video Template 30s'),
+        durationSeconds: Number(body.durationSeconds) || 30,
+        licensedFootage: Boolean(body.licensedFootage),
+        subtitlesVerified: Boolean(body.subtitlesVerified),
+        isFakeRealTour: Boolean(body.isFakeRealTour),
+        subtitlePriceLabel: body.subtitlePriceLabel ? String(body.subtitlePriceLabel) : undefined,
+      });
+      if (!validated.ok) {
+        sendJson(res, 400, { ok: false, error: validated.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F26-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F26',
+          moduleKey: 'F26_VIDEO_TEMPLATE',
+          projectId,
+          title: validated.data.title,
+          status: 'ACTIVE',
+          refId: 'F26-VIDEO',
+          payload: validated.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F26.' });
+      }
+      return;
+    }
+
+    // R2 GELOMBANG 2: CRM, AKUISISI & LAPANGAN (F37, F44, F45, F46, F63, F65, F71)
+    if (pathname === '/api/r2/f37/acquisition-plan' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin membuat acquisition plan (F37).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const plan = buildAcquisitionPlan({
+        projectId,
+        availableStock: Number(body.availableStock) || 0,
+        channels: Array.isArray(body.channels) ? body.channels : [],
+      });
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F37-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F37',
+          moduleKey: 'F37_ACQUISITION_PLAN',
+          projectId,
+          title: String(body.title || `Rencana Akuisisi 30 Hari (${plan.projectedLeads} proyeksi lead)`),
+          status: 'ACTIVE',
+          refId: 'F37-PLAN',
+          payload: plan,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, plan, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F37.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r2/f44/dedup-merge' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin dedup/merge kontak (F44).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const dedup = deduplicateAndMergeContacts(Array.isArray(body.records) ? body.records : []);
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F44-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F44',
+          moduleKey: 'F44_DEDUP_MERGE',
+          projectId,
+          title: `Dedup ${dedup.totalInputRecords} record (${dedup.conflictCount} konflik)`,
+          status: dedup.conflictCount > 0 ? 'NEEDS_REVIEW' : 'ACTIVE',
+          refId: 'F44-DEDUP',
+          payload: dedup,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, dedup, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F44.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r2/f45/bant' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const bant = evaluateBantFit({
+        leadId: String(body.leadId || 'lead-1'),
+        budget: body.budget || {},
+        authority: body.authority || {},
+        need: body.need || {},
+        timeline: body.timeline || {},
+        manualOverrideScore: typeof body.manualOverrideScore === 'number' ? body.manualOverrideScore : undefined,
+        usedSensitiveAttribute: Boolean(body.usedSensitiveAttribute),
+      });
+      if (!bant.ok) {
+        sendJson(res, 400, { ok: false, error: bant.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F45-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F45',
+          moduleKey: 'F45_BANT_QUALIFICATION',
+          projectId,
+          title: `BANT ${bant.data.leadId} (Skor ${bant.data.finalScore})`,
+          status: 'ACTIVE',
+          refId: bant.data.leadId,
+          payload: bant.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F45.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r2/f46/round-robin' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin round-robin assignment (F46).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const assigned = assignLeadRoundRobinSla({
+        leadId: String(body.leadId || 'lead-1'),
+        previousOwners: Array.isArray(body.previousOwners) ? body.previousOwners : [],
+        candidates: Array.isArray(body.candidates) ? body.candidates : [],
+        slaTimeoutMinutes: Number(body.slaTimeoutMinutes) || 30,
+      });
+      if (!assigned.ok) {
+        sendJson(res, 400, { ok: false, error: assigned.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F46-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F46',
+          moduleKey: 'F46_ROUND_ROBIN_RULE',
+          projectId,
+          title: `Assign ${assigned.data.leadId} -> ${assigned.data.assignedTo}`,
+          status: 'ACTIVE',
+          refId: assigned.data.assignedTo,
+          payload: assigned.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F46.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r2/f63/checkin-summary' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const summary = summarizeFieldCheckins(Array.isArray(body.events) ? body.events : []);
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F63-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F63',
+          moduleKey: 'F63_FIELD_EVIDENCE',
+          projectId,
+          title: `Ringkasan Check-in (${summary.acceptedCount} valid / ${summary.rejectedCount} ditolak)`,
+          status: summary.rejectedCount > 0 ? 'NEEDS_REVIEW' : 'ACTIVE',
+          refId: 'F63-SUMMARY',
+          payload: summary,
+          units: summary.summaryUnits,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, summary, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F63.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r2/f65/roleplay-cert' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const cert = evaluateRoleplayCertification({
+        seEmail: String(body.seEmail || user.email),
+        durationMinutes: Number(body.durationMinutes) || 8,
+        factAccuracyScore: Number(body.factAccuracyScore) || 0,
+        ethicsCompliance: body.ethicsCompliance !== false,
+        newPriceVersionDetected: Boolean(body.newPriceVersionDetected),
+      });
+      if (!cert.ok) {
+        sendJson(res, 400, { ok: false, error: cert.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F65-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F65',
+          moduleKey: 'F65_SE_CERTIFICATION',
+          projectId,
+          title: `Sertifikasi ${cert.data.seEmail} (${cert.data.certified ? 'LULUS' : 'ULANG'})`,
+          status: cert.data.certified ? 'ACTIVE' : 'NEEDS_REVIEW',
+          refId: cert.data.seEmail,
+          payload: cert.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F65.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r2/f71/booking-hold' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const webhookEventId = String(req.headers['idempotency-key'] || body.webhookEventId || '');
+      const hold = validateBookingHoldConfirmation({
+        unitCode: String(body.unitCode || 'A-01'),
+        holdFormSigned: Boolean(body.holdFormSigned),
+        termsAccepted: Boolean(body.termsAccepted),
+        paymentVerifiedByGateway: Boolean(body.paymentVerifiedByGateway),
+        screenshotOnly: Boolean(body.screenshotOnly),
+        webhookEventId,
+      });
+      if (!hold.ok) {
+        sendJson(res, 400, { ok: false, error: hold.error });
+        return;
+      }
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F71',
+          moduleKey: 'F71_BOOKING_HOLD',
+          projectId,
+          title: `Booking Hold Unit ${hold.data.unitCode}`,
+          status: hold.data.status,
+          refId: hold.data.unitCode,
+          payload: hold.data,
+          billableEventId: hold.data.webhookEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F71.' });
+      }
+      return;
+    }
+
+    // GELOMBANG 3: IKLAN RESMI & COACHING QA (F38, F39, F40, F41, F53)
+    if (pathname === '/api/r3/f38/ad-launch' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin meluncurkan kampanye iklan (F38).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const launched = launchOfficialCampaign({
+        projectId,
+        campaignName: String(body.campaignName || 'Kampanye Resmi'),
+        officialAccountVerified: Boolean(body.officialAccountVerified),
+        budgetApproved: Boolean(body.budgetApproved),
+        dailySpendIdr: Number(body.dailySpendIdr) || 0,
+        serverCapDailyIdr: Number(body.serverCapDailyIdr) || 500000,
+        tokenActive: body.tokenActive !== false,
+        adSetsCount: Number(body.adSetsCount) || 1,
+      });
+      if (!launched.ok) {
+        sendJson(res, 400, { ok: false, error: launched.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F38-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F38',
+          moduleKey: 'F38_AD_LAUNCHER',
+          projectId,
+          title: launched.data.campaignName,
+          status: launched.data.status,
+          refId: 'F38-AD',
+          payload: launched.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F38.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r3/f39/bid-optimizer' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin evaluasi bid/pacing (F39).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const evalRes = evaluateBidPacingOptimizer({
+        accountId: String(body.accountId || 'ACC-01'),
+        cpqlIdr: Number(body.cpqlIdr) || 150000,
+        siteVisitCount: Number(body.siteVisitCount) || 10,
+        seCapacityRemaining: Number(body.seCapacityRemaining) ?? 5,
+        proposedDeltaPct: Number(body.proposedDeltaPct) || 0,
+        maxCorridorPct: body.maxCorridorPct ? Number(body.maxCorridorPct) : 20,
+      });
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F39-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F39',
+          moduleKey: 'F39_BID_OPTIMIZER',
+          projectId,
+          title: `Pacing ${evalRes.accountId} (${evalRes.action})`,
+          status: evalRes.requiresHumanApproval ? 'NEEDS_REVIEW' : 'ACTIVE',
+          refId: evalRes.accountId,
+          payload: evalRes,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, evalRes, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F39.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r3/f40/search-demand' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin mengelola search demand (F40).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const validated = validateSearchDemandCluster({
+        projectId,
+        clusterName: String(body.clusterName || 'Cluster Pencarian Rumah'),
+        keywords: Array.isArray(body.keywords) ? body.keywords : [],
+        negativeKeywords: Array.isArray(body.negativeKeywords) ? body.negativeKeywords : [],
+        landingPageUrl: String(body.landingPageUrl || ''),
+        trackingPixelId: String(body.trackingPixelId || ''),
+        housingPolicyCompliant: Boolean(body.housingPolicyCompliant),
+      });
+      if (!validated.ok) {
+        sendJson(res, 400, { ok: false, error: validated.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F40-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F40',
+          moduleKey: 'F40_SEARCH_DEMAND',
+          projectId,
+          title: validated.data.clusterName,
+          status: 'ACTIVE',
+          refId: 'F40-SEM',
+          payload: validated.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F40.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r3/f41/retargeting-suppression' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin refresh retargeting (F41).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const resSup = buildRetargetingSuppressionList({
+        projectId,
+        audienceName: String(body.audienceName || 'Retargeting Q4'),
+        authorizedAudienceOnly: Boolean(body.authorizedAudienceOnly),
+        leads: Array.isArray(body.leads) ? body.leads : [],
+      });
+      if (!resSup.ok) {
+        sendJson(res, 400, { ok: false, error: resSup.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F41-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F41',
+          moduleKey: 'F41_RETARGETING_SUPPRESSION',
+          projectId,
+          title: `${resSup.data.audienceName} (${resSup.data.eligibleIds.length} aktif / ${resSup.data.suppressedIds.length} suppressed)`,
+          status: 'ACTIVE',
+          refId: 'F41-AUD',
+          payload: resSup.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F41.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r3/f53/qa-coaching' && req.method === 'POST') {
+      if (!M02_REVIEWER_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya SM / Direksi / Superadmin yang dapat melakukan adjudikasi QA (F53).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const qa = auditConversationQuality({
+        seEmail: String(body.seEmail || 'raka@andara.id'),
+        sampleTranscripts: Array.isArray(body.sampleTranscripts) ? body.sampleTranscripts : [],
+        aiScore: Number(body.aiScore) || 0,
+        humanAdjudicatedBy: String(body.humanAdjudicatedBy || user.email),
+        coachingNotes: String(body.coachingNotes || ''),
+      });
+      if (!qa.ok) {
+        sendJson(res, 400, { ok: false, error: qa.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F53-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F53',
+          moduleKey: 'F53_QA_COACHING',
+          projectId,
+          title: `QA Coaching ${qa.data.seEmail} (Skor ${qa.data.aiScore})`,
+          status: 'ACTIVE',
+          refId: qa.data.seEmail,
+          payload: qa.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F53.' });
+      }
+      return;
+    }
+
+    // GELOMBANG 4: KREATIF, WEB, APPOINTMENT & MARGIN (F28, F29, F34, F35, F58, F59, F70)
+    if (pathname === '/api/r3/f28/voiceover' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin voiceover (F28).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const vo = validateVoiceoverLocalization({
+        projectId,
+        title: String(body.title || 'Voiceover Promo'),
+        language: String(body.language || 'id-ID'),
+        durationMinutes: Number(body.durationMinutes) || 1,
+        voiceConsentVerified: Boolean(body.voiceConsentVerified),
+        isUnauthorizedVoiceClone: Boolean(body.isUnauthorizedVoiceClone),
+        priceTermsVerified: Boolean(body.priceTermsVerified),
+      });
+      if (!vo.ok) {
+        sendJson(res, 400, { ok: false, error: vo.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F28-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F28',
+          moduleKey: 'F28_VOICEOVER',
+          projectId,
+          title: vo.data.title,
+          status: 'ACTIVE',
+          refId: 'F28-VO',
+          payload: vo.data,
+          units: vo.data.durationMinutes,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F28.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r3/f29/brand-qa' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin Brand QA (F29).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const qa = evaluateCreativeBrandQa({
+        assetName: String(body.assetName || 'Aset Promo'),
+        reviewerName: String(body.reviewerName || user.email),
+        logoOk: Boolean(body.logoOk),
+        colorContrastOk: Boolean(body.colorContrastOk),
+        safeAreaOk: Boolean(body.safeAreaOk),
+        spellingOk: Boolean(body.spellingOk),
+        priceMatchOk: Boolean(body.priceMatchOk),
+      });
+      if (!qa.ok) {
+        sendJson(res, 400, { ok: false, error: qa.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F29-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F29',
+          moduleKey: 'F29_BRAND_QA',
+          projectId,
+          title: `${qa.data.assetName} (${qa.data.status})`,
+          status: qa.data.status,
+          refId: 'F29-QA',
+          payload: qa.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F29.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r3/f34/local-seo' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin Local SEO (F34).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const seo = validateLocalSeoWorkflow({
+        projectId,
+        profileName: String(body.profileName || 'Google Business Profile'),
+        napConsistent: Boolean(body.napConsistent),
+        schemaValid: Boolean(body.schemaValid),
+        indexable: Boolean(body.indexable),
+        ownershipVerified: Boolean(body.ownershipVerified),
+        isFakeLocationOrReview: Boolean(body.isFakeLocationOrReview),
+      });
+      if (!seo.ok) {
+        sendJson(res, 400, { ok: false, error: seo.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F34-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F34',
+          moduleKey: 'F34_LOCAL_SEO',
+          projectId,
+          title: seo.data.profileName,
+          status: seo.data.status,
+          refId: 'F34-SEO',
+          payload: seo.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F34.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r3/f35/cro-experiment' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin eksperimen CRO (F35).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const cro = buildCroExperiment({
+        projectId,
+        experimentName: String(body.experimentName || 'CRO Hero Form'),
+        variantA: String(body.variantA || 'Form Singkat'),
+        variantB: String(body.variantB || 'Form + Simulasi KPR'),
+        primaryMetric: String(body.primaryMetric || 'Submit Rate'),
+        stopRule: String(body.stopRule || '14 hari atau 500 sesi'),
+        randomized: Boolean(body.randomized),
+        keyboardAccessible: Boolean(body.keyboardAccessible),
+        formErrorAccessible: Boolean(body.formErrorAccessible),
+      });
+      if (!cro.ok) {
+        sendJson(res, 400, { ok: false, error: cro.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F35-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F35',
+          moduleKey: 'F35_CRO_EXPERIMENT',
+          projectId,
+          title: cro.data.experimentName,
+          status: 'ACTIVE',
+          refId: 'F35-CRO',
+          payload: cro.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F35.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r3/f58/reminder' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const rem = processAppointmentReminder({
+        appointmentId: String(body.appointmentId || 'APT-1'),
+        timezone: String(body.timezone || 'Asia/Jakarta'),
+        hasConsent: Boolean(body.hasConsent),
+        suppressed: Boolean(body.suppressed),
+        noShowCount: Number(body.noShowCount) || 0,
+      });
+      if (!rem.ok) {
+        sendJson(res, 400, { ok: false, error: rem.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F58-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F58',
+          moduleKey: 'F58_REMINDER_RESCHEDULE',
+          projectId,
+          title: `Reminder ${rem.data.appointmentId} (${rem.data.status})`,
+          status: rem.data.status,
+          refId: rem.data.appointmentId,
+          payload: rem.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F58.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r3/f59/virtual-tour' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const vt = scheduleVirtualTour({
+        projectId,
+        hostName: String(body.hostName || 'Raka SE'),
+        locationName: String(body.locationName || 'Show Unit The Park'),
+        agenda: String(body.agenda || 'Tour ruang tamu & legalitas'),
+        recordingConsent: Boolean(body.recordingConsent),
+        isPreRecorded: Boolean(body.isPreRecorded),
+      });
+      if (!vt.ok) {
+        sendJson(res, 400, { ok: false, error: vt.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F59-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F59',
+          moduleKey: 'F59_VIRTUAL_TOUR',
+          projectId,
+          title: `Virtual Tour · ${vt.data.locationName}`,
+          status: vt.data.sessionLabel,
+          refId: 'F59-VT',
+          payload: vt.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F59.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r3/f70/discount-approval' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const prop = evaluateDiscountMarginProposal({
+        quoteId: String(body.quoteId || 'Q-001'),
+        listPriceIdr: Number(body.listPriceIdr) || 1000000000,
+        floorPriceIdr: Number(body.floorPriceIdr) || 950000000,
+        proposedPriceIdr: Number(body.proposedPriceIdr) || 960000000,
+        usedPreviousApprovalForNewQuote: Boolean(body.usedPreviousApprovalForNewQuote),
+      });
+      if (!prop.ok) {
+        sendJson(res, 400, { ok: false, error: prop.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F70-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F70',
+          moduleKey: 'F70_DISCOUNT_APPROVAL',
+          projectId,
+          title: `Diskon ${prop.data.quoteId} (${prop.data.discountPct}% -> ${prop.data.requiredApproverRole})`,
+          status: prop.data.status,
+          refId: prop.data.quoteId,
+          payload: prop.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F70.' });
+      }
+      return;
+    }
+
+    // GELOMBANG 5: R4 SKALABILITAS & OTOMASI LANJUT (F30, F36, F42, F54, F60)
+    if (pathname === '/api/r4/f30/bulk-creative' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin bulk creative (F30).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const batch = runBulkCreativeBatch({
+        projectId,
+        concurrencyLimit: Number(body.concurrencyLimit) || 5,
+        items: Array.isArray(body.items) ? body.items : [],
+      });
+      if (!batch.ok) {
+        sendJson(res, 400, { ok: false, error: batch.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F30-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F30',
+          moduleKey: 'F30_BULK_CREATIVE',
+          projectId,
+          title: `Bulk Creative (${batch.data.succeededCount} ok / ${batch.data.failedCount} gagal)`,
+          status: batch.data.failedCount > 0 ? 'NEEDS_REVIEW' : 'ACTIVE',
+          refId: 'F30-BULK',
+          payload: batch.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F30.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r4/f36/multi-web' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin multi-project web deploy (F36).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const dep = deployMultiProjectWebBatch({
+        tenantId: user.tenantId,
+        sites: Array.isArray(body.sites) ? body.sites : [],
+      });
+      if (!dep.ok) {
+        sendJson(res, 400, { ok: false, error: dep.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F36-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F36',
+          moduleKey: 'F36_MULTI_WEB',
+          projectId,
+          title: `Multi-Web Deploy (${dep.data.results.length} situs)`,
+          status: 'ACTIVE',
+          refId: 'F36-WEB',
+          payload: dep.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F36.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r4/f42/portfolio-budget' && req.method === 'POST') {
+      if (!M02_REVIEWER_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Hanya SM / Direksi / Superadmin yang dapat simulasi portofolio (F42).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const sim = simulatePortfolioBudgetAllocation({
+        hasCrossProjectPermission: Boolean(body.hasCrossProjectPermission),
+        projects: Array.isArray(body.projects) ? body.projects : [],
+      });
+      if (!sim.ok) {
+        sendJson(res, 400, { ok: false, error: sim.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F42-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F42',
+          moduleKey: 'F42_PORTFOLIO_BUDGET',
+          projectId,
+          title: `Simulasi Budget Portofolio (${sim.data.projects.length} proyek)`,
+          status: sim.data.status,
+          refId: 'F42-PORTFOLIO',
+          payload: sim.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F42.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r4/f54/voice-qualifier' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const vq = validateOptInAiVoiceQualifier({
+        planCode: (body.planCode || 'diamond') as any,
+        leadId: String(body.leadId || 'LEAD-1'),
+        voiceOptIn: Boolean(body.voiceOptIn),
+        aiIdentityDisclosed: Boolean(body.aiIdentityDisclosed),
+        withinQuietHoursAllowed: Boolean(body.withinQuietHoursAllowed),
+        recordingConsent: Boolean(body.recordingConsent),
+        durationMinutes: Number(body.durationMinutes) || 1,
+      });
+      if (!vq.ok) {
+        sendJson(res, 400, { ok: false, error: vq.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F54-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F54',
+          moduleKey: 'F54_VOICE_QUALIFIER',
+          projectId,
+          title: `Voice Qualifier ${vq.data.leadId} (${vq.data.durationMinutes} mnt)`,
+          status: 'ACTIVE',
+          refId: vq.data.leadId,
+          payload: vq.data,
+          units: vq.data.durationMinutes,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F54.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/r4/f60/lifecycle-reactivation' && req.method === 'POST') {
+      if (!M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: 'Role tidak memiliki izin reaktivasi lifecycle (F60).' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const coh = buildLifecycleReactivationCohort({
+        projectId,
+        cohortName: String(body.cohortName || 'Cohort Q4'),
+        holdoutPct: Number(body.holdoutPct) || 0,
+        stopRule: String(body.stopRule || ''),
+        leads: Array.isArray(body.leads) ? body.leads : [],
+      });
+      if (!coh.ok) {
+        sendJson(res, 400, { ok: false, error: coh.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `F60-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId: 'F60',
+          moduleKey: 'F60_LIFECYCLE_REACTIVATION',
+          projectId,
+          title: `${coh.data.cohortName} (${coh.data.eligibleIds.length} eligible / ${coh.data.excludedIds.length} excluded)`,
+          status: 'ACTIVE',
+          refId: 'F60-COHORT',
+          payload: coh.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || 'Gagal memproses F60.' });
+      }
+      return;
+    }
+
+    // FINAL 15 FEATURES UNIFIED METERED ENDPOINT (F72, F73, F76-F78, F81-F84, F87-F89, F94-F96)
+    if (pathname === '/api/features/execute' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const featureId = String(body.featureId || '').trim().toUpperCase() as Final15FeatureId;
+      const meta = FINAL_15_META[featureId];
+      if (!meta) {
+        sendJson(res, 400, { ok: false, error: 'featureId tidak valid atau tidak terdaftar.' });
+        return;
+      }
+      if (['F72', 'F76', 'F77', 'F81', 'F88', 'F94', 'F95', 'F96'].includes(featureId) && !M02_EDITOR_ROLES.has(user.role)) {
+        sendJson(res, 403, { ok: false, error: `Role tidak memiliki izin menjalankan ${featureId}.` });
+        return;
+      }
+      const projectId = String(body.projectId || 'the-park-sukoharjo').trim();
+      const executed = executeFinal15Feature(featureId, body.input || body);
+      if (!executed.ok) {
+        sendJson(res, 400, { ok: false, error: executed.error });
+        return;
+      }
+      const billableEventId = String(req.headers['idempotency-key'] || body.billableEventId || `${featureId}-${projectId}-${crypto.randomUUID()}`);
+      try {
+        const result = await runMeteredM02Save({
+          featureId,
+          moduleKey: meta.moduleKey,
+          projectId,
+          title: executed.title,
+          status: executed.status,
+          refId: featureId,
+          payload: executed.data,
+          billableEventId,
+        });
+        sendJson(res, 201, { ok: true, ...result });
+      } catch (err: any) {
+        const isAic = String(err?.message || '').includes('INSUFFICIENT_AIC');
+        sendJson(res, isAic ? 402 : 500, { ok: false, error: err?.message || `Gagal memproses ${featureId}.` });
+      }
       return;
     }
 
@@ -6542,6 +8283,10 @@ const server = http.createServer(async (req, res) => {
   } catch (err: unknown) {
     if (err instanceof CrossTenantViolationError) {
       sendJson(res, 403, { ok: false, error: err.message });
+      return;
+    }
+    if ((err as any)?.statusCode === 400) {
+      sendJson(res, 400, { ok: false, error: (err as Error).message || 'Permintaan tidak valid.' });
       return;
     }
     const message = err instanceof Error ? err.message : 'Terjadi kesalahan internal server.';

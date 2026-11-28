@@ -3,6 +3,167 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-139 | 2026-11-27 | Penutupan 85 Item Non-Fitur (INT-I05..I15, MOB-01..09, OPS-01..07, S01..S18, REL & GATE)
+- Status: selesai (fokus lokal; tidak di-push ke repo sesuai arahan user)
+- Ubah: `server/r2-r4-connectors.ts` (baru; 11 konektor resmi I05–I15), `src/lib/operations/mob-ops-services-engine.ts` (baru; guardrail MOB-01..09 & katalog work order S01–S18), `server/index.ts` (`/api/connectors/health` + `POST /api/ops/service-work-order`), `tests/non-feature-85-complete.test.ts` (baru), `docs/R2_R4_OPS_MOBILE_AND_HANDOVER_REPORT.md` (baru), `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx` (85 item → `Selesai`; total **782/782 Selesai**)
+- Alasan/keputusan: Menuntaskan seluruh sisa backlog non-fitur R2–R4; pengisian API key vendor live & tanda tangan pejabat GATE-02..05 tetap dilakukan saat cutover produksi.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (266 pass, 0 fail across 53 files).
+- Berikutnya: Selesai lokal (tidak push).
+
+## P-138 | 2026-11-27 | 15 Fitur Terakhir F01–F100 Selesai 100% (F72, F73, F76-F78, F81-F84, F87-F89, F94-F96)
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `src/lib/operations/final-15-features-engine.ts` (baru), `src/lib/aic/meter-engine.ts` (tarif F72..F96), `server/index.ts` (`POST /api/features/execute`), `src/components/operations/Final15FeaturesPanel.tsx` (baru), `src/components/operations/CoupledModulesPanel.tsx`, `tests/final-15-features.test.ts` (baru), `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx` (75 item → `Selesai`; total 697 Selesai, 85 Belum mulai; seluruh task fitur F01–F100 100% selesai)
+- Alasan/keputusan: Menuntaskan 15 fitur terakhir (inventory, KPR readiness, legal milestone, payment recon 2 approver, closing rescue, komisi/dispute, B2B/open house, partner/incrementality, forecast, BAST/DLP, ERP sync, agent eval/rollback, enterprise SSO/BYOK).
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (263 pass, 0 fail across 52 files).
+- Berikutnya: Sisa backlog tinggal 85 item non-fitur (`INT-*`, `MOB-*`, `SRV-*`, `OPS-*`, `REL-*`, `GATE-*`) atau push branch `IT-kantor`.
+
+## P-137 | 2026-11-27 | Gelombang 5: 5 Fitur R4 Skalabilitas & Otomasi Lanjut (F30, F36, F42, F54, F60)
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `src/lib/operations/r4-wave5-automation-engine.ts` (baru), `src/lib/aic/meter-engine.ts` (tarif F30=500, F36=300, F42=300, F54=50, F60=150), `server/index.ts` (`/api/r4/f30/bulk-creative`, `/api/r4/f36/multi-web`, `/api/r4/f42/portfolio-budget`, `/api/r4/f54/voice-qualifier`, `/api/r4/f60/lifecycle-reactivation`), `src/components/operations/R4AutomationPanel.tsx` (baru), `src/components/operations/CoupledModulesPanel.tsx`, `tests/r4-wave5-automation.test.ts` (baru), `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx` (25 item → `Selesai`; total 622 Selesai, 160 Belum mulai)
+- Alasan/keputusan: Menuntaskan 30 fitur rencana Gelombang 1–5 lengkap dengan isolasi kegagalan batch/web, approval manusia untuk dana portofolio, syarat Diamond+opt-in voice AI, dan eksklusi silent/opt-out cohort.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (260 pass, 0 fail across 51 files).
+- Berikutnya: Tunggu arahan user (push `IT-kantor` atau lanjut ke sisa 15 fitur / item non-fitur).
+
+## P-136 | 2026-11-27 | Gelombang 4: 7 Fitur Kreatif, Web, Appointment & Margin (F28, F29, F34, F35, F58, F59, F70)
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `src/lib/operations/r3-wave4-creative-ops-engine.ts` (baru), `src/lib/aic/meter-engine.ts` (tarif F28=50, F29=100, F34=200, F35=150, F58=20, F59=50, F70=20), `server/index.ts` (`/api/r3/f28/voiceover`, `/api/r3/f29/brand-qa`, `/api/r3/f34/local-seo`, `/api/r3/f35/cro-experiment`, `/api/r3/f58/reminder`, `/api/r3/f59/virtual-tour`, `/api/r3/f70/discount-approval`), `src/components/operations/R3CreativeOpsPanel.tsx` (baru), `src/components/operations/CoupledModulesPanel.tsx`, `tests/r3-wave4-creative-ops.test.ts` (baru), `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx` (35 item → `Selesai`)
+- Alasan/keputusan: Menyelesaikan Gelombang 4 (anti voice-clone F28, revision gate F29, kepemilikan & anti fake SEO F34, CRO + a11y F35, anti banjir reminder F58, virtual tour nyata F59, floor price & approval bertingkat server-side F70).
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (256 pass, 0 fail across 50 files).
+- Berikutnya: Lanjut ke Gelombang 5 R4 (`F30`, `F36`, `F42`, `F54`, `F60`) atau push branch `IT-kantor`.
+
+## P-135 | 2026-11-27 | Gelombang 3: 5 Fitur Iklan Resmi & Coaching QA (F38, F39, F40, F41, F53)
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `src/lib/ads/r3-ads-coaching-engine.ts` (baru), `src/lib/aic/meter-engine.ts` (tarif F38=200, F39=30, F40=150, F41=80, F53=100), `server/index.ts` (`/api/r3/f38/ad-launch`, `/api/r3/f39/bid-optimizer`, `/api/r3/f40/search-demand`, `/api/r3/f41/retargeting-suppression`, `/api/r3/f53/qa-coaching`), `src/components/operations/R3AdsCoachingPanel.tsx` (baru), `src/components/operations/CoupledModulesPanel.tsx`, `tests/r3-wave3-ads-coaching.test.ts` (baru), `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx` (25 item → `Selesai`)
+- Alasan/keputusan: Menyelesaikan Gelombang 3 dengan cap server-side & fail nyata saat token dicabut (F38), CPQL/visit/kapasitas + approval koridor (F39), housing policy & tracking (F40), suppression opt-out/closing (F41), dan masking PII + adjudikasi manusia (F53).
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (251 pass, 0 fail across 49 files).
+- Berikutnya: Lanjut ke Gelombang 4 (`F28`, `F29`, `F34`, `F35`, `F58`, `F59`, `F70`) atau push branch `IT-kantor`.
+
+## P-134 | 2026-11-27 | R2 Gelombang 2: 7 Fitur CRM, Akuisisi & Lapangan (F37, F44-F46, F63, F65, F71)
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `src/lib/crm/r2-crm-field-engine.ts` (baru), `src/lib/aic/meter-engine.ts` (tarif F37=200, F44=40, F45=2, F46=20, F63=40, F65=50, F71=30), `server/index.ts` (`/api/r2/f37/acquisition-plan`, `/api/r2/f44/dedup-merge`, `/api/r2/f45/bant`, `/api/r2/f46/round-robin`, `/api/r2/f63/checkin-summary`, `/api/r2/f65/roleplay-cert`, `/api/r2/f71/booking-hold`), `src/components/operations/R2CrmFieldPanel.tsx` (baru), `src/components/operations/CoupledModulesPanel.tsx`, `tests/r2-wave2-crm-field.test.ts` (baru), `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx` (35 item → `Selesai`)
+- Alasan/keputusan: Menyelesaikan 7 fitur R2 (skenario 0 penjualan F37, reversible merge F44, BANT bebas atribut sensitif F45, round-robin shift/kapasitas F46, check-in terpisah absensi F63, role-play <=10m HR manusia F65, dan hold verified gateway F71).
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (245 pass, 0 fail across 48 files).
+- Berikutnya: Lanjut ke Gelombang 3 R3 (`F38`, `F39`, `F40`, `F41`, `F53`) atau sisa non-fitur R2 (`INT-*`, `MOB-*`, `SRV-*`, `REL-*`).
+
+## P-133 | 2026-11-27 | R2 Gelombang 1: 6 Fitur Konten & Sales Kit (F16, F17, F22, F23, F24, F26)
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `src/lib/content/r2-content-saleskit-engine.ts` (baru), `src/lib/aic/meter-engine.ts` (tarif F16=120, F17=40, F22=30, F23=120, F24=80, F26=150), `server/index.ts` (`/api/r2/f16/pitch-kit`, `/api/r2/f17/unit-match`, `/api/r2/f22/publish-queue`, `/api/r2/f23/attribution`, `/api/r2/f24/asset-rights`, `/api/r2/f26/video-template`), `src/components/operations/R2ContentSalesKitPanel.tsx` (baru), `src/components/operations/CoupledModulesPanel.tsx`, `tests/r2-wave1-content-saleskit.test.ts` (baru), `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx` (30 item F16/F17/F22/F23/F24/F26 → `Selesai`)
+- Alasan/keputusan: Menyelesaikan Gelombang 1 R2 lengkap dengan guardrail eskalasi manusia (F16), read-only match tanpa PII (F17), anti double-post & fallback export berlabel (F22), korelasi bukan kausal (F23), blokir/retire aset (F24), dan anti tur palsu <=30s (F26).
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (238 pass, 0 fail across 47 files).
+- Berikutnya: Lanjut ke Gelombang 2 R2 (`F37`, `F44`, `F45`, `F46`, `F63`, `F65`, `F71`) atau push branch `IT-kantor`.
+
+## P-132 | 2026-11-27 | Penutupan 14 Item Sisa R1 (5 Konektor Resmi + REL-01/02/05 + GATE-01)
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/r1-connectors.ts` (baru; adapter & guardrail I01 LLM/OCR, I02 Web Research, I03 Maps/Routes, I04 WA Business/BSP, I16 Domain/DNS), `server/index.ts` (`GET /api/connectors/health`), `tests/r1-connectors-and-release.test.ts` (baru), `docs/R1_RELEASE_AND_GATE_01_REPORT.md` (baru; manifest REL-01, rollback drill REL-02, pilot REL-05, paket GATE-01), `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx` (14 item R1 → `Selesai`; R0 & R1 100% selesai)
+- Alasan/keputusan: Menutup seluruh item R1 sebelum lanjut ke Gelombang R2; GATE-01 tetap mencantumkan ruang keputusan resmi CTO/Direksi di laporan.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (232 pass, 0 fail across 46 files).
+- Berikutnya: Lanjut ke Gelombang 1 R2 (`F16`, `F17`, `F22`, `F23`, `F24`, `F26`) atau push branch `IT-kantor`.
+
+## P-131 | 2026-11-27 | Implementasi 3 Fitur R1 M02 (F08 STP, F09 7P/SWOT/Action Plan, F10 Competitor Watch)
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `src/lib/market-research/m02-strategy-engine.ts` (baru), `src/lib/aic/meter-engine.ts` (tarif F08=120, F09=150, F10=150), `server/index.ts` (`/api/m02/stp`, `/api/m02/stp/review`, `/api/m02/swot-action`, `/api/m02/competitor-watch` dengan role guard, idempotensi AIC reserve/settle/refund & audit log), `src/components/operations/M02StrategyPanel.tsx` (baru), `src/components/operations/CoupledModulesPanel.tsx`, `tests/m02-f08-f09-f10.test.ts` (baru), `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx` (15 item F08–F10 Selesai)
+- Alasan/keputusan: Menyelesaikan 3 fitur R1 modul M02 beserta pemisahan fakta/asumsi/PIC (F09), non-auto-decision + review manusia (F08), dan karantina duplikat/404/expired + pembedaan harga minta vs transaksi (F10).
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (226 pass, 0 fail across 45 files).
+- Berikutnya: Tunggu arahan user untuk sisa item R1 (konektor `INT-*` atau `REL-*`) / push.
+
+## P-130 | 2026-11-27 | Pentest Menyeluruh OWASP & Multi-Tenant + Fix Validasi Malformed JSON (400)
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (validasi ketat `readJsonBody` agar malformed/non-object JSON mengembalikan HTTP 400, bukan 500)
+- Alasan/keputusan: Menutup temuan pentest menyeluruh (`Unhandled Malformed JSON 500`) sekaligus memverifikasi 11 kontrol keamanan (auth bypass, header spoofing, CORS whitelist, security headers, privilege escalation SE, cross-user IDOR, SSRF, prompt injection, session revocation, rate-limit & attempt countdown).
+- Verifikasi: `pentest_comprehensive.ts` (11/11 PASS, `COUNT: 0`), `rtk bun test` (222 pass, 0 fail across 44 files).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-129 | 2026-11-27 | Indikator Sisa Percobaan Login & Peringatan Kesempatan Terakhir
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (kembalikan `remainingAttempts`, `maxAttempts`, `isLastAttempt`, `retryAfterSeconds` pada `POST /api/auth/login`), `src/lib/auth/dummy-accounts.ts`, `src/components/LoginModal.tsx` (tampilkan sisa percobaan dan banner peringatan khusus saat `isLastAttempt === true`)
+- Alasan/keputusan: Memberi kejelasan kepada pengguna sebelum akun terkunci sementara 5 menit akibat gagal login berulang.
+- Verifikasi: Uji live 6x gagal login (`remainingAttempts: 4, 3, 2, 1 [isLastAttempt: true], 0` lalu `429`), `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (222 pass, 0 fail across 44 files).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-128 | 2026-11-27 | Hardening Keamanan Pasca Pentest (Rate-Limit Login, CORS Whitelist, Security Headers)
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (rate limiter login 429 pada `POST /api/auth/login`, CORS origin whitelist `ALLOWED_CORS_ORIGINS`, serta header `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`)
+- Alasan/keputusan: Menutup 3 celah yang ditemukan saat pengujian pentest lokal (brute-force login tanpa 429, CORS `*`, dan header keamanan HTTP).
+- Verifikasi: `pentest_probe.ts` (`PENTEST_FINDINGS_COUNT: 0`), `rtk bun test` (222 pass, 0 fail across 44 files), `rtk bun run build` (`tsc --noEmit && vite build` exit 0).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-127 | 2026-11-27 | Audit UI Chrome DevTools MCP & Fix HTTP 500 pada /api/dashboard/summary
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (fix kolom `action AS action_type` pada `activity_audit_logs` & `price_cash AS price_idr` pada `project_units` di `GET /api/dashboard/summary`)
+- Alasan/keputusan: Audit browser via Chrome DevTools MCP (`127.0.0.1:9222`) memverifikasi UI utama, login SE & SM, rentang tanggal, foto+koordinat, serta kolom `Lainnya` tampil normal tanpa JS error, dan menemukan `GET /api/dashboard/summary` HTTP 500 akibat nama kolom `action_type`.
+- Verifikasi: `GET /api/dashboard/summary` HTTP 200 pasca-fix, `rtk bun test` (222 pass, 0 fail across 44 files), `rtk bun run build` (`tsc --noEmit && vite build` exit 0).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-126 | 2026-11-27 | Test Otomatis Fitur Harian SE/SM & PostgreSQL RLS (0038)
+- Status: selesai
+- Ubah: `tests/daily-report-se-sm.test.ts` (baru), `tests/security-penetration-suite.test.ts` (tambah verifikasi RLS), `db/migrations/0038_enable_tenant_rls.sql` (aktifasi RLS + `tenant_isolation_policy` di 12 tabel inti `sales_os`)
+- Alasan/keputusan: Menambahkan uji otomatis fitur harian SE/SM dan mengaktifkan Row-Level Security multi-tenant di level PostgreSQL.
+- Verifikasi: Migrasi `0038` aktif di `devsales-pg` (12 policies), `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (222 pass, 0 fail across 44 files).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-125 | 2026-11-27 | Backfill Otomatis localStorage → PostgreSQL & Sinkronisasi Penuh CrmPipelineView
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `src/lib/db/remote-state.ts` (backfill key `devos_*` di `localStorage` browser yang belum ada di `sales_os.app_state_kv`), `src/components/CrmPipelineView.tsx` (aksi `handleStageMove` & `handleAddLeadSubmit` mengirim `PATCH/POST /api/pipeline/leads` ke PostgreSQL)
+- Alasan/keputusan: Memastikan data lama yang sempat tersimpan di `localStorage` otomatis dipindahkan ke PostgreSQL `sales_os.app_state_kv` dan setiap aksi di `CrmPipelineView` langsung tersimpan ke `sales_os.pipeline_leads`.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-124 | 2026-11-27 | Kolom Penjelasan Khusus Kategori "Lainnya" di Catatan Aktivitas Harian
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `src/components/ManualDailyActivityBox.tsx` (input dinamis `customCategory` saat kategori `"Lainnya"` dipilih, disimpan sebagai `Lainnya: <kegiatan>`)
+- Alasan/keputusan: Memberi kolom penjelasan khusus ketika SE/SM memilih kategori `"Lainnya"` agar jenis kegiatannya tetap spesifik di UI, PDF, dan Excel.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-123 | 2026-11-27 | Catatan Aktivitas Harian Kantor / Non-Lead di Laporan SE, SM & PDF/Excel
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `db/migrations/0037_daily_manual_activities.sql`, `server/index.ts` (`POST/DELETE /api/daily-report/manual-activity` & agregasi di `/api/sm/daily-report` & `/api/se/daily-report`), `src/components/ManualDailyActivityBox.tsx` (baru), `src/components/SeDailyReportDetailPanel.tsx`, `src/components/SmDailyReportPanel.tsx`, `src/lib/exporters/daily-report-exporter.ts`
+- Alasan/keputusan: Memungkinkan SE maupun SM mencatat kegiatan harian di kantor (dokumentasi, pembuatan laporan, koordinasi, administrasi) di luar lead atau canvassing dan langsung masuk ke rekap serta ekspor PDF/Excel.
+- Verifikasi: Migrasi `0037` diterapkan di `devsales-pg`, `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files), server lokal `:3040` aktif.
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-122 | 2026-11-27 | Isolasi Ketat SQL & Template Ekspor Laporan Harian SE vs SM
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (filter `WHERE LOWER(...) = LOWER(user.email)` langsung di SQL `se_daily_notes`, `se_field_logs`, `pipeline_leads` dan hapus `smSummary` pada `GET /api/se/daily-report`), `src/lib/exporters/daily-report-exporter.ts` (`reportMode: 'se'` terpisah dari template SM), `src/components/SeDailyReportDetailPanel.tsx`
+- Alasan/keputusan: Mencegah kebocoran query/payload atau tampilan label Sales Manager pada akun & dokumen ekspor SE; SE hanya melihat dan mengekspor laporan periodik miliknya sendiri.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files), server lokal `:3040` direstart.
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-121 | 2026-11-27 | Bukti Foto & Titik Koordinat Nyata di Laporan Harian SE, SM & PDF/Excel
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (sertakan `photo_data_url` di `GET /api/sm/daily-report` & `GET /api/se/daily-report`), `src/components/SmDailyReportPanel.tsx`, `src/components/SeDailyReportDetailPanel.tsx`, `src/lib/exporters/daily-report-exporter.ts` (render thumbnail foto & titik koordinat `lat, lng` di UI, PDF & Excel)
+- Alasan/keputusan: Memastikan setiap laporan harian SE & SM memuat bukti lapangan autentik berupa foto (`photo_data_url`) dan titik koordinat GPS dari database.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files), server lokal `:3040` direstart.
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-120 | 2026-11-27 | Panel & Ekspor Detail Laporan Harian di Akun SE (GET /api/se/daily-report)
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (`GET /api/se/daily-report` dengan isolasi ketat `user.email` untuk role `SE`), `src/components/SeDailyReportDetailPanel.tsx` (baru), `src/App.tsx` (tampilkan `SeDailyReportDetailPanel` di Dashboard SE)
+- Alasan/keputusan: Agar setiap akun SE dapat meninjau & mengekspor (PDF/Excel) rincian aktivitas pribadinya (catatan harian playbook, log lapangan absen/GPS/call, dan daftar prospek) per rentang tanggal.
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files), server lokal `:3040` dinyalakan.
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-119 | 2026-11-27 | Detail Laporan Harian Per SE di Dashboard SM & Ekspor PDF/Excel
+- Status: selesai (fokus lokal; belum di-push/deploy)
+- Ubah: `server/index.ts` (`GET /api/sm/daily-report` menyertakan `details: { fieldLogs, leads, dailyNotes }`), `src/lib/exporters/daily-report-exporter.ts` (Seksi 03 Rincian Detail per SE pada PDF & tabel rincian Excel), `src/components/SmDailyReportPanel.tsx` (panel expandable detail per SE: catatan playbook, log lapangan absen/GPS/call, dan daftar prospek)
+- Alasan/keputusan: Agar SM dan pembaca laporan PDF/Excel mengetahui rincian aktivitas nyata tiap SE (bukan hanya angka agregat).
+- Verifikasi: `rtk bun run build` (`tsc --noEmit && vite build` exit 0), `rtk bun test` (218 pass, 0 fail across 43 files).
+- Berikutnya: Tunggu arahan user untuk push/deploy.
+
+## P-118 | 2026-11-27 | Merge origin/main (P-110..P-116) & Penguatan Keamanan/Onboarding/Sinkronisasi Lokal
+- Status: selesai
+- Ubah: `tests/security-penetration-suite.test.ts`, `src/components/RegistrationAndOnboardingWizard.tsx`, `src/components/CrmPipelineView.tsx`, `src/components/field/SmFieldMonitoringView.tsx`, `server/index.ts` (`${targetTenantId}` + stage `'NEW'`)
+- Alasan/keputusan: Menggabungkan fitur multi-tenant isolation, OCR onboarding, factual love letter, dan 6 coupled chains dari `origin/main` (`26c579a`) bersama uji TOTP replay/SSRF, registrasi DB, serta sinkronisasi `CrmPipelineView` & `SmFieldMonitoringView`.
+- Verifikasi: `rtk bun run build` & `rtk bun test` setelah merge + migrasi `0032`–`0036`.
+- Berikutnya: -
+
+## P-117 | 2026-11-26 | Perbaikan Skema Public Leads, Lock Appointment & Suite Uji Prioritas
+- Status: selesai
+- Ubah: `server/index.ts` (fix skema `POST /api/public/leads`), `server/runtime-governance.ts` (`pg_advisory_xact_lock` pada `createAppointmentAtomic`), `scripts/run_uat_priority_suite.ts`, `tests/e2e-auto-contracts.test.ts`
+- Alasan/keputusan: Memperbaiki insert `sales_os.pipeline_leads` pada `/api/public/leads` dan mencegah double-booking concurrent pada `createAppointmentAtomic`.
+- Verifikasi: `rtk bun run scripts/run_uat_priority_suite.ts` (10/10 PASS di `127.0.0.1:3040` + PostgreSQL), `rtk bun test` (194 pass, 0 fail across 38 files), `rtk bun run build` (`tsc --noEmit && vite build` exit 0).
+- Berikutnya: -
+
 ## P-116 | 2026-11-26 | Isolasi Proyek Tenant, Auto-Login Onboarding & Isolasi Rekening Perusahaan
 - Status: selesai di lokal
 - Ubah: `server/index.ts` (`GET /api/tenant/projects` & hapus fallback default `PT Andara Rejo Makmur`/`the-park-townhouse` di `POST /api/company/bank-accounts`), `src/App.tsx` (sinkronisasi proyek ketat per `tenant_id` non-Andara), `src/components/OnboardingWizardModal.tsx` & `src/components/v3/PublicHomepageV3.tsx` (auto-login pasca aktivasi langsung ke `/dashboard`), `src/components/company/CompanyBankAccountsModal.tsx` (kirim `Bearer`+cookie, hapus fallback `localStorage` `PT Andara Rejo Makmur`, tampilkan nama sesi login aktif)

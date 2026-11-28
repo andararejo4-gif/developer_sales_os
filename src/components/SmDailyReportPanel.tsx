@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Calendar,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Download,
   FileSpreadsheet,
   MapPin,
@@ -16,6 +18,10 @@ import {
   exportSmDailyReportPdf,
   type SmTeamSeReportRow,
 } from '../lib/exporters/daily-report-exporter';
+import {
+  ManualDailyActivityBox,
+  type ManualDailyActivityItem,
+} from './ManualDailyActivityBox';
 
 interface SmDailyReportResponse {
   ok: boolean;
@@ -27,6 +33,7 @@ interface SmDailyReportResponse {
     email: string;
     role: string;
     ownActivities: Array<{ action: string; entity: string; entity_id?: string; created_at: string }>;
+    manualActivities?: ManualDailyActivityItem[];
   };
   teamTotals: {
     totalSe: number;
@@ -70,6 +77,11 @@ export const SmDailyReportPanel: React.FC<{ projectName: string }> = ({ projectN
   const [data, setData] = useState<SmDailyReportResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedSe, setExpandedSe] = useState<Record<string, boolean>>({});
+
+  const toggleSeDetail = (email: string) => {
+    setExpandedSe((prev) => ({ ...prev, [email]: !prev[email] }));
+  };
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -174,6 +186,7 @@ export const SmDailyReportPanel: React.FC<{ projectName: string }> = ({ projectN
       smEmail: data.smSummary.email,
       dateLabel: data.date,
       smActivities: data.smSummary.ownActivities,
+      smManualActivities: data.smSummary.manualActivities || [],
       teamTotals: data.teamTotals,
       seReports: data.seReports,
     };
@@ -395,53 +408,193 @@ export const SmDailyReportPanel: React.FC<{ projectName: string }> = ({ projectN
                   <th className="py-2.5 px-3 font-bold text-center">Konten</th>
                   <th className="py-2.5 px-3 font-bold text-center">Lead</th>
                   <th className="py-2.5 px-3 font-bold text-center">Booking</th>
+                  <th className="py-2.5 px-3 font-bold text-center">Detail</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-warmborder/60">
                 {data.seReports.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-4 text-center text-warmmuted">
+                    <td colSpan={9} className="py-4 text-center text-warmmuted">
                       Belum ada SE terdaftar di tenant ini.
                     </td>
                   </tr>
                 ) : (
-                  data.seReports.map((se) => (
-                    <tr key={se.seEmail} className="hover:bg-sandstone/30">
-                      <td className="py-2.5 px-3">
-                        <div className="font-bold text-espresso">{se.seName}</div>
-                        <div className="text-[10px] text-warmmuted">{se.seEmail}</div>
-                      </td>
-                      <td className="py-2.5 px-3 text-center">
-                        {se.checkInAt ? (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px]">
-                            {new Date(se.checkInAt).toLocaleTimeString('id-ID', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-rose-600 font-semibold">Belum</span>
+                  data.seReports.map((se) => {
+                    const isOpen = expandedSe[se.seEmail] ?? data.seReports.length === 1;
+                    const logs = se.details?.fieldLogs || [];
+                    const leads = se.details?.leads || [];
+                    const notes = se.details?.dailyNotes || [];
+                    return (
+                      <React.Fragment key={se.seEmail}>
+                        <tr className="hover:bg-sandstone/30">
+                          <td className="py-2.5 px-3">
+                            <div className="font-bold text-espresso">{se.seName}</div>
+                            <div className="text-[10px] text-warmmuted">{se.seEmail}</div>
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            {se.checkInAt ? (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px]">
+                                {new Date(se.checkInAt).toLocaleTimeString('id-ID', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-rose-600 font-semibold">Belum</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="font-semibold text-espresso">{se.gpsCount} titik</span>
+                            {se.latestLocation && (
+                              <div className="text-[10px] text-warmmuted truncate max-w-[180px]">
+                                {se.latestLocation}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-bold">{se.callCount}</td>
+                          <td className="py-2.5 px-3 text-center">{se.canvassingContacts}</td>
+                          <td className="py-2.5 px-3 text-center">{se.contentPosted}</td>
+                          <td className="py-2.5 px-3 text-center font-bold text-olive">{se.leadsToday}</td>
+                          <td className="py-2.5 px-3 text-center font-bold text-espresso">{se.bookingsCount}</td>
+                          <td className="py-2.5 px-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => toggleSeDetail(se.seEmail)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-warmborder bg-white hover:bg-sandstone text-[11px] font-semibold text-espresso cursor-pointer"
+                            >
+                              {isOpen ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                              <span>{isOpen ? 'Tutup' : 'Rincian'}</span>
+                            </button>
+                          </td>
+                        </tr>
+                        {isOpen && (
+                          <tr className="bg-sandstone/25">
+                            <td colSpan={9} className="p-3">
+                              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 text-[11px]">
+                                <div className="bg-white rounded-xl border border-warmborder p-2.5">
+                                  <div className="font-bold text-espresso mb-1.5">
+                                    Catatan Harian Playbook ({notes.length})
+                                  </div>
+                                  {notes.length === 0 ? (
+                                    <p className="text-warmmuted">Belum ada catatan harian.</p>
+                                  ) : (
+                                    <ul className="space-y-1.5">
+                                      {notes.map((n, idx) => (
+                                        <li key={idx} className="border-b border-warmborder/50 pb-1 last:border-0">
+                                          <div className="font-semibold text-espresso">{n.reportDate}</div>
+                                          <div className="text-warmmuted">
+                                            Call: {n.dialCount} ({n.connectedCallCount} sambung) · Canv: {n.canvassingContacts} kontak / {n.canvassingBrochures} brosur / {n.canvassingLeads} lead
+                                          </div>
+                                          <div className="text-warmmuted">
+                                            Konten: {n.postedReels} reels · {n.postedWaStatus} WA · {n.postedStories} story
+                                          </div>
+                                          {n.hambatan && <div className="text-rose-700">Hambatan: {n.hambatan}</div>}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                                <div className="bg-white rounded-xl border border-warmborder p-2.5">
+                                  <div className="font-bold text-espresso mb-1.5">
+                                    Log Lapangan Absen, GPS &amp; Call ({logs.length})
+                                  </div>
+                                  {logs.length === 0 ? (
+                                    <p className="text-warmmuted">Belum ada log lapangan.</p>
+                                  ) : (
+                                    <ul className="space-y-1 max-h-44 overflow-y-auto pr-1">
+                                      {logs.slice(0, 20).map((l, idx) => (
+                                        <li key={idx} className="border-b border-warmborder/50 pb-1.5 last:border-0 flex items-start gap-2">
+                                          {l.photoDataUrl && (
+                                            <a href={l.photoDataUrl} target="_blank" rel="noreferrer" className="shrink-0" title="Klik untuk lihat foto ukuran penuh">
+                                              <img
+                                                src={l.photoDataUrl}
+                                                alt="Bukti Lapangan"
+                                                className="size-10 rounded-lg object-cover border border-warmborder"
+                                              />
+                                            </a>
+                                          )}
+                                          <div className="min-w-0 flex-1">
+                                            <div>
+                                              <span className="font-bold text-terracotta">[{l.logType}]</span>{' '}
+                                              <span className="text-warmmuted">
+                                                {new Date(l.createdAt).toLocaleString('id-ID', {
+                                                  timeZone: 'Asia/Jakarta',
+                                                  day: '2-digit',
+                                                  month: 'short',
+                                                  hour: '2-digit',
+                                                  minute: '2-digit',
+                                                })}
+                                              </span>{' '}
+                                              — <span className="text-espresso font-medium">{l.title || '-'}</span>
+                                            </div>
+                                            {l.locationLabel && (
+                                              <div className="text-[10px] text-warmmuted truncate">{l.locationLabel}</div>
+                                            )}
+                                            {l.lat != null && l.lng != null && (
+                                              <div className="text-[10px] font-mono text-olive">
+                                                Koordinat: {Number(l.lat).toFixed(5)}, {Number(l.lng).toFixed(5)}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                                <div className="bg-white rounded-xl border border-warmborder p-2.5">
+                                  <div className="font-bold text-espresso mb-1.5">
+                                    Prospek / Lead Ditangani ({leads.length})
+                                  </div>
+                                  {leads.length === 0 ? (
+                                    <p className="text-warmmuted">Belum ada lead pada periode ini.</p>
+                                  ) : (
+                                    <ul className="space-y-1 max-h-44 overflow-y-auto pr-1">
+                                      {leads.map((ld, idx) => (
+                                        <li key={idx} className="border-b border-warmborder/50 pb-1 last:border-0">
+                                          <div className="font-semibold text-espresso">
+                                            {ld.fullName} <span className="text-olive">({ld.stage})</span>
+                                          </div>
+                                          <div className="text-[10px] text-warmmuted">
+                                            {ld.unitInterest} · {ld.source} · BANT {ld.bantTotal}
+                                          </div>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              </div>
+                              {(se.details?.manualActivities?.length || 0) > 0 && (
+                                <div className="mt-2.5 bg-white rounded-xl border border-warmborder p-2.5 text-[11px]">
+                                  <div className="font-bold text-espresso mb-1">
+                                    Catatan Aktivitas Kantor / Non-Lead ({se.details?.manualActivities?.length})
+                                  </div>
+                                  <ul className="space-y-1">
+                                    {se.details?.manualActivities?.map((m) => (
+                                      <li key={m.id} className="text-warmmuted">
+                                        <span className="font-semibold text-espresso">{m.activityDate}</span> ·{' '}
+                                        <span className="text-terracotta font-semibold">[{m.category}]</span> {m.note}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className="font-semibold text-espresso">{se.gpsCount} titik</span>
-                        {se.latestLocation && (
-                          <div className="text-[10px] text-warmmuted truncate max-w-[180px]">
-                            {se.latestLocation}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 text-center font-bold">{se.callCount}</td>
-                      <td className="py-2.5 px-3 text-center">{se.canvassingContacts}</td>
-                      <td className="py-2.5 px-3 text-center">{se.contentPosted}</td>
-                      <td className="py-2.5 px-3 text-center font-bold text-olive">{se.leadsToday}</td>
-                      <td className="py-2.5 px-3 text-center font-bold text-espresso">{se.bookingsCount}</td>
-                    </tr>
-                  ))
+                      </React.Fragment>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
+
+          <ManualDailyActivityBox
+            title="Catatan Aktivitas Harian SM (Kantor / Non-Lead)"
+            defaultDate={todayWib}
+            items={data.smSummary.manualActivities || []}
+            onSaved={() => void loadReport()}
+          />
         </>
       )}
     </section>
