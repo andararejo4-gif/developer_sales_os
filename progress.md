@@ -3,6 +3,13 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-149 | 2026-11-28 | Build APK Android Asli (Capacitor) & Tombol Unduh Langsung `/download/DeveloperSalesOS.apk`
+- Status: selesai & live di `hades`
+- Ubah: `capacitor.config.ts` (baru; `com.andararejomakmur.devsalesos` terhubung live ke `https://developerproperti.giivepro.com`), `android/` (proyek native Capacitor Android dengan izin `INTERNET`, `CAMERA`, `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` & ikon brand), `src/components/mobile/PwaInstallBanner.tsx` (Android langsung unduh `/download/DeveloperSalesOS.apk`, iOS Safari panduan *Add to Home Screen*, sembunyikan otomatis di dalam APK native), `package.json`, dan upload `DeveloperSalesOS.apk` ringan ke `hades:/var/www/developer-sales-os/download/DeveloperSalesOS.apk`.
+- Alasan/keputusan: Memenuhi kebutuhan instalasi file `.apk` asli di Android (lebih profesional dibanding shortcut browser) sambil menjaga pembaruan web otomatis tersinkron ke dalam APK.
+- Verifikasi: Kompilasi lokal `gradlew.bat assembleDebug` (JDK 21 + Android SDK 36), pangkas aset `generated-media` dari bundle APK agar ukuran ringan (~5–8 MB), upload & verifikasi `HTTP 200` pada `https://developerproperti.giivepro.com/download/DeveloperSalesOS.apk`.
+- Berikutnya: -
+
 ## P-148 | 2026-11-28 | Fix Crash Dashboard `monthsToSoldOut` (Fallback Skenario Tidak Valid di Calculator)
 - Status: selesai & live di `hades`
 - Ubah: `src/lib/sales-target/calculator.ts` (tambah guard `safeScenario`: fallback otomatis ke `'realistis'` bila `chosenScenario` dari `localStorage`/state tidak ada di `scenarios`).
