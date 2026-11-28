@@ -85,6 +85,9 @@ export const MEDIA_OUTPUT_DIR = path.resolve(process.cwd(), 'public', 'generated
 
 const HERMES_API_URL = (process.env.HERMES_API_URL || 'https://hermes.giivepro.com').replace(/\/+$/, '');
 const HERMES_API_KEY = process.env.FLOW_API_KEY || 'kzjsGMv5mYYaku8Teb5ATc9ZxyJAqWVVJZLA3iQI';
+const HERMES_MEDIA_PAUSED = ['1', 'true', 'yes'].includes(
+  String(process.env.HERMES_MEDIA_PAUSED || '').trim().toLowerCase()
+);
 const OPENROUTER_FREE_IMAGE_KEY = (process.env.OPENROUTER_FREE_IMAGE_KEY || '').trim();
 const OPENROUTER_FREE_IMAGE_MODEL = (
   process.env.OPENROUTER_FREE_IMAGE_MODEL || 'recraft/recraft-v4.1-flash-v2:free'
@@ -1130,6 +1133,14 @@ export async function enqueueSlotMediaViaHermes(params: {
   jobs: HermesJobEntry[];
   error?: string;
 }> {
+  if (HERMES_MEDIA_PAUSED) {
+    return {
+      ok: false,
+      targetCount: 0,
+      jobs: [],
+      error: 'Generate media Hermes sedang dijeda sementara untuk penghematan kredit.',
+    };
+  }
   if (!SE_EMAILS.includes(params.seEmail.toLowerCase())) {
     return { ok: false, targetCount: 0, jobs: [], error: 'Generate konten hanya untuk akun Sales Executive.' };
   }
@@ -1685,6 +1696,7 @@ async function retryOrFail(item: Record<string, any>, reason: string): Promise<v
  * Ensures only 1 job is ever active in Hermes VNC across all SEs & slots.
  */
 export async function pollActiveHermesJobs(): Promise<void> {
+  if (HERMES_MEDIA_PAUSED) return;
   if (isQueueTickBusy) return;
   isQueueTickBusy = true;
   try {
@@ -1938,6 +1950,10 @@ let schedulerStarted = false;
  * 2) Every 60s: enqueues today's scheduled slots when their WIB hour arrives
  */
 export function startContentMediaScheduler(): void {
+  if (HERMES_MEDIA_PAUSED) {
+    console.log('[content-scheduler] Dijeda sementara (HERMES_MEDIA_PAUSED=true).');
+    return;
+  }
   if (schedulerStarted) return;
   schedulerStarted = true;
 

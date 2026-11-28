@@ -19,7 +19,14 @@ import {
   reserveAicAtomic,
   settleAicAtomic,
 } from './aic-ledger';
-import { paymentGateway, type PaymentInvoiceType } from './payment-gateway';
+import {
+  paymentGateway,
+  getActivePaymentGateway,
+  getMidtransPublicConfig,
+  handleMidtransWebhook,
+  checkMidtransTransactionStatus,
+  type PaymentInvoiceType,
+} from './payment-gateway';
 import { generateGroundedLoveLetter } from './love-letter-generator';
 import {
   activateOnboardingWithDummyPayment,
@@ -2897,26 +2904,44 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/se/field-logs' && req.method === 'GET') {
       const isManagerRole = user.role !== 'SE';
       const filterEmail = String(parsedUrl.searchParams.get('seEmail') || '').trim().toLowerCase();
+      const seMemberRows = await sql`
+        SELECT email, name
+        FROM sales_os.app_users
+        WHERE tenant_id = ${user.tenantId}
+          AND role = 'SE'
+          AND is_active = TRUE
+        ORDER BY name ASC
+      `;
+      const seMembers = seMemberRows.map((u: any) => ({
+        email: String(u.email).toLowerCase(),
+        name: String(u.name),
+      }));
       const rows = isManagerRole
         ? filterEmail
           ? await sql`
               SELECT * FROM sales_os.se_field_logs
-              WHERE se_email = ${filterEmail}
+              WHERE LOWER(se_email) = ${filterEmail}
+                AND LOWER(se_email) IN (
+                  SELECT LOWER(email) FROM sales_os.app_users WHERE tenant_id = ${user.tenantId}
+                )
               ORDER BY created_at DESC
               LIMIT 400
             `
           : await sql`
               SELECT * FROM sales_os.se_field_logs
+              WHERE LOWER(se_email) IN (
+                SELECT LOWER(email) FROM sales_os.app_users WHERE tenant_id = ${user.tenantId}
+              )
               ORDER BY created_at DESC
               LIMIT 400
             `
         : await sql`
             SELECT * FROM sales_os.se_field_logs
-            WHERE se_email = ${user.email}
+            WHERE LOWER(se_email) = ${user.email.toLowerCase()}
             ORDER BY created_at DESC
             LIMIT 100
           `;
-      sendJson(res, 200, { ok: true, logs: rows });
+      sendJson(res, 200, { ok: true, logs: rows, seMembers });
       return;
     }
 
@@ -3834,6 +3859,18 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       sendJson(res, 201, { ok: true, quote: result.quote, unit: result.unit });
+      return;
+    }
+
+    // 14B. MIDTRANS SANDBOX/PROD WEBHOOK NOTIFICATION (PUBLIC, VERIFIED BY SHA-512 SIGNATURE)
+    if (pathname === '/api/payments/midtrans/webhook' && req.method === 'POST') {
+      try {
+        const body = await readJsonBody(req);
+        const result = await handleMidtransWebhook(body);
+        sendJson(res, result.status || 200, result);
+      } catch (err: any) {
+        sendJson(res, 400, { ok: false, error: err?.message || 'Webhook Midtrans gagal diproses.' });
+      }
       return;
     }
 
@@ -6259,7 +6296,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // DUMMY PAYMENT GATEWAY (INT-I12, F65, F67, F77)
+    // PAYMENT GATEWAY (MIDTRANS SANDBOX / DUMMY FALLBACK — INT-I12, F65, F67, F77)
+    if (pathname === '/api/payments/config' && req.method === 'GET') {
+      sendJson(res, 200, { ok: true, ...getMidtransPublicConfig() });
+      return;
+    }
+
     if (pathname === '/api/payments/invoices' && req.method === 'GET') {
       const invoiceType = String(parsedUrl.searchParams.get('type') || '').trim().toUpperCase();
       const rows = invoiceType
@@ -6275,7 +6317,7 @@ const server = http.createServer(async (req, res) => {
             ORDER BY created_at DESC
             LIMIT 50
           `;
-      sendJson(res, 200, { ok: true, invoices: rows });
+      sendJson(res, 200, { ok: true, invoices: rows, ...getMidtransPublicConfig() });
       return;
     }
 
@@ -6293,20 +6335,37 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { ok: false, error: 'Nominal invoice minimal Rp 1.000.' });
         return;
       }
-      const inv = await paymentGateway.createInvoice({
-        tenantId: user.tenantId,
-        projectId: String(body.projectId || user.projectId || 'the-park-sukoharjo'),
-        invoiceType,
-        referenceCode: String(body.referenceCode || (invoiceType === 'AIC_TOPUP' ? 'AIC-TOPUP' : 'BOOKING-UNIT')),
-        description: String(body.description || (invoiceType === 'AIC_TOPUP' ? 'Top-up Saldo AIC' : 'Booking Fee Unit')),
-        amountIdr,
-        aicAmount: Number(body.aicAmount || 0),
-        unitCode: body.unitCode ? String(body.unitCode) : undefined,
-        customerName: body.customerName ? String(body.customerName) : undefined,
-        customerPhone: body.customerPhone ? String(body.customerPhone) : undefined,
-        createdBy: user.email,
-      });
-      sendJson(res, 201, { ok: true, invoice: inv });
+      try {
+        const activeGateway = getActivePaymentGateway();
+        const inv = await activeGateway.createInvoice({
+          tenantId: user.tenantId,
+          projectId: String(body.projectId || user.projectId || 'the-park-sukoharjo'),
+          invoiceType,
+          referenceCode: String(body.referenceCode || (invoiceType === 'AIC_TOPUP' ? 'AIC-TOPUP' : 'BOOKING-UNIT')),
+          description: String(body.description || (invoiceType === 'AIC_TOPUP' ? 'Top-up Saldo AIC' : 'Booking Fee Unit')),
+          amountIdr,
+          aicAmount: Number(body.aicAmount || 0),
+          unitCode: body.unitCode ? String(body.unitCode) : undefined,
+          customerName: body.customerName ? String(body.customerName) : undefined,
+          customerPhone: body.customerPhone ? String(body.customerPhone) : undefined,
+          createdBy: user.email,
+        });
+        sendJson(res, 201, { ok: true, invoice: inv });
+      } catch (err: any) {
+        sendJson(res, 502, { ok: false, error: err?.message || 'Gagal membuat transaksi ke Payment Gateway.' });
+      }
+      return;
+    }
+
+    if (pathname === '/api/payments/check-status' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const invoiceNo = String(body.invoiceNo || '').trim();
+      if (!invoiceNo) {
+        sendJson(res, 400, { ok: false, error: 'invoiceNo wajib diisi.' });
+        return;
+      }
+      const result = await checkMidtransTransactionStatus(user.tenantId, invoiceNo);
+      sendJson(res, result.ok ? 200 : 400, result);
       return;
     }
 
@@ -6322,7 +6381,7 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { ok: false, error: 'invoiceNo dan targetStatus (PAID/EXPIRED/REFUNDED) wajib valid.' });
         return;
       }
-      const settled = await paymentGateway.settleInvoice({
+      const settled = await getActivePaymentGateway().settleInvoice({
         tenantId: user.tenantId,
         invoiceNo,
         targetStatus,

@@ -1,6 +1,52 @@
 import { describe, expect, it } from 'bun:test';
-import { paymentGateway, SandboxDummyPaymentAdapter } from '../server/payment-gateway';
+import crypto from 'node:crypto';
+import {
+  paymentGateway,
+  SandboxDummyPaymentAdapter,
+  verifyMidtransSignature,
+  mapMidtransStatus,
+  getMidtransPublicConfig,
+} from '../server/payment-gateway';
 import { sql } from '../server/db';
+
+describe('Midtrans Payment Gateway Adapter & Webhook Security', () => {
+  it('memvalidasi signature SHA-512 Midtrans secara deterministik dan menolak payload palsu', () => {
+    const serverKey = 'SB-Mid-server-TestKey123';
+    const orderId = 'INV-MID-TEST-01';
+    const statusCode = '200';
+    const grossAmount = '250000.00';
+    const validSig = crypto
+      .createHash('sha512')
+      .update(`${orderId}${statusCode}${grossAmount}${serverKey}`)
+      .digest('hex');
+
+    expect(
+      verifyMidtransSignature({ orderId, statusCode, grossAmount, signatureKey: validSig, serverKey })
+    ).toBe(true);
+    expect(
+      verifyMidtransSignature({ orderId, statusCode, grossAmount: '1000.00', signatureKey: validSig, serverKey })
+    ).toBe(false);
+    expect(
+      verifyMidtransSignature({ orderId, statusCode, grossAmount, signatureKey: 'bad-sig', serverKey })
+    ).toBe(false);
+  });
+
+  it('memetakan status transaksi Midtrans (settlement/capture/expire/refund) dengan benar', () => {
+    expect(mapMidtransStatus('settlement')).toBe('PAID');
+    expect(mapMidtransStatus('capture', 'accept')).toBe('PAID');
+    expect(mapMidtransStatus('capture', 'challenge')).toBe('PENDING');
+    expect(mapMidtransStatus('pending')).toBe('PENDING');
+    expect(mapMidtransStatus('expire')).toBe('EXPIRED');
+    expect(mapMidtransStatus('cancel')).toBe('EXPIRED');
+    expect(mapMidtransStatus('refund')).toBe('REFUNDED');
+  });
+
+  it('membaca konfigurasi Midtrans Sandbox dari environment tanpa membocorkan serverKey', () => {
+    const pub = getMidtransPublicConfig();
+    expect(['MIDTRANS_SANDBOX', 'MIDTRANS_PRODUCTION', 'SANDBOX_DUMMY_PG']).toContain(pub.provider);
+    expect((pub as any).serverKey).toBeUndefined();
+  });
+});
 
 describe('Dummy Payment Gateway Adapter (INT-I12, F65, F67)', () => {
   it('memvalidasi HMAC webhook signature secara deterministik dan menolak signature palsu', () => {

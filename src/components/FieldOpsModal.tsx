@@ -42,7 +42,6 @@ import {
 } from '../lib/navigation/router';
 import type { CompanyProject } from '../lib/projects/projects-data';
 import type { RoleKey, UserProfile } from '../data';
-import { SE_TEAM_DATA } from '../data';
 import type { SeActivityCategory, CallOutcome, GpsActivityType } from '../lib/field-ops/types';
 import {
   GpsLiveRadarMap,
@@ -260,6 +259,7 @@ export function FieldOpsModal({
   }, [isRadarTracking, userRole, activeUserName, effectiveCoords.lat, effectiveCoords.lng, effectiveProjectName]);
 
   const [dbFieldLogs, setDbFieldLogs] = useState<any[]>([]);
+  const [seMembers, setSeMembers] = useState<Array<{ email: string; name: string }>>([]);
   const liveRadarStorageKey = `devos_live_radar_se_${activeProjectId}`;
   const offlineLogsStorageKey = `devos_offline_field_logs_${activeProjectId}`;
 
@@ -356,6 +356,9 @@ export function FieldOpsModal({
         if (json.ok && Array.isArray(json.logs)) {
           setDbFieldLogs(json.logs);
         }
+        if (json.ok && Array.isArray(json.seMembers)) {
+          setSeMembers(json.seMembers);
+        }
       }
     } catch {
       /* ignore */
@@ -397,37 +400,32 @@ export function FieldOpsModal({
     };
   }, [userEmail, userRole, isManager, liveRadarStorageKey, offlineLogsStorageKey]);
 
-  // Daftar Live Marker SE untuk role Manager (SM / Admin)
+  // Daftar Live Marker SE untuk role Manager (SM / Admin) — hanya akun SE nyata dari DB tenant
   const teamLiveMarkers: TeamMemberLiveMarker[] = useMemo(() => {
     if (!isManager) return [];
     const todayWib = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
     const combinedLogs = [...dbFieldLogs, ...offlineFieldLogs];
 
-    return SE_TEAM_DATA.map((se) => {
-      const firstName = se.nama.split(' ')[0].toLowerCase();
-      const dottedName = se.nama.toLowerCase().replace(/[^a-z0-9]+/g, '.');
-      const seEmail = `${firstName}@andararejomakmur.co.id`;
+    const seMap = new Map<string, { email: string; name: string }>();
+    for (const m of seMembers) {
+      const email = String(m.email || '').trim().toLowerCase();
+      if (email) seMap.set(email, { email, name: m.name || email.split('@')[0] });
+    }
+    for (const l of combinedLogs) {
+      const email = String(l.se_email || '').trim().toLowerCase();
+      if (email && !seMap.has(email)) {
+        seMap.set(email, { email, name: l.se_name || email.split('@')[0] });
+      }
+    }
 
-      const matchesSe = (email?: string, name?: string) => {
-        const e = (email || '').toLowerCase();
-        const n = (name || '').toLowerCase();
-        return (
-          e === seEmail ||
-          e === `${dottedName}@andararejomakmur.co.id` ||
-          e.startsWith(`${firstName}@`) ||
-          n.includes(se.nama.toLowerCase()) ||
-          n.includes(firstName)
-        );
-      };
-
-      const seDbLogs = combinedLogs.filter((l) => matchesSe(l.se_email, l.se_name));
+    return Array.from(seMap.values()).map((se, idx) => {
+      const seEmail = se.email;
+      const seDbLogs = combinedLogs.filter((l) => String(l.se_email || '').toLowerCase() === seEmail);
       const latestDb = seDbLogs[0];
 
-      const liveRadarEntry = Object.values(sharedLiveRadar).find((entry) =>
-        matchesSe(entry.seEmail, entry.seName)
+      const liveRadarEntry = Object.values(sharedLiveRadar).find(
+        (entry) => String(entry.seEmail || '').toLowerCase() === seEmail
       );
-
-      const fallbackPoint = gpsLogs.find((p) => p.seName.includes(se.nama) || p.seName.includes(se.seId));
 
       const useLiveRadar =
         liveRadarEntry &&
@@ -435,38 +433,37 @@ export function FieldOpsModal({
 
       const lat = useLiveRadar
         ? liveRadarEntry.lat
-        : latestDb?.lat ?? fallbackPoint?.lat ?? effectiveCoords.lat;
+        : latestDb?.lat ?? effectiveCoords.lat;
       const lng = useLiveRadar
         ? liveRadarEntry.lng
-        : latestDb?.lng ?? fallbackPoint?.lng ?? effectiveCoords.lng;
+        : latestDb?.lng ?? effectiveCoords.lng;
       const distKm = calculateDistanceKm(effectiveCoords.lat, effectiveCoords.lng, Number(lat), Number(lng));
 
       const hasLogToday = seDbLogs.some((l) => l.created_at && l.created_at.startsWith(todayWib));
       const isOnline = Boolean(liveRadarEntry) || hasLogToday || Boolean(latestDb);
 
       return {
-        id: se.seId,
-        name: se.nama,
+        id: `se-${idx + 1}`,
+        name: se.name,
         email: liveRadarEntry?.seEmail || seEmail,
-        seId: se.seId,
+        seId: `SE-${idx + 1}`,
         role: 'SE',
-        zone: se.zonaHariIni,
+        zone: 'Lapangan',
         lat: Number(lat),
         lng: Number(lng),
         distanceFromProjectKm: distKm,
         locationLabel:
           (useLiveRadar ? liveRadarEntry.locationLabel : undefined) ||
           latestDb?.location_label ||
-          fallbackPoint?.locationLabel ||
-          `Wilayah ${se.zonaHariIni}`,
+          'Belum ada posisi tercatat',
         lastUpdated: useLiveRadar
           ? `${liveRadarEntry.updatedAt} WIB`
           : latestDb
           ? new Date(latestDb.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'
-          : fallbackPoint?.recordedAt || 'Hari Ini',
+          : '-',
         isOnline,
         statusLabel: isOnline ? 'Aktif di Lapangan' : 'Standby',
-        avatarText: se.nama
+        avatarText: se.name
           .split(' ')
           .map((n) => n[0])
           .join('')
@@ -474,7 +471,7 @@ export function FieldOpsModal({
           .toUpperCase(),
       };
     });
-  }, [isManager, dbFieldLogs, offlineFieldLogs, sharedLiveRadar, gpsLogs, effectiveCoords.lat, effectiveCoords.lng]);
+  }, [isManager, seMembers, dbFieldLogs, offlineFieldLogs, sharedLiveRadar, effectiveCoords.lat, effectiveCoords.lng]);
 
   // Status presensi mandiri hari ini untuk user aktif (SE, SM, Admin)
   const myTodayAttendance = useMemo(() => {
@@ -1027,8 +1024,7 @@ export function FieldOpsModal({
                     projectName={effectiveProjectName}
                     baseCoords={effectiveCoords}
                     dbFieldLogs={dbFieldLogs}
-                    fallbackAttendance={attendanceList}
-                    fallbackGpsLogs={gpsLogs}
+                    seMembers={seMembers}
                   />
                 </>
               )}
@@ -1271,8 +1267,7 @@ export function FieldOpsModal({
                 projectName={effectiveProjectName}
                 baseCoords={effectiveCoords}
                 dbFieldLogs={dbFieldLogs}
-                fallbackAttendance={attendanceList}
-                fallbackGpsLogs={gpsLogs}
+                seMembers={seMembers}
               />
             </div>
           )}

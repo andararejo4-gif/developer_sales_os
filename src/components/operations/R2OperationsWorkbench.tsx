@@ -158,6 +158,26 @@ export const R2OperationsWorkbench: React.FC<R2OperationsWorkbenchProps> = ({
     }
   };
 
+  const handleCheckMidtransStatus = async (invoiceNo: string) => {
+    const res = await fetch('/api/payments/check-status', {
+      method: 'POST',
+      credentials: 'include',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ invoiceNo }),
+    });
+    const json = await res.json();
+    if (res.ok && json.ok) {
+      showToast(
+        json.pending
+          ? `Status Midtrans ${invoiceNo}: masih PENDING.`
+          : `Status Midtrans ${invoiceNo} tersinkron: ${json.invoice?.status || 'PAID'}!`
+      );
+      await loadData();
+    } else {
+      showToast(json.error || 'Gagal mengecek status Midtrans.');
+    }
+  };
+
   const handleSimulatePaid = async (invoiceNo: string) => {
     const res = await fetch('/api/payments/dummy-settle', {
       method: 'POST',
@@ -314,7 +334,7 @@ export const R2OperationsWorkbench: React.FC<R2OperationsWorkbenchProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-xs font-bold text-espresso flex items-center gap-1.5">
               <CreditCard className="size-4 text-terracotta" />
-              {isIt ? 'Top-up Saldo AIC (Mode Dummy Payment Gateway)' : 'Tagihan Booking Fee (Mode Dummy Payment Gateway)'}
+              {isIt ? 'Top-up Saldo AIC (Midtrans Sandbox)' : 'Tagihan Booking Fee (Midtrans Sandbox)'}
             </h4>
             {isIt && aicBalance !== null && (
               <span className="px-2.5 py-1 rounded-full bg-olive/10 text-olive text-xs font-bold">
@@ -398,7 +418,26 @@ export const R2OperationsWorkbench: React.FC<R2OperationsWorkbenchProps> = ({
                     >
                       {inv.status}
                     </span>
-                    {inv.status === 'PENDING' && (
+                    {inv.status === 'PENDING' && String(inv.checkout_url || '').startsWith('https://') && (
+                      <>
+                        <a
+                          href={inv.checkout_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-2.5 py-1 rounded bg-terracotta text-white text-[11px] font-semibold"
+                        >
+                          Bayar via Midtrans
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleCheckMidtransStatus(inv.invoice_no)}
+                          className="px-2.5 py-1 rounded bg-espresso text-white text-[11px] font-semibold cursor-pointer"
+                        >
+                          Cek Status
+                        </button>
+                      </>
+                    )}
+                    {inv.status === 'PENDING' && !String(inv.checkout_url || '').startsWith('https://') && (
                       <button
                         type="button"
                         onClick={() => handleSimulatePaid(inv.invoice_no)}

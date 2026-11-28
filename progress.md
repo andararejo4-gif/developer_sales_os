@@ -3,6 +3,52 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-145 | 2026-11-28 | Integrasi Payment Gateway Midtrans Sandbox (Snap API, Webhook SHA-512 & Status Sync)
+- Status: selesai di lokal (kredensial Sandbox terpasang di `.env` lokal; perlu disalin ke `.env` `hades` saat deploy)
+- Ubah: `.env` (`PAYMENT_PROVIDER=midtrans`, `MIDTRANS_IS_PRODUCTION=false`, `MIDTRANS_MERCHANT_ID`, `MIDTRANS_SERVER_KEY`, `MIDTRANS_CLIENT_KEY`), `server/payment-gateway.ts` (`MidtransPaymentAdapter`, `getActivePaymentGateway`, `verifyMidtransSignature` SHA-512, `mapMidtransStatus`, `handleMidtransWebhook`, `checkMidtransTransactionStatus`), `server/index.ts` (webhook publik `POST /api/payments/midtrans/webhook`, `GET /api/payments/config`, `POST /api/payments/check-status`, `/api/payments/invoices` & `/api/payments/dummy-settle` pakai `getActivePaymentGateway()`), `src/components/operations/R2OperationsWorkbench.tsx` (tombol `Bayar via Midtrans` & `Cek Status`), `tests/payment-gateway.test.ts` (3 test Midtrans).
+- Alasan/keputusan: Mengganti jalur transaksi pembayaran ke Midtrans Sandbox Snap API resmi sambil menjaga `SandboxDummyPaymentAdapter` sebagai fallback saat key belum diisi.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build` exit 0), `bun build server/index.ts --outfile dist-server.mjs --target node` exit 0, `bun test` (269 pass, 0 fail di 53 file), & smoke test live Snap API Sandbox.
+- Berikutnya: Commit perubahan, push ke `origin/main`, pasang env Midtrans Sandbox ke `hades`, & set Notification URL di dashboard Midtrans ke `https://developerproperti.giivepro.com/api/payments/midtrans/webhook`.
+
+## P-144 | 2026-11-28 | Sinkronisasi Terarah origin/IT-kantor (bbc404d) ke main + Pertahankan Fitur Lokal P-140..P-143
+- Status: selesai di lokal (siap commit/push; migrasi `0037`–`0038` perlu ikut dijalankan saat deploy ke `hades`)
+- Ubah: merge `origin/IT-kantor` (`bbc404d`) ke `main`, renumber entri lokal `P-117..P-120` → `P-140..P-143` di `progress.md`, selesaikan konflik `src/components/field/SmFieldMonitoringView.tsx` (tetap tanpa dummy `SE_TEAM_DATA`, pakai `seMembers` nyata DB), pertahankan `HERMES_MEDIA_PAUSED` (`server/content-media-worker.ts`), `FieldOpsModal.tsx`, dan `/api/se/field-logs` (`server/index.ts`), serta terapkan migrasi `0037` & `0038` ke PostgreSQL lokal.
+- Alasan/keputusan: Menyatukan 4 commit IT kantor (`f625604`..`bbc404d`: daily report SE/SM, RLS, pentest/UAT, panel R1–R4) tanpa menimpa perbaikan produksi/lokal kita, dan memastikan seluruh test lulus 100%.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build` exit 0), `bun build server/index.ts --outfile dist-server.mjs --target node` exit 0, `bun test` (**266 pass, 0 fail** di 53 file, 3970 assertions).
+- Berikutnya: Commit perubahan lokal (`progress.md`, `server/content-media-worker.ts`, `server/index.ts`, `src/components/FieldOpsModal.tsx`, `src/components/field/SmFieldMonitoringView.tsx`), push ke `origin/main`, lalu deploy ke `hades` (termasuk migrasi `0037` & `0038`).
+
+## P-143 | 2026-11-27 | Hapus Data Dummy Absensi & GPS Monitoring SM (Ganti ke Data Nyata DB Tenant)
+- Status: selesai & live di `hades`
+- Ubah: `server/index.ts` (`GET /api/se/field-logs` kembalikan `seMembers` nyata dari `sales_os.app_users` & isolasi log per `tenant_id`), `src/components/field/SmFieldMonitoringView.tsx` (hapus `SE_TEAM_DATA` dummy `raka.pratama@...` serta `fallbackAttendance`/`fallbackGpsLogs`), `src/components/FieldOpsModal.tsx` (gunakan `seMembers` nyata untuk absensi & marker radar SM).
+- Alasan/keputusan: Mencegah akun dan absensi dummy tampil di halaman Absensi/GPS Sales Manager.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`), `bun build server/index.ts --outfile dist-server.mjs --target node`, deploy frontend & backend ke `hades`, `/api/health` OK.
+- Berikutnya: -
+- Catatan: -
+
+## P-142 | 2026-11-27 | Jeda Sementara Generate Media Hermes (`HERMES_MEDIA_PAUSED=true`)
+- Status: selesai & aktif di `hades`
+- Ubah: `server/content-media-worker.ts` (tambah guard `HERMES_MEDIA_PAUSED` di `enqueueSlotMediaViaHermes`, `pollActiveHermesJobs`, dan `startContentMediaScheduler`), `dist-server.mjs`, dan `.env` di `hades` (`HERMES_MEDIA_PAUSED=true`).
+- Alasan/keputusan: Menghentikan sementara pengiriman job gambar/video ke Hermes Google Flow (kredit turun 700 -> 130 akibat video Reels gagal ekstraksi MP4 + retry & semua gambar masuk ke Flow).
+- Verifikasi: `bun build server/index.ts --outfile dist-server.mjs --target node`, `pm2 restart developer-sales-os-api --update-env`, `/api/health` OK, log `[content-scheduler] Dijeda sementara`.
+- Berikutnya: Aktifkan kembali dengan `HERMES_MEDIA_PAUSED=false` setelah jalur render gambar dipindah ke `9router`/Recraft dan ekstraksi video MP4 diperbaiki.
+- Catatan: Tombol Aktif/Non-aktif di `hermes.giivepro.com/#/agents` hanya label dashboard, tidak menghentikan proses.
+
+## P-141 | 2026-11-27 | Registrasi 7 Agent AI Developer Sales OS ke Hermes Control Center (`hermes.giivepro.com`)
+- Status: selesai & live di `https://hermes.giivepro.com/#/agents` (`hades`)
+- Ubah: `hades:/opt/hermes-dashboard/agents.py` (tambah 7 agent: `dsos-onboarding`, `dsos-lead-ai`, `dsos-wa-copilot`, `dsos-content-poster`, `dsos-doc-truth`, `dsos-knowledge-it`, `dsos-finops-aic`, lengkap dengan workflow, live health `:3040` & `9router` `:20128`, statistik & riwayat `sales_os` DB) dan `hades:/opt/hermes-dashboard/static/js/pages/agents.js` (renderer tabel riwayat `kind === 'dsos'`).
+- Alasan/keputusan: Memusatkan pemantauan dan dokumentasi seluruh proses AI (pendaftaran/OCR, SE, TL/SM, Admin, IT, Direksi/Owner) di Hermes Control Center.
+- Verifikasi: `py_compile`, `systemctl restart hermes-dashboard` (`active`), uji `agents.overview()`, `WORKFLOWS`, dan `history()` untuk semua 9 agent di `hades` (`running`, 0 error).
+- Berikutnya: -
+- Catatan: Backup di `hades`: `/opt/hermes-dashboard/agents.py.bak-20261127` dan `/opt/hermes-dashboard/static/js/pages/agents.js.bak-20261127`.
+
+## P-140 | 2026-11-26 | Lanjutan & Penyelesaian Deploy P-110–P-116 ke Server Produksi (hades) + Proxy Nginx /c/
+- Status: selesai & live di `https://developerproperti.giivepro.com` (`hades`, commit `26c579a` di `origin/main`)
+- Ubah: `hades` (`pm2 restart developer-sales-os-api` dengan `dist-server.mjs` baru 749.991 B + `server/doc-extractor.py` + `.venv-doc` OCR aktif; `/etc/nginx/sites-available/developerproperti.giivepro.com` tambah `location /c/` proxy ke `:3040` untuk shortlink referral P-111); `Laporan_Harian_Divisi_IT_27_November_2026_Komprehensif.pdf` (16 halaman, cakupan P-098–P-117 & DEV-27–DEV-47 pasca-deploy).
+- Alasan/keputusan: Push `26c579a`, backup DB (`sales_os-20261126-2245.dump`), migrasi `0025`–`0036`, upload frontend (`index-Bv8W3DCC.js`), dan upload backend sudah masuk namun proses sempat mandek sebelum restart PM2 & verifikasi live; Nginx juga belum mem-proxy `/c/` ke backend.
+- Verifikasi: `pm2` online stabil (Baileys WA connected), `nginx -t` & reload OK, smoke live `https://developerproperti.giivepro.com` — `/` (`200`, `index-Bv8W3DCC.js`), `/api/health` (`200`, `dbConnected:true, aiConfigured:true`), `/api/public/site/the-park-sukoharjo` (`200`), `/api/public/live/the-park-townhouse` (`200`), `/c/test-smoke-404` (`302` redirect), endpoint terproteksi (`/api/tenant/projects`, `/api/company/bank-accounts`, `/api/smart-links`, `/api/workspace-items`, `/api/pipeline/leads`) `401` (nol 5xx).
+- Berikutnya: UAT multi-tenant di live (`PT Andara` + 1 developer uji) lintas peran; ganti `SandboxDummyPaymentAdapter` ke PG produksi saat kredensial siap.
+- Catatan: Rollback tersedia di `hades`: `~/db-backup/sales_os-20261126-2245.dump`, `dist-server.mjs.pre-20261126-2246`, `~/db-backup/index.html.20261126-2246`, dan `~/db-backup/nginx-developerproperti.20261126-2255.bak`.
+
 ## P-139 | 2026-11-27 | Penutupan 85 Item Non-Fitur (INT-I05..I15, MOB-01..09, OPS-01..07, S01..S18, REL & GATE)
 - Status: selesai (fokus lokal; tidak di-push ke repo sesuai arahan user)
 - Ubah: `server/r2-r4-connectors.ts` (baru; 11 konektor resmi I05–I15), `src/lib/operations/mob-ops-services-engine.ts` (baru; guardrail MOB-01..09 & katalog work order S01–S18), `server/index.ts` (`/api/connectors/health` + `POST /api/ops/service-work-order`), `tests/non-feature-85-complete.test.ts` (baru), `docs/R2_R4_OPS_MOBILE_AND_HANDOVER_REPORT.md` (baru), `docs/CHECKLIST_PEMBANGUNAN_TIM_IT_V2.xlsx` (85 item → `Selesai`; total **782/782 Selesai**)

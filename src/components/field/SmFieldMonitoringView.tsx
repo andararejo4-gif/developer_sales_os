@@ -10,7 +10,6 @@ import {
   UserCheck,
   X,
 } from 'lucide-react';
-import { SE_TEAM_DATA } from '../../data';
 import type { SeAttendanceRecord, SeGpsTrackPoint } from '../../lib/field-ops/types';
 
 export interface DbFieldLogRow {
@@ -34,8 +33,9 @@ interface SmFieldMonitoringViewProps {
   projectName: string;
   baseCoords: { lat: number; lng: number };
   dbFieldLogs: DbFieldLogRow[];
-  fallbackAttendance: SeAttendanceRecord[];
-  fallbackGpsLogs: SeGpsTrackPoint[];
+  seMembers?: Array<{ email: string; name: string }>;
+  fallbackAttendance?: SeAttendanceRecord[];
+  fallbackGpsLogs?: SeGpsTrackPoint[];
 }
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -71,8 +71,7 @@ export const SmFieldMonitoringView: React.FC<SmFieldMonitoringViewProps> = ({
   projectName,
   baseCoords,
   dbFieldLogs,
-  fallbackAttendance,
-  fallbackGpsLogs,
+  seMembers = [],
 }) => {
   const [period, setPeriod] = useState<AttendancePeriod>('harian');
   const [selectedSeEmail, setSelectedSeEmail] = useState<string | null>(null);
@@ -86,11 +85,21 @@ export const SmFieldMonitoringView: React.FC<SmFieldMonitoringViewProps> = ({
     []
   );
 
-  // Daftar SE terdaftar: utamakan data nyata PostgreSQL (dbFieldLogs); fallback konstanta hanya bila DB masih kosong
+  // Daftar SE terdaftar HANYA dari akun SE nyata di DB tenant + akun SE yang tercatat di DB logs (tanpa data dummy)
   const registeredSes = useMemo(() => {
     const map = new Map<string, { email: string; name: string; seId: string; zone: string }>();
+    for (const member of seMembers) {
+      const email = String(member.email || '').trim().toLowerCase();
+      if (!email) continue;
+      map.set(email, {
+        email,
+        name: member.name || email.split('@')[0],
+        seId: 'SE',
+        zone: 'Lapangan',
+      });
+    }
     for (const log of dbFieldLogs) {
-      const email = String(log.se_email || '').toLowerCase();
+      const email = String(log.se_email || '').trim().toLowerCase();
       if (email && !map.has(email)) {
         map.set(email, {
           email,
@@ -100,20 +109,8 @@ export const SmFieldMonitoringView: React.FC<SmFieldMonitoringViewProps> = ({
         });
       }
     }
-    if (map.size === 0) {
-      for (const se of SE_TEAM_DATA) {
-        const firstToken = se.nama.toLowerCase().replace(/[^a-z0-9]+/g, '.');
-        const email = `${firstToken}@andararejomakmur.co.id`;
-        map.set(email, {
-          email,
-          name: se.nama,
-          seId: se.seId,
-          zone: se.zonaHariIni,
-        });
-      }
-    }
     return Array.from(map.values());
-  }, [dbFieldLogs]);
+  }, [seMembers, dbFieldLogs]);
 
   // Filter logs berdasarkan periode Harian / Mingguan / Bulanan
   const periodStartKey = useMemo(() => {
@@ -138,34 +135,26 @@ export const SmFieldMonitoringView: React.FC<SmFieldMonitoringViewProps> = ({
       const checkOuts = seLogs.filter((l) => l.log_type === 'CHECK_OUT');
       const todayIn = checkIns.filter((l) => toWibDateKey(l.created_at) === todayKey).slice(-1)[0];
       const todayOut = checkOuts.filter((l) => toWibDateKey(l.created_at) === todayKey)[0];
-      const fb = fallbackAttendance.find(
-        (a) => a.seName.toLowerCase().includes(se.name.toLowerCase()) || a.seName.includes(se.seId)
-      );
 
       const firstInLabel = todayIn
         ? fmtWibTime(todayIn.created_at)
-        : period === 'harian' && fb?.checkInAt
-        ? fb.checkInAt
         : checkIns[checkIns.length - 1]
         ? fmtWibTime(checkIns[checkIns.length - 1].created_at)
         : '-';
       const lastOutLabel = todayOut
         ? fmtWibTime(todayOut.created_at)
-        : period === 'harian' && fb?.checkOutAt
-        ? fb.checkOutAt
         : checkOuts[0]
         ? fmtWibTime(checkOuts[0].created_at)
         : 'Belum';
 
       const uniquePresentDays = new Set(checkIns.map((c) => toWibDateKey(c.created_at))).size;
-      const statusLabel =
-        todayIn || (period === 'harian' && fb?.status === 'HADIR')
-          ? todayOut || fb?.checkOutAt
-            ? 'Selesai Tugas'
-            : 'Hadir / Bertugas'
-          : uniquePresentDays > 0 && period !== 'harian'
-          ? `${uniquePresentDays} Hari Hadir`
-          : 'Belum Absen';
+      const statusLabel = todayIn
+        ? todayOut
+          ? 'Selesai Tugas'
+          : 'Hadir / Bertugas'
+        : uniquePresentDays > 0 && period !== 'harian'
+        ? `${uniquePresentDays} Hari Hadir`
+        : 'Belum Absen';
 
       return {
         ...se,
@@ -178,13 +167,11 @@ export const SmFieldMonitoringView: React.FC<SmFieldMonitoringViewProps> = ({
         latestCoords:
           todayIn?.lat != null && todayIn?.lng != null
             ? `${Number(todayIn.lat).toFixed(5)}, ${Number(todayIn.lng).toFixed(5)}`
-            : fb?.checkInLat != null && fb?.checkInLng != null
-            ? `${fb.checkInLat.toFixed(5)}, ${fb.checkInLng.toFixed(5)}`
             : '-',
         logs: seLogs,
       };
     });
-  }, [registeredSes, dbFieldLogs, periodStartKey, todayKey, period, fallbackAttendance]);
+  }, [registeredSes, dbFieldLogs, periodStartKey, todayKey, period]);
 
   const handleExportAttendanceExcel = () => {
     const rowsHtml = attendanceSummaryPerSe
@@ -445,24 +432,21 @@ export const SmFieldMonitoringView: React.FC<SmFieldMonitoringViewProps> = ({
           (l.log_type === 'GPS' || l.log_type === 'CHECK_IN' || l.log_type === 'CHECK_OUT')
       );
       const latestDb = seLogs[0];
-      const fb = fallbackGpsLogs.find(
-        (g) => g.seName.toLowerCase().includes(se.name.toLowerCase()) || g.seName.includes(se.seId)
-      );
 
-      const lat = latestDb?.lat ?? fb?.lat ?? null;
-      const lng = latestDb?.lng ?? fb?.lng ?? null;
+      const lat = latestDb?.lat ?? null;
+      const lng = latestDb?.lng ?? null;
       const distKm =
         lat != null && lng != null
           ? haversineKm(baseCoords.lat, baseCoords.lng, Number(lat), Number(lng))
-          : fb?.distanceFromProjectKm ?? null;
+          : null;
 
       const todayLogs = seLogs.filter((l) => toWibDateKey(l.created_at) === selectedDate);
       const photoLogs = seLogs.filter((l) => Boolean(l.photo_data_url));
 
       return {
         ...se,
-        lastLocation: latestDb?.location_label || fb?.locationLabel || 'Belum ada posisi tercatat',
-        lastTime: latestDb ? fmtWibTime(latestDb.created_at) : fb?.recordedAt || '-',
+        lastLocation: latestDb?.location_label || 'Belum ada posisi tercatat',
+        lastTime: latestDb ? fmtWibTime(latestDb.created_at) : '-',
         lastCoords: lat != null && lng != null ? `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}` : '-',
         distKm,
         todayPointsCount: todayLogs.length,
@@ -472,7 +456,7 @@ export const SmFieldMonitoringView: React.FC<SmFieldMonitoringViewProps> = ({
         photoLogs,
       };
     });
-  }, [registeredSes, dbFieldLogs, fallbackGpsLogs, baseCoords, selectedDate]);
+  }, [registeredSes, dbFieldLogs, baseCoords, selectedDate]);
 
   const selectedGpsSe = selectedSeEmail
     ? gpsSummaryPerSe.find((s) => s.email === selectedSeEmail)
