@@ -75,7 +75,9 @@ export function calculateSalesTargetPlan(
     },
   };
 
-  const active = scenarios[chosenScenario];
+  const safeScenario: ScenarioType =
+    chosenScenario && chosenScenario in scenarios ? chosenScenario : 'realistis';
+  const active = scenarios[safeScenario];
   const monthlySchedules: MonthlyScheduleRow[] = [];
 
   let cumulativeSold = 0;
@@ -190,7 +192,7 @@ export function calculateSalesTargetPlan(
     totalProjectRevenueIdr,
     seHeadcount,
     scenarios,
-    activeScenario: chosenScenario,
+    activeScenario: safeScenario,
     monthlySchedules,
     seAllocations,
     inventoryConstraint,

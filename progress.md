@@ -3,6 +3,13 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-148 | 2026-11-28 | Fix Crash Dashboard `monthsToSoldOut` (Fallback Skenario Tidak Valid di Calculator)
+- Status: selesai & live di `hades`
+- Ubah: `src/lib/sales-target/calculator.ts` (tambah guard `safeScenario`: fallback otomatis ke `'realistis'` bila `chosenScenario` dari `localStorage`/state tidak ada di `scenarios`).
+- Alasan/keputusan: Mencegah crash `TypeError: Cannot read properties of undefined (reading 'monthsToSoldOut')` saat `/dashboard` memuat nilai skenario lama/kosong dari cache lokal browser.
+- Verifikasi: `npm run build` (`tsc --noEmit && vite build`), `bun test tests/sales-target.test.ts`, deploy `dist/*` ke `hades`.
+- Berikutnya: -
+
 ## P-147 | 2026-11-28 | Optimasi Build Web App / PWA Android & iOS (Code-Splitting 89% Lebih Ringan + Workbox Aktif)
 - Status: selesai & live di `hades`
 - Ubah: `vite.config.ts` (hapus `selfDestroying: true`, aktifkan Workbox PWA caching + runtime image cache, tambah `manualChunks` pisah `vendor-react`, `vendor-lucide`, `vendor-docx`, `vendor-leaflet`, `vendor-motion`, `vendor-qrcode`), `src/App.tsx` (lazy-load 32 halaman/modal berat via `React.lazy`), `src/main.tsx` (bungkus `<Suspense>` + pasang `PwaInstallBanner`), `src/components/mobile/PwaInstallBanner.tsx` (baru; prompt install Android & panduan iOS Safari), `index.html` (meta PWA iOS/Android `apple-mobile-web-app-capable`, `black-translucent`, hapus script SW-unregister lama), dan Nginx `hades` (`Permissions-Policy` izinkan `camera=(self)` untuk foto lapangan HP).
