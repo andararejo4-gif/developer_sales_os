@@ -57,6 +57,26 @@ export async function saveRemoteState<T>(
   }
 }
 
+function unwrapRemoteValue(val: unknown): unknown {
+  let cur = val;
+  for (let i = 0; i < 20; i++) {
+    if (typeof cur !== 'string') break;
+    const trimmed = cur.trim();
+    if (!(trimmed.startsWith('"') && trimmed.endsWith('"'))) break;
+    try {
+      const next = JSON.parse(trimmed);
+      if (typeof next === 'string') {
+        cur = next;
+        continue;
+      }
+      return next;
+    } catch {
+      break;
+    }
+  }
+  return cur;
+}
+
 export async function hydrateAllRemoteState(
   projectId = '__global__'
 ): Promise<Record<string, unknown>> {
@@ -74,8 +94,9 @@ export async function hydrateAllRemoteState(
 
     if (window.localStorage) {
       // 1. Hydrate from PostgreSQL DB -> localStorage cache
-      for (const [k, v] of Object.entries(data.items)) {
-        if (!k || k === AUTH_STORAGE_KEY || v === undefined) continue;
+      for (const [k, rawV] of Object.entries(data.items)) {
+        if (!k || k === AUTH_STORAGE_KEY || rawV === undefined) continue;
+        const v = unwrapRemoteValue(rawV);
         try {
           window.localStorage.setItem(k, typeof v === 'string' && k.startsWith('devos_hook_cooldown_') ? v : JSON.stringify(v));
         } catch {

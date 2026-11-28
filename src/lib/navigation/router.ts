@@ -95,12 +95,32 @@ export function setQueryParam(key: string, value: string): void {
 
 import { saveRemoteState } from '../db/remote-state';
 
+function unwrapDoubleEncodedString(val: unknown): unknown {
+  let cur = val;
+  for (let i = 0; i < 20; i++) {
+    if (typeof cur !== 'string') break;
+    const trimmed = cur.trim();
+    if (!(trimmed.startsWith('"') && trimmed.endsWith('"'))) break;
+    try {
+      const next = JSON.parse(trimmed);
+      if (typeof next === 'string') {
+        cur = next;
+        continue;
+      }
+      return next;
+    } catch {
+      break;
+    }
+  }
+  return cur;
+}
+
 export function loadPersistedState<T>(key: string, fallback: T): T {
   try {
     if (typeof localStorage === 'undefined') return fallback;
     const raw = localStorage.getItem(key);
     if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as unknown;
+    const parsed = unwrapDoubleEncodedString(JSON.parse(raw) as unknown);
     if (parsed === null || parsed === undefined) {
       return fallback;
     }

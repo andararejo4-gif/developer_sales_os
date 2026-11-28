@@ -6085,6 +6085,25 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/state' && req.method === 'GET') {
+      const unwrapJsonPayload = (val: unknown): unknown => {
+        let cur = val;
+        for (let i = 0; i < 20; i++) {
+          if (typeof cur !== 'string') break;
+          const t = cur.trim();
+          if (!(t.startsWith('"') && t.endsWith('"'))) break;
+          try {
+            const next = JSON.parse(t);
+            if (typeof next === 'string') {
+              cur = next;
+              continue;
+            }
+            return next;
+          } catch {
+            break;
+          }
+        }
+        return cur;
+      };
       const requestedTenant = String(parsedUrl.searchParams.get('tenantId') || '').trim();
       const tenantId =
         (user.role === 'SUPERADMIN' || user.role === 'SUPERADMIN_IT') && requestedTenant
@@ -6103,7 +6122,7 @@ const server = http.createServer(async (req, res) => {
           ok: true,
           key: stateKey,
           projectId,
-          payload: rows[0]?.payload ?? null,
+          payload: unwrapJsonPayload(rows[0]?.payload ?? null),
           updatedAt: rows[0]?.updated_at ?? null,
         });
         return;
@@ -6116,7 +6135,7 @@ const server = http.createServer(async (req, res) => {
       `;
       const items: Record<string, unknown> = {};
       for (const row of rows) {
-        items[String(row.state_key)] = row.payload;
+        items[String(row.state_key)] = unwrapJsonPayload(row.payload);
       }
       sendJson(res, 200, { ok: true, projectId, items });
       return;
@@ -6135,7 +6154,24 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { ok: false, error: 'key wajib diisi.' });
         return;
       }
-      const payloadJson = JSON.stringify(body.payload ?? null);
+      let cleanPayload: unknown = body.payload ?? null;
+      for (let i = 0; i < 20; i++) {
+        if (typeof cleanPayload !== 'string') break;
+        const t = cleanPayload.trim();
+        if (!(t.startsWith('"') && t.endsWith('"'))) break;
+        try {
+          const next = JSON.parse(t);
+          if (typeof next === 'string') {
+            cleanPayload = next;
+            continue;
+          }
+          cleanPayload = next;
+          break;
+        } catch {
+          break;
+        }
+      }
+      const payloadJson = JSON.stringify(cleanPayload ?? null);
       await sql`
         INSERT INTO sales_os.app_state_kv (tenant_id, project_id, state_key, payload, updated_by, updated_at)
         VALUES (${tenantId}, ${projectId}, ${stateKey}, ${payloadJson}::jsonb, ${user.email}, NOW())

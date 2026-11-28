@@ -3,6 +3,13 @@
 Jejak perubahan proyek untuk handover antar-sesi AI. Entri terbaru selalu di atas.
 Aturan: AI membaca 3–5 entri teratas saat sesi dimulai. Entri lama dicari lewat rtk rg dan di-cache ke `.agents/progress-cache.md`.
 
+## P-150 | 2026-11-28 | Fix Double-Stringify Backslash Explosion pada State Input Log Panggilan & `/api/state`
+- Status: selesai & live di `hades`
+- Ubah: `server/index.ts` (unwrap string JSON ter-escape ganda di `GET /api/state` & `PUT /api/state`), `src/lib/db/remote-state.ts` (`unwrapRemoteValue` saat hidrasi ke `localStorage`), `src/lib/navigation/router.ts` (`unwrapDoubleEncodedString` di `loadPersistedState`).
+- Alasan/keputusan: Mencegah nilai string kosong/teks pada form (seperti Nama Prospek, No. WA, Ringkasan Pembicaraan di Log Panggilan) berubah menjadi `"\"\\\"\\\\\\\"..."` akibat siklus `JSON.stringify` berulang antara `app_state_kv` dan `localStorage`, sekaligus memulihkan data yang sudah terlanjur ter-escape.
+- Verifikasi: `npm run build`, `bun build server/index.ts --outfile dist-server.mjs --target node`, deploy frontend + backend ke `hades` + restart PM2.
+- Berikutnya: -
+
 ## P-149 | 2026-11-28 | Build APK Android Asli (Capacitor) & Tombol Unduh Langsung `/download/DeveloperSalesOS.apk`
 - Status: selesai & live di `hades`
 - Ubah: `capacitor.config.ts` (baru; `com.andararejomakmur.devsalesos` terhubung live ke `https://developerproperti.giivepro.com`), `android/` (proyek native Capacitor Android dengan izin `INTERNET`, `CAMERA`, `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` & ikon brand), `src/components/mobile/PwaInstallBanner.tsx` (Android langsung unduh `/download/DeveloperSalesOS.apk`, iOS Safari panduan *Add to Home Screen*, sembunyikan otomatis di dalam APK native), `package.json`, dan upload `DeveloperSalesOS.apk` ringan ke `hades:/var/www/developer-sales-os/download/DeveloperSalesOS.apk`.
